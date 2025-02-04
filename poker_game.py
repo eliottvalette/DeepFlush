@@ -7,7 +7,7 @@ import random as rd
 from enum import Enum
 from typing import List, Dict, Optional, Tuple
 import pygame.font
-from collections import Counter
+from collections import Counter, defaultdict
 import numpy as np
 
 SCREEN_WIDTH = 1400
@@ -145,14 +145,29 @@ class Player:
         self.is_human = True
         self.has_acted = False
         positions = [
-            (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 160),  # Bas (Joueur 1)
-            (120, SCREEN_HEIGHT - 260),  # Bas-Gauche (Joueur 2) 
-            (SCREEN_WIDTH - 120, SCREEN_HEIGHT - 260),  # Bas-Droite (Joueur 3)
-            (120, 170),  # Haut-Gauche (Joueur 4)
-            (SCREEN_WIDTH - 120, 170),  # Haut-Droite (Joueur 5)
-            (SCREEN_WIDTH // 2, 150)  # Haut (Joueur 6)
+            (SCREEN_WIDTH-550, SCREEN_HEIGHT-250),     # Bas-Droite (Joueur 1)
+            (420, SCREEN_HEIGHT-250),                  # Bas-Gauche (Joueur 2) 
+            (80, (SCREEN_HEIGHT-150) / 2),             # Milieu-Gauche (Joueur 3)
+            (420, 140),                                # Haut-Gauche (Joueur 4)
+            (SCREEN_WIDTH-550, 140),                   # Haut-Droite (Joueur 5)
+            (SCREEN_WIDTH-190, (SCREEN_HEIGHT-150)/2)  # Milieu-Droite (Joueur 6)
         ]
         self.x, self.y = positions[position]
+
+class SidePot:
+    """
+    Représente un side pot créé lorsqu'un joueur est all-in.
+    """
+    def __init__(self, amount: int, eligible_players: List[Player]):
+        """
+        Initialise un side pot avec son montant et les joueurs éligibles.
+        
+        Args:
+            amount (int): Montant du side pot
+            eligible_players (List[Player]): Liste des joueurs pouvant gagner ce pot
+        """
+        self.amount = amount
+        self.eligible_players = eligible_players
 
 class PokerGame:
     """
@@ -223,6 +238,10 @@ class PokerGame:
 
         # Ajouter le temps de la dernière action IA
         self.last_ai_action_time = 0
+        
+        # Ajouter la gestion des side pots
+        self.main_pot = 0
+        self.side_pots: List[SidePot] = []
         
         self.start_new_hand()
         self._update_button_states()
@@ -669,6 +688,10 @@ class PokerGame:
                     if p != player and p.is_active:
                         p.has_acted = False
             
+            # Créer un side pot si nécessaire
+            if any(p.current_bet > all_in_amount for p in self.players if p.is_active and not p.has_folded):
+                self._create_side_pot(all_in_amount)
+            
             print(f"{player.name} fait tapis avec ${all_in_amount}")
         
         player.has_acted = True
@@ -717,43 +740,62 @@ class PokerGame:
 
     def handle_showdown(self):
         """
-        Gère la phase de showdown où les joueurs restants révèlent leurs mains.
-        Évalue les mains, détermine le(s) gagnant(s) et attribue le pot.
+        Gère la phase de showdown en tenant compte des side pots.
         """
         print("\n=== SHOWDOWN ===")
         self.current_phase = GamePhase.SHOWDOWN
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
-        print(f"Active players in showdown: {[p.name for p in active_players]}")
         
-        # Disable all action buttons during showdown
+        # Désactiver tous les boutons pendant le showdown
         for button in self.action_buttons.values():
             button.enabled = False
         
+        # S'assurer que toutes les cartes communes sont distribuées
+        while len(self.community_cards) < 5:
+            self.community_cards.append(self.deck.pop())
+        
+        # Traiter d'abord les side pots (du plus petit au plus grand)
+        total_winnings = defaultdict(int)
+        
+        for i, side_pot in enumerate(self.side_pots):
+            eligible_players = [p for p in side_pot.eligible_players if not p.has_folded]
+            if len(eligible_players) == 1:
+                winner = eligible_players[0]
+            else:
+                # Évaluer les mains des joueurs éligibles
+                player_hands = [(player, self.evaluate_final_hand(player)) for player in eligible_players]
+                player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
+                winner = player_hands[0][0]
+                winning_hand = player_hands[0][1][0].name.replace('_', ' ').title()
+                print(f"{winner.name}'s winning hand: {winning_hand}")
+            
+            total_winnings[winner] += side_pot.amount
+            print(f"Side pot {i+1} (${side_pot.amount}) won by {winner.name}")
+        
+        # Traiter le pot principal
         if len(active_players) == 1:
             winner = active_players[0]
-            winner.stack += self.pot
-            self.winner_info = f"{winner.name} wins ${self.pot} (all others folded)"
-            print(f"Winner by fold: {winner.name}")
-            print(f"Winning amount: ${self.pot}")
         else:
-            # Make sure all community cards are dealt for all-in situations
-            while len(self.community_cards) < 5:
-                self.community_cards.append(self.deck.pop())
-            
-            # Evaluate hands and find winner
             player_hands = [(player, self.evaluate_final_hand(player)) for player in active_players]
-            for player, (hand_rank, _) in player_hands:
-                print(f"{player.name}'s hand: {[str(card) for card in player.cards]}")
-                print(f"{player.name}'s hand rank: {hand_rank.name}")
-            
             player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
             winner = player_hands[0][0]
-            winner.stack += self.pot
             winning_hand = player_hands[0][1][0].name.replace('_', ' ').title()
-            self.winner_info = f"{winner.name} wins ${self.pot} with {winning_hand}"
-            print(f"Winner at showdown: {winner.name}")
-            print(f"Winning hand: {winning_hand}")
-            print(f"Winning amount: ${self.pot}")
+            print(f"{winner.name}'s winning hand: {winning_hand}")
+        
+        total_winnings[winner] += self.pot
+        print(f"Main pot (${self.pot}) won by {winner.name}")
+        
+        # Distribuer les gains
+        for winner, amount in total_winnings.items():
+            winner.stack += amount
+            if len(total_winnings) == 1:
+                self.winner_info = f"{winner.name} wins ${amount}"
+            else:
+                self.winner_info = "Multiple winners: " + ", ".join(f"{p.name} (${amt})" for p, amt in total_winnings.items())
+        
+        # Reset pots
+        self.pot = 0
+        self.side_pots = []
         
         # Set the winner display start time
         self.winner_display_start = pygame.time.get_ticks()
@@ -1518,16 +1560,48 @@ class PokerGame:
         # Clip to [0, 1]
         return np.clip(equity, 0.0, 1.0)
 
-    def _create_side_pot(self, all_in_amount):
+    def _create_side_pot(self, all_in_amount: int):
         """
-        Creates a side pot when a player is all-in for a smaller amount.
+        Crée un side pot lorsqu'un joueur est all-in pour un montant inférieur.
         
         Args:
-            all_in_amount (int): The amount the all-in player has bet
+            all_in_amount (int): Montant du all-in du joueur
         """
-        # TODO: Implement side pot logic
-        # For now, just continue the hand without creating actual side pots
-        pass
+        active_players = [p for p in self.players if p.is_active and not p.has_folded]
+        
+        # Calculer les contributions au side pot
+        side_pot_amount = 0
+        main_pot_amount = 0
+        
+        # Première passe : calculer les montants des pots
+        for player in active_players:
+            if player.current_bet > all_in_amount:
+                # L'excédent va dans le side pot
+                excess = player.current_bet - all_in_amount
+                side_pot_amount += excess
+                # La partie égale va dans le pot principal
+                main_pot_amount += all_in_amount
+            else:
+                # Tout va dans le pot principal
+                main_pot_amount += player.current_bet
+        
+        # Deuxième passe : ajuster les mises des joueurs
+        for player in active_players:
+            if player.current_bet > all_in_amount:
+                player.current_bet = all_in_amount
+        
+        # Mettre à jour les pots
+        self.pot = main_pot_amount
+        
+        # Créer le side pot si nécessaire
+        if side_pot_amount > 0:
+            # Les joueurs éligibles sont ceux qui ont misé plus que le all-in ou qui ont encore des jetons
+            eligible_players = [p for p in active_players if p.stack > 0 or p.current_bet == all_in_amount]
+            self.side_pots.append(SidePot(side_pot_amount, eligible_players))
+            
+            print(f"Side pot created: ${side_pot_amount}")
+            print(f"Main pot adjusted to: ${main_pot_amount}")
+            print(f"Eligible players for side pot: {[p.name for p in eligible_players]}")
 
     def manual_run(self):
         """
