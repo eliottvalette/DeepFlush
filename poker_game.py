@@ -12,6 +12,14 @@ import numpy as np
 
 SCREEN_WIDTH = 1400
 SCREEN_HEIGHT = 900
+POSITIONS = [
+    (SCREEN_WIDTH-550, SCREEN_HEIGHT-250),     # Bas-Droite (Joueur 1)
+    (420, SCREEN_HEIGHT-250),                  # Bas-Gauche (Joueur 2) 
+    (80, (SCREEN_HEIGHT-150) / 2),             # Milieu-Gauche (Joueur 3)
+    (420, 140),                                # Haut-Gauche (Joueur 4)
+    (SCREEN_WIDTH-550, 140),                   # Haut-Droite (Joueur 5)
+    (SCREEN_WIDTH-190, (SCREEN_HEIGHT-150)/2)  # Milieu-Droite (Joueur 6)
+]
 
 class Card:
     """ 
@@ -126,7 +134,7 @@ class Player:
     """
     Représente un joueur de poker avec ses cartes, son stack et son état de jeu.
     """
-    def __init__(self, name: str, stack: int, position: int):
+    def __init__(self, name: str, stack: int, seat_position: int):
         """
         Initialise un joueur avec son nom, son stack de départ et sa position à la table.
         
@@ -137,37 +145,15 @@ class Player:
         """
         self.name = name
         self.stack = stack
-        self.position = position
+        self.seat_position = seat_position # 0-5
+        self.role_position = seat_position # 0-5 (0 = UTG, 1 = HJ, 2 = CO, 3 = BU, 4 = SB, 5 = BB) (On attribue initialement le role en fonction de la position, ce role tournera à chaque main)
         self.cards: List[Card] = []
-        self.is_active = True
+        self.is_active = True # True si le joueur a assez de fonds pour jouer (stack > big_blind)
         self.has_folded = False
-        self.current_bet = 0
-        self.is_human = True
-        self.has_acted = False
-        positions = [
-            (SCREEN_WIDTH-550, SCREEN_HEIGHT-250),     # Bas-Droite (Joueur 1)
-            (420, SCREEN_HEIGHT-250),                  # Bas-Gauche (Joueur 2) 
-            (80, (SCREEN_HEIGHT-150) / 2),             # Milieu-Gauche (Joueur 3)
-            (420, 140),                                # Haut-Gauche (Joueur 4)
-            (SCREEN_WIDTH-550, 140),                   # Haut-Droite (Joueur 5)
-            (SCREEN_WIDTH-190, (SCREEN_HEIGHT-150)/2)  # Milieu-Droite (Joueur 6)
-        ]
-        self.x, self.y = positions[position]
-
-class SidePot:
-    """
-    Représente un side pot créé lorsqu'un joueur est all-in.
-    """
-    def __init__(self, amount: int, eligible_players: List[Player]):
-        """
-        Initialise un side pot avec son montant et les joueurs éligibles.
-        
-        Args:
-            amount (int): Montant du side pot
-            eligible_players (List[Player]): Liste des joueurs pouvant gagner ce pot
-        """
-        self.amount = amount
-        self.eligible_players = eligible_players
+        self.is_human = True # True si on veut voir les cartes du joueur
+        self.is_all_in = False
+        self.range = None # Range du joueur (à initialiser comme l'ensemble des mains possibles)
+        self.x, self.y = POSITIONS[self.seat_position]
 
 class PokerGame:
     """
@@ -185,28 +171,11 @@ class PokerGame:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("6-Max Poker")
         self.font = pygame.font.SysFont('Arial', 24)
-        self.num_players = min(num_players, 6)  # Maximum 6 joueurs
-        
-        # Structure des blindes avec progression
-        self.blind_levels = [
-            (1, 2),     # Niveau 1
-            (2, 4),     # Niveau 2
-            (3, 6),     # Niveau 3
-            (5, 10),    # Niveau 4
-            (10, 20),   # Niveau 5
-            (15, 30),   # Niveau 6
-            (25, 50),   # Niveau 7
-            (50, 100),  # Niveau 8
-            (100, 200)  # Niveau 9
-        ]
-        
-        self.current_blind_level = 0
-        self.hands_until_blind_increase = 4
-        self.hands_played = 0
-        
-        self.small_blind = self.blind_levels[0][0]
-        self.big_blind = self.blind_levels[0][1]
-        self.starting_stack = 1000  # Stack de départ augmenté pour 6-max
+        self.num_players = 6
+                
+        self.small_blind = 0.5
+        self.big_blind = 1
+        self.starting_stack = 100 # Stack de départ en BB
         
         self.pot = 0
         self.deck: List[Card] = self._create_deck()
