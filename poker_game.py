@@ -237,9 +237,6 @@ class PokerGame:
         self.deck = self._create_deck()
         self.winner_info = None
         self.winner_display_start = 0
-        self.game_phase = 0
-        self.number_raise_this_round = 0
-        self.action_history = []
         
         # Réinitialiser l'état des joueurs
         for player in self.players:
@@ -248,33 +245,32 @@ class PokerGame:
             player.is_active = True
             player.has_folded = False
             player.has_acted = False
-            player.stack = 1000  # Réinitialiser au stack de départ
+            player.is_all_in = False
+            player.stack = self.starting_stack
         
-        # Réinitialiser le bouton et les blindes
-        self.button_position = (self.button_position + 1) % self.num_players
-        self.sb_pos = (self.sb_pos + 1) % self.num_players
-        self.bb_pos = (self.bb_pos + 1) % self.num_players
+        # Réinitialiser les variables de jeu
+        button_position = rd.randint(0, 5)  # 0-5
+        for player in self.players:
+            player.role_position = (player.seat_position - button_position - 1) % 6
         
-        # Poster les blindes
-        self.players[self.sb_pos].stack -= self.small_blind
-        self.players[self.sb_pos].current_bet = self.small_blind
-        self.players[self.bb_pos].stack -= self.big_blind
-        self.players[self.bb_pos].current_bet = self.big_blind
-        
-        self.pot = self.small_blind + self.big_blind
-        self.current_bet = self.big_blind
-        
-        # Distribuer les cartes
-        self.deal_cards()
-        
-        # Définir le premier joueur (UTG)
-        self.current_player_seat = (self.bb_pos + 1) % self.num_players
-        
-        # Réinitialiser l'état des mises
+        # Initialiser les variables d'état du jeu
+        self.current_player_seat = (button_position + 1) % 6  # 0-5 initialisé à SB
+        self.current_maximum_bet = 0  # initialisé à 0 mais s'updatera automatiquement à BB
         self.last_raiser_seat = None
-
+        
+        self.game_phase = GamePhase.PREFLOP
+        self.number_raise_this_game_phase = 0
+        
+        # Réinitialiser les pots
+        self.main_pot = 0
+        self.side_pots = [0] * 4
+        
+        # Réinitialiser l'historique des actions
+        self.action_history = []
+        
+        self.start_new_hand()
         self._update_button_states()
-
+        
         return self.get_state()
 
     def start_new_hand(self):
@@ -282,80 +278,69 @@ class PokerGame:
         Démarre une nouvelle main de poker en réinitialisant l'état approprié.
         Met à jour les blindes et vérifie les conditions de jeu.
         """
-        # Mettre à jour les blindes avant de commencer une nouvelle main
-        self.update_blinds()
-        
         # Réinitialiser les variables d'état du jeu
         self.pot = 0
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
-        self.current_bet = self.big_blind
+        self.current_maximum_bet = 0
         self.last_raiser_seat = None
-        self.game_phase = 0
+        self.number_raise_this_game_phase = 0
         
         # Clear previous action history and add initial round separator
         self.action_history = []
         self.action_history.append("=== NEW HAND ===")
         self.action_history.append(f"--- {GamePhase.PREFLOP.value.upper()} ---")
         
-        # Construire une nouvelle liste des joueurs actifs (uniquement ceux avec assez de fonds)
-        active_players = []
+        # Réinitialiser l'état des joueurs
         for player in self.players:
             player.cards = []
             player.current_bet = 0
             player.has_acted = False
             player.has_folded = False
+            player.is_all_in = False
             if player.stack >= self.big_blind:
                 player.is_active = True
-                active_players.append(player)
             else:
                 player.is_active = False
                 print(f"{player.name} est hors jeu (fonds insuffisants: ${player.stack})")
         
-        # S'il y a moins de 2 joueurs actifs, réinitialiser le jeu
+        # Vérifier s'il y a assez de joueurs actifs
+        active_players = [p for p in self.players if p.is_active]
         if len(active_players) < 2:
             print("Pas assez de joueurs pour continuer.")
             self.reset()
             return
         
-        # Compter les joueurs actifs pour la structure des blindes
-        num_active_players = len(active_players)
+        # Mettre à jour les positions des joueurs
+        for player in self.players:
+            player.role_position = (player.seat_position - self.current_player_seat - 1) % 6
         
-        # Déplacer le bouton avant de définir les positions des blindes
-        self.button_position = (self.button_position + 1) % self.num_players
-        while not self.players[self.button_position].is_active:
-            self.button_position = (self.button_position + 1) % self.num_players
-        
-        if num_active_players == 2:  # Heads-up
-            # En heads-up, le bouton est SB et agit en dernier preflop, premier postflop
-            self.sb_pos = self.button_position
-            self.bb_pos = (self.button_position + 1) % self.num_players
-            while not self.players[self.bb_pos].is_active:
-                self.bb_pos = (self.bb_pos + 1) % self.num_players
-        else:
-            # Structure normale à 3 joueurs
-            self.sb_pos = (self.button_position + 1) % self.num_players
-            while not self.players[self.sb_pos].is_active:
-                self.sb_pos = (self.sb_pos + 1) % self.num_players
-                
-            self.bb_pos = (self.sb_pos + 1) % self.num_players
-            while not self.players[self.bb_pos].is_active:
-                self.bb_pos = (self.bb_pos + 1) % self.num_players
-        
-        # Poster les blindes
-        self.players[self.sb_pos].stack -= self.small_blind
-        self.players[self.sb_pos].current_bet = self.small_blind
-        self.players[self.bb_pos].stack -= self.big_blind
-        self.players[self.bb_pos].current_bet = self.big_blind
-        
-        self.pot = self.small_blind + self.big_blind
+        # Distribuer les cartes
         self.deal_cards()
         
-        # UTG agit en premier preflop (après BB)
-        self.current_player_seat = (self.bb_pos + 1) % self.num_players
+        # Poster les blindes
+        sb_pos = (self.current_player_seat) % 6
+        bb_pos = (sb_pos + 1) % 6
+        
+        # S'assurer que les joueurs aux positions SB et BB sont actifs
+        while not self.players[sb_pos].is_active:
+            sb_pos = (sb_pos + 1) % 6
+        while not self.players[bb_pos].is_active or bb_pos == sb_pos:
+            bb_pos = (bb_pos + 1) % 6
+        
+        # Poster les blindes
+        self.players[sb_pos].stack -= self.small_blind
+        self.players[sb_pos].current_bet = self.small_blind
+        self.players[bb_pos].stack -= self.big_blind
+        self.players[bb_pos].current_bet = self.big_blind
+        
+        self.pot = self.small_blind + self.big_blind
+        
+        # Définir le premier joueur (UTG)
+        self.current_player_seat = (bb_pos + 1) % 6
         while not self.players[self.current_player_seat].is_active:
-            self.current_player_seat = (self.current_player_seat + 1) % self.num_players
-
+            self.current_player_seat = (self.current_player_seat + 1) % 6
+        
         self._update_button_states()
         return True
 
