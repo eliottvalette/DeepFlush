@@ -630,6 +630,10 @@ class PokerGame:
         # All-in toujours disponible si le joueur a des jetons
         self.action_buttons[PlayerAction.ALL_IN].enabled = current_player.stack > 0
 
+        if self.current_phase == GamePhase.SHOWDOWN:
+            for button in self.action_buttons.values():
+                button.enabled = False
+
     def _create_action_buttons(self) -> Dict[PlayerAction, Button]:
         """
         Crée et initialise les boutons d'action pour l'interaction des joueurs.
