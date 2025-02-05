@@ -155,6 +155,7 @@ class Player:
         self.range = None # Range du joueur (à initialiser comme l'ensemble des mains possibles)
         self.current_bet = 0 # Montant de la mise actuelle du joueur
         self.x, self.y = POSITIONS[self.seat_position]
+        self.has_acted = False # True si le joueur a fait une action dans la phase courante (nécessaire pour savoir si le tour est terminé, car si le premier joueur de la phase check, tous les jouers sont a bet égal et ca déclencherait la phase suivante)
 
 class PokerGame:
     """
@@ -301,7 +302,10 @@ class PokerGame:
             raise ValueError("Il doit y avoir au moins 2 joueurs pour continuer la partie")
             
         # Réinitialiser les variables de jeu
-        if not first_hand:
+        if first_hand:
+            # Réorganiser les joueurs pour que le bouton soit le premier joueur
+            role_player_idx_list = [player.role_position for player in self.players]
+        else :
             # Filtrer pour n'avoir que les joueurs actifs (avec des jetons)
             active_players = [player for player in self.players if player.is_active]
             
@@ -383,21 +387,25 @@ class PokerGame:
     def check_phase_completion(self):
         """
         Vérifie si le tour d'enchères actuel est terminé.
-        Differents cas de figure 
-        - Un tour est terminé quand tous les joueurs actifs ont misé le même montant.
-        - Un tour est terminé quand les joueurs ayant moins de jetons que le plus petit current_bet sont all-in et que les plus riches ont call.
+        Le tour est terminé uniquement lorsque tous les joueurs actifs (et n'ayant pas foldé)
+        ont déjà agi ET que pour chacun, la mise actuelle est égale à la mise maximale (ou qu'il est all-in).
         """
-        # Ne considérer que les joueurs actifs et n'ayant pas fold
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
         
-        # S'il ne reste qu'un joueur, le tour est terminé
+        # Si un seul joueur reste, le tour est terminé
         if len(active_players) == 1:
             return True
         
-        # 1. Tous les joueurs ont un current_bet égal
+        for player in active_players:
+            # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
+            if not player.has_acted:
+                return False
+            # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le tour n'est pas terminé
+            if player.current_bet < self.current_maximum_bet and not player.is_all_in:
+                return False
         
-        
-        return False
+        return True
+
 
     def advance_phase(self):
         """
@@ -427,17 +435,18 @@ class PokerGame:
             self.current_phase = GamePhase.RIVER
         
         # Increment round number when moving to a new phase
-        self.number_raise_this_round = 0
+        self.number_raise_this_game_phase = 0
         
         # Deal community cards for the new phase
         self.deal_community_cards()
         
-        # Reset betting for new phase
-        self.current_bet = 0
+        # Réinitialiser les mises pour la nouvelle phase
+        self.current_maximum_bet = 0
         for player in self.players:
             if player.is_active:
-                player.has_acted = False
                 player.current_bet = 0
+                if not player.has_folded:
+                    player.has_acted = False  # Réinitialisation du flag
         
         # Set first player after dealer button
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
@@ -458,26 +467,26 @@ class PokerGame:
         # Règles spécifiques au preflop
         if self.current_phase == GamePhase.PREFLOP:
             # Le joueur ne peut check que si sa mise actuelle est égale à la mise courante
-            if current_player.current_bet < self.current_bet:
+            if current_player.current_bet < self.current_maximum_bet:
                 self.pygame_action_buttons[PlayerAction.CHECK].enabled = False
         else:
             # Post-flop: on peut check seulement si personne n'a misé
-            if current_player.current_bet < self.current_bet:
+            if current_player.current_bet < self.current_maximum_bet:
                 self.pygame_action_buttons[PlayerAction.CHECK].enabled = False
         
         # Désactiver call si pas de mise à suivre ou pas assez de jetons
-        if current_player.current_bet == self.current_bet:
+        if current_player.current_bet == self.current_maximum_bet:
             self.pygame_action_buttons[PlayerAction.CALL].enabled = False
-        elif current_player.stack < (self.current_bet - current_player.current_bet):
+        elif current_player.stack < (self.current_maximum_bet - current_player.current_bet):
             self.pygame_action_buttons[PlayerAction.CALL].enabled = False
         
         # Désactiver raise si pas assez de jetons pour la mise minimale
-        min_raise = max(self.current_bet * 2, self.big_blind * 2)
+        min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
         if current_player.stack + current_player.current_bet < min_raise:
             self.pygame_action_buttons[PlayerAction.RAISE].enabled = False
         
         # Désactiver raise si déjà 4 relances dans le tour
-        if self.number_raise_this_round >= 4:
+        if self.number_raise_this_game_phase >= 4:
             self.pygame_action_buttons[PlayerAction.RAISE].enabled = False
         
         # All-in toujours disponible si le joueur a des jetons
@@ -506,20 +515,20 @@ class PokerGame:
         print(f"Player activity: {player.is_active}")
         print(f"Action: {action.value}")
         print(f"Current phase: {self.current_phase}")
-        print(f"Current pot: ${self.pot}")
-        print(f"Current bet: ${self.current_bet}")
-        print(f"Player stack before: ${player.stack}")
-        print(f"Player current bet: ${player.current_bet}")
+        print(f"Current pot: {self.pot}B")
+        print(f"Current Maximum bet: {self.current_maximum_bet}B")
+        print(f"Player stack before: {player.stack}B")
+        print(f"Player current bet: {player.current_bet}B")
         
         # Record the action
         action_text = f"{player.name}: {action.value}"
         if bet_amount is not None and action == PlayerAction.RAISE:
-            action_text += f" ${bet_amount}"
+            action_text += f" {bet_amount}B"
         elif action == PlayerAction.RAISE:
             # Calculate minimum and maximum possible raise amounts
-            min_raise = max(self.current_bet * 2, self.big_blind * 2)
+            min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
             bet_amount = min_raise
-            action_text += f" ${bet_amount}"
+            action_text += f" {bet_amount}B"
 
         # Add round separator before action if phase is changing
         if self.check_phase_completion() and self.current_phase != GamePhase.SHOWDOWN:
@@ -535,27 +544,23 @@ class PokerGame:
             print(f"{player.name} folds")
             
         elif action == PlayerAction.CHECK:
-            player.has_acted = True
             print(f"{player.name} checks")
-            
+
         elif action == PlayerAction.CALL:
-            call_amount = self.current_bet - player.current_bet
+            call_amount = self.current_maximum_bet - player.current_bet
             player.stack -= call_amount
-            player.current_bet = self.current_bet
+            player.current_bet = self.current_maximum_bet
             self.pot += call_amount
-            print(f"{player.name} calls ${call_amount}")
+            print(f"{player.name} calls {call_amount}B")
             
         elif action == PlayerAction.RAISE and bet_amount is not None:
             total_to_put_in = bet_amount - player.current_bet
             player.stack -= total_to_put_in
             player.current_bet = bet_amount
-            self.current_bet = bet_amount
+            self.current_maximum_bet = bet_amount
             self.pot += total_to_put_in
             self.last_raiser_seat = player
-            print(f"{player.name} raises to ${bet_amount}")
-            for p in self.players:
-                if p != player and p.is_active:
-                    p.has_acted = False
+            print(f"{player.name} raises to {bet_amount}B")
         
         elif action == PlayerAction.ALL_IN:
             all_in_amount = player.stack + player.current_bet
@@ -563,25 +568,24 @@ class PokerGame:
             player.stack = 0
             player.current_bet = all_in_amount
             self.pot += total_to_put_in
+            player.is_all_in = True
             
-            if all_in_amount > self.current_bet:
-                self.current_bet = all_in_amount
+            if all_in_amount > self.current_maximum_bet:
+                self.current_maximum_bet = all_in_amount
                 self.last_raiser_seat = player
-                for p in self.players:
-                    if p != player and p.is_active:
-                        p.has_acted = False
             
             # Créer un side pot si nécessaire
             if any(p.current_bet > all_in_amount for p in self.players if p.is_active and not p.has_folded):
                 self._create_side_pot(all_in_amount)
             
-            print(f"{player.name} fait tapis avec ${all_in_amount}")
+            print(f"{player.name} fait tapis avec {all_in_amount}B")
         
         player.has_acted = True
         
+        
         # Debug print post-action state
-        print(f"Player stack after: ${player.stack}")
-        print(f"New pot: ${self.pot}")
+        print(f"Player stack after: {player.stack}B")
+        print(f"New pot: {self.pot}B")
         print(f"Active players: {sum(1 for p in self.players if p.is_active)}")
         
         # Check for all-in situations after the action
@@ -611,10 +615,7 @@ class PokerGame:
             else:
                 self.advance_phase()
                 print(f"Advanced to {self.current_phase}")
-                # Réinitialiser has_acted pour tous les joueurs actifs et non fold au début d'une nouvelle phase
-                for p in self.players:
-                    if p.is_active and not p.has_folded:
-                        p.has_acted = False
+
         else:
             self._next_player()
             print(f"Next player: {self.players[self.current_player_seat].name}")
@@ -779,21 +780,6 @@ class PokerGame:
         # Traiter d'abord les side pots (du plus petit au plus grand)
         total_winnings = defaultdict(int)
         
-        for i, side_pot in enumerate(self.side_pots):
-            eligible_players = [p for p in side_pot.eligible_players if not p.has_folded]
-            if len(eligible_players) == 1:
-                winner = eligible_players[0]
-            else:
-                # Évaluer les mains des joueurs éligibles
-                player_hands = [(player, self.evaluate_final_hand(player)) for player in eligible_players]
-                player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
-                winner = player_hands[0][0]
-                winning_hand = player_hands[0][1][0].name.replace('_', ' ').title()
-                print(f"{winner.name}'s winning hand: {winning_hand}")
-            
-            total_winnings[winner] += side_pot.amount
-            print(f"Side pot {i+1} (${side_pot.amount}) won by {winner.name}")
-        
         # Traiter le pot principal
         if len(active_players) == 1:
             winner = active_players[0]
@@ -805,15 +791,15 @@ class PokerGame:
             print(f"{winner.name}'s winning hand: {winning_hand}")
         
         total_winnings[winner] += self.pot
-        print(f"Main pot (${self.pot}) won by {winner.name}")
+        print(f"Main pot ({self.pot}B) won by {winner.name}")
         
         # Distribuer les gains
         for winner, amount in total_winnings.items():
             winner.stack += amount
             if len(total_winnings) == 1:
-                self.pygame_winner_info = f"{winner.name} wins ${amount}"
+                self.pygame_winner_info = f"{winner.name} wins {amount}B"
             else:
-                self.pygame_winner_info = "Multiple winners: " + ", ".join(f"{p.name} (${amt})" for p, amt in total_winnings.items())
+                self.pygame_winner_info = "Multiple winners: " + ", ".join(f"{p.name} ({amt}B)" for p, amt in total_winnings.items())
         
         # Reset pots
         self.pot = 0
@@ -916,8 +902,8 @@ class PokerGame:
             eligible_players = [p for p in active_players if p.stack > 0 or p.current_bet == all_in_amount]
             self.side_pots.append(SidePot(side_pot_amount, eligible_players))
             
-            print(f"Side pot created: ${side_pot_amount}")
-            print(f"Main pot adjusted to: ${main_pot_amount}")
+            print(f"Side pot created: {side_pot_amount}B")
+            print(f"Main pot adjusted to: {main_pot_amount}B")
             print(f"Eligible players for side pot: {[p.name for p in eligible_players]}")
 
     # --------------------------------
@@ -999,7 +985,7 @@ class PokerGame:
         state.extend(phase_range)
 
         # 4. Mise actuelle normalisée par la grosse blinde
-        state.append(self.current_bet / self.big_blind)  # Normalisation de la mise (taille = 1)
+        state.append(self.current_maximum_bet / self.big_blind)  # Normalisation de la mise (taille = 1)
 
         # 6. Argent restant (tailles des stacks normalisées par le stack initial)
         initial_stack = self.starting_stack
@@ -1086,7 +1072,7 @@ class PokerGame:
         state.append(win_prob) # (taille = 1)
 
         # 14. Cotes du pot
-        call_amount = self.current_bet - current_player.current_bet
+        call_amount = self.current_maximum_bet - current_player.current_bet
         pot_odds = call_amount / (self.pot + call_amount) if (self.pot + call_amount) > 0 else 0
         state.append(pot_odds) # (taille = 1)
 
@@ -1095,7 +1081,7 @@ class PokerGame:
         state.append(equity) # (taille = 1)
 
         # 16. Facteur d'agressivité
-        state.append(self.number_raise_this_round / 4) # (taille = 1)
+        state.append(self.number_raise_this_game_phase / 4) # (taille = 1)
 
         # Avant de retourner, conversion en tableau numpy
         state = np.array(state, dtype=np.float32)
@@ -1115,7 +1101,7 @@ class PokerGame:
         reward = 0.0
 
         # Capturer l'état du jeu avant de traiter l'action pour le calcul des cotes du pot
-        call_amount_before = self.current_bet - current_player.current_bet
+        call_amount_before = self.current_maximum_bet - current_player.current_bet
         pot_before = self.pot
 
         # --- Récompenses stratégiques des actions ---
@@ -1150,7 +1136,7 @@ class PokerGame:
             
         # --- Bonus de position ---
         # Bonus pour actions agressives en dernière position (bouton)
-        if current_player.position == self.button_seat_position:
+        if current_player.seat_position == self.button_seat_position:
             if action in [PlayerAction.RAISE, PlayerAction.ALL_IN]:
                 reward += 0.2
         
@@ -1333,12 +1319,12 @@ class PokerGame:
         
         # Position multiplier (better position = higher equity)
         # Calculate relative position from button (0 = button, 1 = SB, 2 = BB)
-        relative_pos = (player.position - self.button_seat_position) % self.num_players
+        relative_pos = (player.seat_position - self.button_seat_position) % self.num_players
         position_multiplier = 1.0 + (0.1 * (self.num_players - relative_pos) / self.num_players)
         
         # Pot odds consideration
         total_pot = self.pot + sum(p.current_bet for p in self.players)
-        call_amount = self.current_bet - player.current_bet
+        call_amount = self.current_maximum_bet - player.current_bet
         if call_amount > 0 and total_pot > 0:
             pot_odds = call_amount / (total_pot + call_amount)
             # Adjust equity based on pot odds
@@ -1399,7 +1385,7 @@ class PokerGame:
             player (Player): Le joueur à dessiner
         """
         # Draw neon effect for active player
-        if player.position == self.current_player_seat:
+        if player.seat_position == self.current_player_seat:
             # Draw multiple circles with decreasing alpha for glow effect
             for radius in range(40, 20, -5):
                 glow_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
@@ -1408,8 +1394,8 @@ class PokerGame:
                 self.screen.blit(glow_surface, (player.x + 25 - radius, player.y + 35 - radius))
         
         # Draw player info with 2 decimal places
-        name_color = (0, 255, 255) if player.position == self.current_player_seat else (255, 255, 255)
-        name_text = self.font.render(f"{player.name} (${player.stack:.2f})", True, name_color)
+        name_color = (0, 255, 255) if player.seat_position == self.current_player_seat else (255, 255, 255)
+        name_text = self.font.render(f"{player.name} ({player.stack:.2f}B)", True, name_color)
         self.screen.blit(name_text, (player.x - 50, player.y - 40))
         
         # Draw player cards
@@ -1424,11 +1410,11 @@ class PokerGame:
         
         # Draw current bet with 2 decimal places
         if player.current_bet > 0:
-            bet_text = self.font.render(f"Bet: ${player.current_bet:.2f}", True, (255, 255, 0))
+            bet_text = self.font.render(f"Bet: {player.current_bet:.2f}B", True, (255, 255, 0))
             self.screen.blit(bet_text, (player.x - 30, player.y + 80))
     
         # Draw dealer button (D) - Updated positioning logic
-        if player.position == self.button_seat_position:  # Only draw if this player is the dealer
+        if player.seat_position == self.button_seat_position:  # Only draw if this player is the dealer
             button_x = player.x + 52
             button_y = player.y + 80
             pygame.draw.circle(self.screen, (255, 255, 255), (button_x, button_y), 15)
@@ -1454,7 +1440,7 @@ class PokerGame:
             self._draw_card(card, 400 + i * 60, 350)
         
         # Draw pot with 2 decimal places
-        pot_text = self.font.render(f"Pot: ${self.pot:.2f}", True, (255, 255, 255))
+        pot_text = self.font.render(f"Pot: {self.pot:.2f}B", True, (255, 255, 255))
         self.screen.blit(pot_text, (550, 300))
         
         # Draw players
@@ -1475,13 +1461,13 @@ class PokerGame:
         
         # Draw bet slider with min and max values
         current_player = self.players[self.current_player_seat]
-        min_raise = max(self.current_bet * 2, self.big_blind * 2)
+        min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
         max_raise = current_player.stack + current_player.current_bet
         
         pygame.draw.rect(self.screen, (200, 200, 200), self.pygame_bet_slider)
-        bet_text = self.font.render(f"Bet: ${int(self.pygame_slider_bet_amount)}", True, (255, 255, 255))
-        min_text = self.font.render(f"Min: ${min_raise}", True, (255, 255, 255))
-        max_text = self.font.render(f"Max: ${max_raise}", True, (255, 255, 255))
+        bet_text = self.font.render(f"Bet: {int(self.pygame_slider_bet_amount)}B", True, (255, 255, 255))
+        min_text = self.font.render(f"Min: {min_raise}B", True, (255, 255, 255))
+        max_text = self.font.render(f"Max: {max_raise}B", True, (255, 255, 255))
         
         self.screen.blit(bet_text, (50, SCREEN_HEIGHT - 75))
         self.screen.blit(min_text, (self.pygame_bet_slider.x, SCREEN_HEIGHT - 125))
@@ -1548,13 +1534,6 @@ class PokerGame:
         # Ajouter l'affichage des blindes actuelles
         blind_text = self.font.render(f"Blindes: {self.small_blind}/{self.big_blind}", True, (255, 255, 255))
         self.screen.blit(blind_text, (50, 25))
-        
-        hands_left_text = self.font.render(
-            f"Mains avant augmentation: {self.hands_until_blind_increase - (self.hands_played % self.hands_until_blind_increase)}", 
-            True, 
-            (255, 255, 255)
-        )
-        self.screen.blit(hands_left_text, (50, 75))
 
     def handle_input(self, event):
         """
@@ -1574,7 +1553,7 @@ class PokerGame:
                     # Validate bet amount doesn't exceed player's stack
                     if action == PlayerAction.RAISE:
                         max_bet = current_player.stack + current_player.current_bet
-                        min_bet = max(self.current_bet * 2, self.big_blind * 2)
+                        min_bet = max(self.current_maximum_bet * 2, self.big_blind * 2)
                         bet_amount = min(bet_amount, max_bet)
                         bet_amount = max(bet_amount, min_bet)
                     self.process_action(current_player, action, bet_amount)
@@ -1582,7 +1561,7 @@ class PokerGame:
             # Check bet slider
             if self.pygame_bet_slider.collidepoint(mouse_pos):
                 # Calculate minimum raise (2x current bet)
-                min_raise = max(self.current_bet * 2, self.big_blind * 2)
+                min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
                 # Calculate maximum raise (player's stack + current bet)
                 max_raise = current_player.stack + current_player.current_bet
                 
