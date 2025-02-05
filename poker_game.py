@@ -318,7 +318,7 @@ class PokerGame:
             
             # Trouver l'index du bouton actuel dans la liste des positions, si l'ancien Button n'est plus dans la liste, le joueur encore actif le plus proche à la suite de lui 
             # Comme les roles vont dans l'ordre croissanrt de 0 à 5, on a juste à chercher l'index du plus petit role
-            if 5 in role_player_idx_list: # Si le bouton est encore actif
+            if self.button_seat_position in role_player_idx_list: # Si le bouton est encore actif
                 button_role_idx = role_player_idx_list.index(self.button_seat_position)
             else :
                 button_role_idx = role_player_idx_list.index(min(role_player_idx_list))
@@ -711,134 +711,101 @@ class PokerGame:
         Returns:
             Tuple[HandRank, List[int]]: Le rang de la main et les valeurs pour départager
         """
+        # Combine les cartes du joueur avec les cartes communes
         all_cards = player.cards + self.community_cards
+        # Extrait les valeurs et couleurs de toutes les cartes
         values = [card.value for card in all_cards]
         suits = [card.suit for card in all_cards]
         
-        # Check for flush
+        # Vérifie si une couleur est possible (5+ cartes de même couleur)
         suit_counts = Counter(suits)
+        # Trouve la première couleur qui apparaît 5 fois ou plus, sinon None
         flush_suit = next((suit for suit, count in suit_counts.items() if count >= 5), None)
         
-        # Check for straight
-        unique_values = sorted(set(values))
-        straight = False
-        straight_high = None
-        for i in range(len(unique_values) - 4):
-            if unique_values[i+4] - unique_values[i] == 4:
-                straight = True
-                straight_high = unique_values[i+4]
+        # Si une couleur est possible, on vérifie d'abord les mains les plus fortes
+        if flush_suit:
+            # Trie les cartes de la couleur par valeur décroissante
+            flush_cards = sorted([card for card in all_cards if card.suit == flush_suit], key=lambda x: x.value, reverse=True)
+            flush_values = [card.value for card in flush_cards]
+            
+            # Vérifie si on a une quinte flush
+            for i in range(len(flush_values) - 4):
+                # Vérifie si 5 cartes consécutives de même couleur
+                if flush_values[i] - flush_values[i+4] == 4:
+                    # Si la plus haute carte est un As, c'est une quinte flush royale
+                    if flush_values[i] == 14 and flush_values[i+4] == 10:
+                        return (HandRank.ROYAL_FLUSH, [14])
+                    # Sinon c'est une quinte flush normale
+                    return (HandRank.STRAIGHT_FLUSH, [flush_values[i]])
+            
+            # Vérifie la quinte flush basse (As-5)
+            if set([14,2,3,4,5]).issubset(set(flush_values)):
+                return (HandRank.STRAIGHT_FLUSH, [5])
         
-        # Special case for Ace-low straight
-        if set([14, 2, 3, 4, 5]).issubset(set(values)):
-            straight = True
-            straight_high = 5
-        
-        # Count values
+        # Compte les occurrences de chaque valeur
         value_counts = Counter(values)
         
-        # Determine hand rank
-        if straight and flush_suit:
-            flush_cards = [card for card in all_cards if card.suit == flush_suit]
-            if straight_high == 14 and all(v in [10, 11, 12, 13, 14] for v in values):
-                return (HandRank.ROYAL_FLUSH, [14])
-            return (HandRank.STRAIGHT_FLUSH, [straight_high])
-        
+        # Vérifie le carré (4 cartes de même valeur)
         if 4 in value_counts.values():
             quads = [v for v, count in value_counts.items() if count == 4][0]
-            return (HandRank.FOUR_OF_A_KIND, [quads])
+            # Trouve la plus haute carte restante comme kicker
+            kicker = max(v for v in values if v != quads)
+            return (HandRank.FOUR_OF_A_KIND, [quads, kicker])
         
-        if 3 in value_counts.values() and 2 in value_counts.values():
-            trips = [v for v, count in value_counts.items() if count == 3][0]
-            pair = [v for v, count in value_counts.items() if count == 2][0]
-            return (HandRank.FULL_HOUSE, [trips, pair])
+        # Vérifie le full house (brelan + paire)
+        if 3 in value_counts.values():
+            # Trouve tous les brelans, triés par valeur décroissante
+            trips = sorted([v for v, count in value_counts.items() if count >= 3], reverse=True)
+            # Trouve toutes les paires potentielles, y compris les brelans qui peuvent servir de paire
+            pairs = []
+            for value, count in value_counts.items():
+                if count >= 2:  # La carte peut former une paire
+                    if count >= 3 and value != trips[0]:  # C'est un second brelan
+                        pairs.append(value)
+                    elif count == 2:  # C'est une paire simple
+                        pairs.append(value)
+            
+            if pairs:  # Si on a au moins une paire ou un second brelan utilisable comme paire
+                return (HandRank.FULL_HOUSE, [trips[0], max(pairs)])
         
+        # Vérifie la couleur simple
         if flush_suit:
             flush_cards = sorted([card.value for card in all_cards if card.suit == flush_suit], reverse=True)
             return (HandRank.FLUSH, flush_cards[:5])
         
-        if straight:
-            return (HandRank.STRAIGHT, [straight_high])
+        # Vérifie la quinte (5 cartes consécutives)
+        unique_values = sorted(set(values), reverse=True)
+        for i in range(len(unique_values) - 4):
+            if unique_values[i] - unique_values[i+4] == 4:
+                return (HandRank.STRAIGHT, [unique_values[i]])
+                
+        # Vérifie la quinte basse (As-5)
+        if set([14,2,3,4,5]).issubset(set(values)):
+            return (HandRank.STRAIGHT, [5])
         
+        # Vérifie le brelan
         if 3 in value_counts.values():
-            trips = [v for v, count in value_counts.items() if count == 3][0]
+            # Trouve tous les brelans et sélectionne le plus haut
+            trips = max(v for v, count in value_counts.items() if count >= 3)
+            # Garde les 2 meilleures cartes restantes comme kickers
             kickers = sorted([v for v in values if v != trips], reverse=True)[:2]
             return (HandRank.THREE_OF_A_KIND, [trips] + kickers)
         
-        pairs = [v for v, count in value_counts.items() if count == 2]
+        # Vérifie la double paire
+        pairs = sorted([v for v, count in value_counts.items() if count >= 2], reverse=True)
         if len(pairs) >= 2:
-            pairs.sort(reverse=True)
-            kicker = max(v for v in values if v not in pairs[:2])
-            return (HandRank.TWO_PAIR, pairs[:2] + [kicker])
+            # Garde la meilleure carte restante comme kicker
+            kickers = [v for v in values if v not in pairs[:2]]
+            return (HandRank.TWO_PAIR, pairs[:2] + [max(kickers)])
         
+        # Vérifie la paire simple
         if pairs:
+            # Garde les 3 meilleures cartes restantes comme kickers
             kickers = sorted([v for v in values if v != pairs[0]], reverse=True)[:3]
-            return (HandRank.PAIR, pairs + kickers)
+            return (HandRank.PAIR, [pairs[0]] + kickers)
         
+        # Si aucune combinaison, retourne la carte haute avec les 5 meilleures cartes
         return (HandRank.HIGH_CARD, sorted(values, reverse=True)[:5])
-
-    def evaluate_current_hand(self, player) -> Tuple[HandRank, List[int]]:
-        """
-        Évalue la main actuelle d'un joueur avec les cartes communes disponibles meme si il y en a moins de 5.
-        
-        Args:
-            player (Player): Le joueur dont on évalue la main
-        """
-        # Si le joueur n'a pas de cartes ou a foldé
-        if not player.cards or player.has_folded:
-            return (HandRank.HIGH_CARD, [0])
-        
-        # Obtenir toutes les cartes disponibles
-        all_cards = player.cards + self.community_cards
-        values = [card.value for card in all_cards]
-        suits = [card.suit for card in all_cards]
-        
-        # Au pré-flop, évaluer uniquement les cartes du joueur
-        if self.current_phase == GamePhase.PREFLOP:
-            # Paire de départ
-            if player.cards[0].value == player.cards[1].value:
-                return (HandRank.PAIR, [player.cards[0].value])
-            # Cartes hautes
-            return (HandRank.HIGH_CARD, sorted([c.value for c in player.cards], reverse=True))
-        
-        # Compter les occurrences des valeurs et couleurs
-        value_counts = Counter(values)
-        suit_counts = Counter(suits)
-        
-        # Vérifier les combinaisons possibles avec les cartes disponibles
-        # Paire
-        pairs = [v for v, count in value_counts.items() if count >= 2]
-        if pairs:
-            if len(pairs) >= 2:  # Double paire
-                pairs.sort(reverse=True)
-                kicker = max(v for v in values if v not in pairs[:2])
-                return (HandRank.TWO_PAIR, pairs[:2] + [kicker])
-            # Simple paire
-            kickers = sorted([v for v in values if v != pairs[0]], reverse=True)[:3]
-            return (HandRank.PAIR, pairs + kickers)
-        
-        # Brelan
-        trips = [v for v, count in value_counts.items() if count >= 3]
-        if trips:
-            kickers = sorted([v for v in values if v != trips[0]], reverse=True)[:2]
-            return (HandRank.THREE_OF_A_KIND, [trips[0]] + kickers)
-        
-        # Couleur potentielle (4 cartes de la même couleur)
-        flush_suit = next((suit for suit, count in suit_counts.items() if count >= 4), None)
-        if flush_suit:
-            flush_cards = sorted([card.value for card in all_cards if card.suit == flush_suit], reverse=True)
-            if len(flush_cards) >= 5:
-                return (HandRank.FLUSH, flush_cards[:5])
-        
-        # Quinte potentielle
-        unique_values = sorted(set(values))
-        for i in range(len(unique_values) - 3):
-            if unique_values[i+3] - unique_values[i] == 3:  # 4 cartes consécutives
-                return (HandRank.STRAIGHT, [unique_values[i+3]])
-        
-        # Si aucune combinaison, retourner la plus haute carte
-        return (HandRank.HIGH_CARD, sorted(values, reverse=True)[:5])
-
-    
 
     def handle_showdown(self):
         """
@@ -859,18 +826,41 @@ class PokerGame:
         # Traiter d'abord les side pots (du plus petit au plus grand)
         total_winnings = defaultdict(int)
         
+        # Traiter les side pots dans l'ordre inverse (du plus grand au plus petit)
+        for i in range(len(self.side_pots) - 1, -1, -1):
+            if self.side_pots[i] > 0:
+                # Identifier les joueurs éligibles pour ce side pot
+                eligible_players = [p for p in active_players if not p.is_all_in or p.stack == 0]
+                if len(eligible_players) > 1:
+                    # Évaluer les mains des joueurs éligibles
+                    player_hands = [(player, self.evaluate_final_hand(player)) for player in eligible_players]
+                    player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
+                    
+                    # Trouver le(s) gagnant(s) du side pot
+                    best_hand = player_hands[0][1]
+                    winners = [p for p, h in player_hands if h == best_hand]
+                    
+                    # Distribuer le side pot équitablement entre les gagnants
+                    split_amount = self.side_pots[i] / len(winners)
+                    for winner in winners:
+                        total_winnings[winner] += split_amount
+                elif len(eligible_players) == 1:
+                    total_winnings[eligible_players[0]] += self.side_pots[i]
+        
         # Traiter le pot principal
         if len(active_players) == 1:
             winner = active_players[0]
+            total_winnings[winner] += self.pot
         else:
             player_hands = [(player, self.evaluate_final_hand(player)) for player in active_players]
             player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
-            winner = player_hands[0][0]
-            winning_hand = player_hands[0][1][0].name.replace('_', ' ').title()
-            print(f"{winner.name}'s winning hand: {winning_hand}")
-        
-        total_winnings[winner] += self.pot
-        print(f"Main pot ({self.pot}B) won by {winner.name}")
+            best_hand = player_hands[0][1]
+            winners = [p for p, h in player_hands if h == best_hand]
+            split_amount = self.pot / len(winners)
+            for winner in winners:
+                total_winnings[winner] += split_amount
+                winning_hand = best_hand[0].name.replace('_', ' ').title()
+                print(f"{winner.name}'s winning hand: {winning_hand}")
         
         # Distribuer les gains
         for winner, amount in total_winnings.items():
@@ -882,7 +872,7 @@ class PokerGame:
         
         # Reset pots
         self.pot = 0
-        self.side_pots = []
+        self.side_pots = [0] * 4
         
         # Set the winner display start time
         self.pygame_winner_display_start = pygame.time.get_ticks()
@@ -938,7 +928,7 @@ class PokerGame:
 
     def _create_side_pot(self, all_in_amount: int):
         """
-        Crée un side pot lorsqu'un joueur est all-in pour un montant inférieur.
+        Crée un side pot lorsqu'un joueur est all-in.
         
         Args:
             all_in_amount (int): Montant du all-in du joueur
@@ -969,15 +959,11 @@ class PokerGame:
         # Mettre à jour les pots
         self.pot = main_pot_amount
         
-        # Créer le side pot si nécessaire
-        if side_pot_amount > 0:
-            # Les joueurs éligibles sont ceux qui ont misé plus que le all-in ou qui ont encore des jetons
-            eligible_players = [p for p in active_players if p.stack > 0 or p.current_bet == all_in_amount]
-            self.side_pots.append(SidePot(side_pot_amount, eligible_players))
-            
-            print(f"Side pot created: {side_pot_amount}B")
-            print(f"Main pot adjusted to: {main_pot_amount}B")
-            print(f"Eligible players for side pot: {[p.name for p in eligible_players]}")
+        # Trouver le premier side pot vide
+        for i, pot in enumerate(self.side_pots):
+            if pot == 0:
+                self.side_pots[i] = side_pot_amount
+                break
 
     # --------------------------------
     # Methodes Nécessaires pour le RL
@@ -1230,6 +1216,68 @@ class PokerGame:
     # --------------------------------
     # Methodes de calculs (à exporter dans un autre fichier)
     # --------------------------------
+    def evaluate_current_hand(self, player) -> Tuple[HandRank, List[int]]:
+        """
+        Évalue la main actuelle d'un joueur avec les cartes communes disponibles meme si il y en a moins de 5.
+        
+        Args:
+            player (Player): Le joueur dont on évalue la main
+        """
+        # Si le joueur n'a pas de cartes ou a foldé
+        if not player.cards or player.has_folded:
+            return (HandRank.HIGH_CARD, [0])
+        
+        # Obtenir toutes les cartes disponibles
+        all_cards = player.cards + self.community_cards
+        values = [card.value for card in all_cards]
+        suits = [card.suit for card in all_cards]
+        
+        # Au pré-flop, évaluer uniquement les cartes du joueur
+        if self.current_phase == GamePhase.PREFLOP:
+            # Paire de départ
+            if player.cards[0].value == player.cards[1].value:
+                return (HandRank.PAIR, [player.cards[0].value])
+            # Cartes hautes
+            return (HandRank.HIGH_CARD, sorted([c.value for c in player.cards], reverse=True))
+        
+        # Compter les occurrences des valeurs et couleurs
+        value_counts = Counter(values)
+        suit_counts = Counter(suits)
+        
+        # Vérifier les combinaisons possibles avec les cartes disponibles
+        # Paire
+        pairs = [v for v, count in value_counts.items() if count >= 2]
+        if pairs:
+            if len(pairs) >= 2:  # Double paire
+                pairs.sort(reverse=True)
+                kicker = max(v for v in values if v not in pairs[:2])
+                return (HandRank.TWO_PAIR, pairs[:2] + [kicker])
+            # Simple paire
+            kickers = sorted([v for v in values if v != pairs[0]], reverse=True)[:3]
+            return (HandRank.PAIR, pairs + kickers)
+        
+        # Brelan
+        trips = [v for v, count in value_counts.items() if count >= 3]
+        if trips:
+            kickers = sorted([v for v in values if v != trips[0]], reverse=True)[:2]
+            return (HandRank.THREE_OF_A_KIND, [trips[0]] + kickers)
+        
+        # Couleur potentielle (4 cartes de la même couleur)
+        flush_suit = next((suit for suit, count in suit_counts.items() if count >= 4), None)
+        if flush_suit:
+            flush_cards = sorted([card.value for card in all_cards if card.suit == flush_suit], reverse=True)
+            if len(flush_cards) >= 5:
+                return (HandRank.FLUSH, flush_cards[:5])
+        
+        # Quinte potentielle
+        unique_values = sorted(set(values))
+        for i in range(len(unique_values) - 3):
+            if unique_values[i+3] - unique_values[i] == 3:  # 4 cartes consécutives
+                return (HandRank.STRAIGHT, [unique_values[i+3]])
+        
+        # Si aucune combinaison, retourner la plus haute carte
+        return (HandRank.HIGH_CARD, sorted(values, reverse=True)[:5])
+    
     def _evaluate_preflop_strength(self, cards) -> float:
         """
         Évalue la force d'une main preflop selon des heuristiques.
