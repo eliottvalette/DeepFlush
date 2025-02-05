@@ -448,10 +448,12 @@ class PokerGame:
         if self.players[sb_seat_position].stack < self.small_blind:
             self.players[sb_seat_position].is_all_in = True
             self.players[sb_seat_position].current_player_bet = self.players[sb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la SB devient son stack
+            self.pot += self.players[sb_seat_position].stack  # Le pot est augmenté du stack du joueur
             self.players[sb_seat_position].stack = 0  # Le stack du joueur est donc 0
             self.players[sb_seat_position].has_acted = True
         else:
             self.players[sb_seat_position].stack -= self.small_blind
+            self.pot += self.small_blind  # Le pot est augmenté de la SB
             self.players[sb_seat_position].current_player_bet = self.small_blind
             self.players[sb_seat_position].has_acted = True
 
@@ -461,11 +463,13 @@ class PokerGame:
         # BB
         if self.players[bb_seat_position].stack < self.big_blind:
             self.players[bb_seat_position].is_all_in = True
-            self.players[bb_seat_position].current_playrr_bet = self.players[bb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la BB devient son stack
+            self.players[bb_seat_position].current_player_bet = self.players[bb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la BB devient son stack
+            self.pot += self.players[bb_seat_position].stack  # Le pot est augmenté du stack du joueur
             self.players[bb_seat_position].stack = 0  # Le stack du joueur devient 0
             self.players[bb_seat_position].has_acted = True
         else:
             self.players[bb_seat_position].stack -= self.big_blind
+            self.pot += self.big_blind  # Le pot est augmenté de la BB
             self.players[bb_seat_position].current_player_bet = self.big_blind
             self.players[bb_seat_position].has_acted = True
         
