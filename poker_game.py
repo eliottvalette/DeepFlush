@@ -454,6 +454,12 @@ class PokerGame:
         ont déjà agi ET que pour chacun, la mise actuelle est égale à la mise maximale (ou qu'il est all-in).
         """
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
+        current_player = self.players[self.current_player_seat]
+
+        # Cas particulier, au PREFLOP, si la BB est limpée, elle doit avoir un droit de parole
+        print(f"\n\ncurrent_player = {current_player.name} role: {current_player.role_position}\n\n")
+        if self.current_phase == GamePhase.PREFLOP and current_player.role_position == 2:
+            return False
         
         # Si un seul joueur reste, le tour est terminé
         if len(active_players) == 1:
@@ -514,7 +520,6 @@ class PokerGame:
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
         while not self.players[self.current_player_seat].is_active:
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
-        
     
     def _update_button_states(self):
         """
@@ -527,7 +532,7 @@ class PokerGame:
         for button in self.pygame_action_buttons.values():
             button.enabled = True
         
-        # Règles spécifiques au preflop
+        # ---- CHECK ----
         if self.current_phase == GamePhase.PREFLOP:
             # Le joueur ne peut check que si sa mise actuelle est égale à la mise courante
             if current_player.current_bet < self.current_maximum_bet:
@@ -536,17 +541,27 @@ class PokerGame:
             # Post-flop: on peut check seulement si personne n'a misé
             if current_player.current_bet < self.current_maximum_bet:
                 self.pygame_action_buttons[PlayerAction.CHECK].enabled = False
+
+        # ---- FOLD ----
+        if self.pygame_action_buttons[PlayerAction.CHECK].enabled:
+            self.pygame_action_buttons[PlayerAction.FOLD].enabled = False
+
+        # ---- CALL ----
         
         # Désactiver call si pas de mise à suivre ou pas assez de jetons
         if current_player.current_bet == self.current_maximum_bet:
             self.pygame_action_buttons[PlayerAction.CALL].enabled = False
         elif current_player.stack < (self.current_maximum_bet - current_player.current_bet):
             self.pygame_action_buttons[PlayerAction.CALL].enabled = False
+
+        # ---- RAISE ----
         
         # Désactiver raise si pas assez de jetons pour la mise minimale
         min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
         if current_player.stack + current_player.current_bet < min_raise:
             self.pygame_action_buttons[PlayerAction.RAISE].enabled = False
+
+        # ---- ALL-IN ----
         
         # Désactiver raise si déjà 4 relances dans le tour
         if self.number_raise_this_game_phase >= 4:
