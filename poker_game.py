@@ -434,9 +434,15 @@ class PokerGame:
         """
         Méthode à run en début de main pour distribuer automatiquement les blindes
         """
+        active_players = [p for p in self.players if p.is_active]
         # Déterminer les positions SB et BB en se basant sur les rôles attribués
-        sb_player = next((p for p in self.players if p.is_active and p.role_position == 0), None)
-        bb_player = next((p for p in self.players if p.is_active and p.role_position == 1), None)
+        if len(active_players) == 2:
+            # Heads-Up : le joueur en position 0 est la Small Blind et le joueur en position 5 est le Big Blind (bouton)
+            sb_player = next((p for p in self.players if p.is_active and p.role_position == 0), None)
+            bb_player = next((p for p in self.players if p.is_active and p.role_position == 5), None)
+        else:
+            sb_player = next((p for p in self.players if p.is_active and p.role_position == 0), None)
+            bb_player = next((p for p in self.players if p.is_active and p.role_position == 1), None)
         
         if sb_player is None or bb_player is None:
             raise ValueError("Impossible de déterminer la position de la Small Blind ou Big Blind")
