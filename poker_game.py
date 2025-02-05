@@ -1506,11 +1506,25 @@ class PokerGame:
                 pygame.draw.rect(self.screen, (100, 100, 100), (player.x + i * 60, player.y, 50, 70))
 
 
-        # Draw current bet with 2 decimal places - Updated to show total contribution
+        # Draw current bet with decomposition into main pot and side pots
         if player.current_player_bet > 0:
             total_contribution = player.current_player_bet
-            bet_text = self.font.render(f"Bet: {total_contribution:.2f}BB", True, (255, 255, 0))
-            self.screen.blit(bet_text, (player.x - 30, player.y + 80))
+            bet_lines = [f"Total bet: {total_contribution:.2f}BB"]
+            
+            # Add main pot contribution if any
+            if self.pot > 0:
+                bet_lines.append(f"Main: {min(total_contribution, self.pot):.2f}BB")
+            
+            # Add side pot contributions if any
+            for i, side_pot in enumerate(self.side_pots):
+                if side_pot > 0:
+                    bet_lines.append(f"Side {i+1}: {min(total_contribution, side_pot):.2f}BB")
+            
+            # Draw each line of bet text
+            for i, line in enumerate(bet_lines):
+                bet_text = self.font.render(line, True, (255, 255, 0))
+                self.screen.blit(bet_text, (player.x - 30, player.y + 80 + i * 25))
+    
     
         # Draw dealer button (D) - Updated positioning logic
         if player.seat_position == self.button_seat_position:  # Only draw if this player is the dealer
