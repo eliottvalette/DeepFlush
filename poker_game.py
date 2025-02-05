@@ -245,6 +245,7 @@ class PokerGame:
         # Réinitialiser les états variables des joueurs
         for player in self.players:
             player.stack = self.starting_stack
+            player.current_bet = 0
             player.cards = []
             player.is_active = True
             player.has_folded = False
@@ -284,13 +285,14 @@ class PokerGame:
         """
         # Réinitialiser les variables d'état du jeu
         self.pot = 0
-        self.deck = self._create_deck() 
+        self.deck = self._create_deck() # Réinitialiser le deck
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
 
         # Actualiser les états variables des joueurs
         for player in self.players:
             player.cards = []
+            player.current_bet = 0
             player.is_all_in = False
             player.has_folded = False
             player.range = None   
@@ -300,6 +302,8 @@ class PokerGame:
         active_players = [player for player in self.players if player.is_active]
         if len(active_players) < 2:
             raise ValueError("Il doit y avoir au moins 2 joueurs pour continuer la partie")
+        
+        self.deal_cards()
             
         # Réinitialiser les variables de jeu
         if first_hand:
@@ -417,18 +421,23 @@ class PokerGame:
             self.players[sb_seat_position].stack -= self.small_blind
             self.players[sb_seat_position].current_bet = self.small_blind
             self.players[sb_seat_position].has_acted = True
+
+        self.current_maximum_bet = self.small_blind
+        self._next_player()
         
         # BB
         if self.players[bb_seat_position].stack < self.big_blind:
             self.players[bb_seat_position].is_all_in = True
             self.players[bb_seat_position].current_bet = self.players[bb_seat_position].stack # Le Bet du joueur n'ayant pas assez pour payant la BB, est égal à son stack
-            self.players[self.BIG_BLIND_SEAT_POSITION].stack = 0 # Le stack du joueur est donc 0
-            self.players[self.BIG_BLIND_SEAT_POSITION].has_acted = True
+            self.players[bb_seat_position].stack = 0 # Le stack du joueur est donc 0
+            self.players[bb_seat_position].has_acted = True
         else :
-            self.players[self.BIG_BLIND_SEAT_POSITION].stack -= self.big_blind
-            self.players[self.BIG_BLIND_SEAT_POSITION].current_bet = self.big_blind
-            self.players[self.BIG_BLIND_SEAT_POSITION].has_acted = True
-    
+            self.players[bb_seat_position].stack -= self.big_blind
+            self.players[bb_seat_position].current_bet = self.big_blind
+            self.players[bb_seat_position].has_acted = True
+        
+        self.current_maximum_bet = self.big_blind
+        self._next_player()
 
     def _next_player(self):
         """
@@ -468,7 +477,7 @@ class PokerGame:
         print(f"current_phase {self.current_phase}")
         
         # Check if all active players are all-in
-        active_players = [p for p in self.players if p.is_active]
+        active_players = [p for p in self.players if p.is_active and not p.has_folded]
         all_in_players = [p for p in active_players if p.stack == 0]
         
         if len(all_in_players) == len(active_players) and len(active_players) > 1:
@@ -910,12 +919,6 @@ class PokerGame:
         Distribue deux cartes à chaque joueur actif.
         Réinitialise et mélange le jeu avant la distribution.
         """
-        self.deck = self._create_deck()  # Reset and shuffle deck
-        # Clear previous hands
-        for player in self.players:
-            player.cards = []
-        self.community_cards = []
-        
         # Deal two cards to each active player
         for _ in range(2):
             for player in self.players:
@@ -1445,7 +1448,7 @@ class PokerGame:
         self.screen.blit(name_text, (player.x - 50, player.y - 40))
         
         # Draw player cards
-        if player.is_active and not player.has_folded and player.cards:
+        if player.is_active and not player.has_folded and len(player.cards) > 0:
             if player.is_human or self.current_phase == GamePhase.SHOWDOWN:
                 for i, card in enumerate(player.cards):
                     self._draw_card(card, player.x + i * 60, player.y)
@@ -1453,7 +1456,11 @@ class PokerGame:
                 # Draw card backs for non-human players
                 for i in range(2):
                     pygame.draw.rect(self.screen, (200, 0, 0), (player.x + i * 60, player.y, 50, 70))
-        
+        elif player.is_active and player.has_folded :
+            for i in range(2): # Draw 2 back cards a bit transparent for folded players
+                pygame.draw.rect(self.screen, (100, 100, 100), (player.x + i * 60, player.y, 50, 70))
+
+
         # Draw current bet with 2 decimal places
         if player.current_bet > 0:
             bet_text = self.font.render(f"Bet: {player.current_bet:.2f}B", True, (255, 255, 0))
@@ -1621,9 +1628,7 @@ class PokerGame:
         """
         Lance le jeu en mode manuel avec interface graphique.
         Gère la boucle principale du jeu et les événements.
-        """
-        self.deal_cards()  # Initial deal
-        
+        """        
         running = True
         while running:
             for event in pygame.event.get():
