@@ -458,9 +458,9 @@ class PokerGame:
 
         # Cas particulier, au PREFLOP, si la BB est limpée, elle doit avoir un droit de parole
         print(f"\n\ncurrent_player = {current_player.name} role: {current_player.role_position}\n\n")
-        if self.current_phase == GamePhase.PREFLOP and current_player.role_position == 2:
+        if self.current_phase == GamePhase.PREFLOP and current_player.role_position == 0: # 
             return False
-        
+                
         # Si un seul joueur reste, le tour est terminé
         if len(active_players) == 1:
             return True
