@@ -327,8 +327,8 @@ class PokerGame:
             # Réassigner les positions selon le nombre de joueurs actifs (le code est très peu optimisé mais il est très simple à comprendre)
             if len(active_players) == 2:  # Heads-Up
                 # En Heads-Up, le bouton est aussi la petite blinde
-                self.players[role_player_idx_list[1]].role_position = 5  # Button/SB
-                self.players[role_player_idx_list[0]].role_position = 0  # BB
+                self.players[role_player_idx_list[1]].role_position = 5  # Button/BB
+                self.players[role_player_idx_list[0]].role_position = 0  # SB
                 
             elif len(active_players) == 3:
                 # Si ils sont 3, Deuxieme devient BU (5), Troisième devient SB (0) 1er devient BB (1)
@@ -359,10 +359,25 @@ class PokerGame:
                 self.players[role_player_idx_list[4]].role_position = 2  # UTG
                 self.players[role_player_idx_list[5]].role_position = 3  # Hijack (HJ)
                 self.players[role_player_idx_list[0]].role_position = 4  # Cutoff (CO)
+
+            
+        # Cas classique (>= 3 Joueurs)
+        if len(active_players) == 2:    
+            self.BUTTON_SEAT_POSITION = role_player_idx_list[1]
+            self.SMALL_BLIND_SEAT_POSITION = role_player_idx_list[0]
+            self.BIG_BLIND_SEAT_POSITION = role_player_idx_list[1]
+        elif len(active_players) == 3:
+            self.BUTTON_SEAT_POSITION = role_player_idx_list[1]
+            self.SMALL_BLIND_SEAT_POSITION = role_player_idx_list[2]
+            self.BIG_BLIND_SEAT_POSITION = role_player_idx_list[0]
+        else :
+            self.BUTTON_SEAT_POSITION = role_player_idx_list[1]
+            self.SMALL_BLIND_SEAT_POSITION = role_player_idx_list[2]
+            self.BIG_BLIND_SEAT_POSITION = role_player_idx_list[3]
         
         # Initialiser les variables d'état du jeu
         self.button_seat_position = self.players[role_player_idx_list[1]].seat_position # Actualisé après les nouvelles positions des joueurs
-        self.current_player_seat = self.players[role_player_idx_list[1]].seat_position
+        self.current_player_seat = self.players[role_player_idx_list[2]].seat_position
         self.current_maximum_bet = 0  # initialisé à 0 mais s'updatera automatiquement à BB
         self.last_raiser_seat = None
         
@@ -381,8 +396,47 @@ class PokerGame:
         # --------------------
 
         self._update_button_states()
+        self.deal_small_and_big_blind()
 
         return self.get_state()
+    
+    def deal_small_and_big_blind(self):
+        """
+        Methode à run en début de main pour distribuer automatiquement les blindes
+        """
+        sb_seat_position = self.SMALL_BLIND_SEAT_POSITION
+        bb_seat_position = self.BIG_BLIND_SEAT_POSITION
+
+        # SB
+        if self.players[sb_seat_position].stack < self.small_blind:
+            self.players[sb_seat_position].is_all_in = True
+            self.players[sb_seat_position].current_bet = self.players[sb_seat_position].stack # Le Bet du joueur n'ayant pas assez pour payant la SB, est égal à son stack
+            self.players[sb_seat_position].stack = 0 # Le stack du joueur est donc 0
+            self.players[sb_seat_position].has_acted = True
+        else :
+            self.players[sb_seat_position].stack -= self.small_blind
+            self.players[sb_seat_position].current_bet = self.small_blind
+            self.players[sb_seat_position].has_acted = True
+        
+        # BB
+        if self.players[bb_seat_position].stack < self.big_blind:
+            self.players[bb_seat_position].is_all_in = True
+            self.players[bb_seat_position].current_bet = self.players[bb_seat_position].stack # Le Bet du joueur n'ayant pas assez pour payant la BB, est égal à son stack
+            self.players[self.BIG_BLIND_SEAT_POSITION].stack = 0 # Le stack du joueur est donc 0
+            self.players[self.BIG_BLIND_SEAT_POSITION].has_acted = True
+        else :
+            self.players[self.BIG_BLIND_SEAT_POSITION].stack -= self.big_blind
+            self.players[self.BIG_BLIND_SEAT_POSITION].current_bet = self.big_blind
+            self.players[self.BIG_BLIND_SEAT_POSITION].has_acted = True
+    
+
+    def _next_player(self):
+        """
+        Passe au prochain joueur actif et n'ayant pas fold dans le sens horaire.
+        """
+        self.current_player_seat = (self.current_player_seat + 1) % self.num_players
+        while not self.players[self.current_player_seat].is_active or self.players[self.current_player_seat].has_folded:
+            self.current_player_seat = (self.current_player_seat + 1) % self.num_players
     
     def check_phase_completion(self):
         """
@@ -405,7 +459,6 @@ class PokerGame:
                 return False
         
         return True
-
 
     def advance_phase(self):
         """
@@ -452,6 +505,7 @@ class PokerGame:
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
         while not self.players[self.current_player_seat].is_active:
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
+        
     
     def _update_button_states(self):
         """
@@ -491,6 +545,22 @@ class PokerGame:
         
         # All-in toujours disponible si le joueur a des jetons
         self.pygame_action_buttons[PlayerAction.ALL_IN].enabled = current_player.stack > 0
+
+    def _create_action_buttons(self) -> Dict[PlayerAction, Button]:
+        """
+        Crée et initialise les boutons d'action pour l'interaction des joueurs.
+        
+        Returns:
+            Dict[PlayerAction, Button]: Dictionnaire associant les actions aux objets boutons
+        """
+        buttons = {
+            PlayerAction.FOLD: Button(300, SCREEN_HEIGHT - 100, 100, 40, "Fold", (200, 0, 0)),
+            PlayerAction.CHECK: Button(450, SCREEN_HEIGHT - 100, 100, 40, "Check", (0, 200, 0)),
+            PlayerAction.CALL: Button(600, SCREEN_HEIGHT - 100, 100, 40, "Call", (0, 0, 200)),
+            PlayerAction.RAISE: Button(750, SCREEN_HEIGHT - 100, 100, 40, "Raise", (200, 200, 0)),
+            PlayerAction.ALL_IN: Button(900, SCREEN_HEIGHT - 100, 100, 40, "All-in", (150, 0, 150))
+        }
+        return buttons
 
     def process_action(self, player: Player, action: PlayerAction, bet_amount: Optional[int] = None):
         """
@@ -1154,33 +1224,9 @@ class PokerGame:
 
         return self.get_state(), reward
 
-    def _next_player(self):
-        """
-        Passe au prochain joueur actif et n'ayant pas fold dans le sens horaire.
-        """
-        self.current_player_seat = (self.current_player_seat + 1) % self.num_players
-        while not self.players[self.current_player_seat].is_active or self.players[self.current_player_seat].has_folded:
-            self.current_player_seat = (self.current_player_seat + 1) % self.num_players
-
     # --------------------------------
     # Methodes de calculs (à exporter dans un autre fichier)
     # --------------------------------
-    def _create_action_buttons(self) -> Dict[PlayerAction, Button]:
-        """
-        Crée et initialise les boutons d'action pour l'interaction des joueurs.
-        
-        Returns:
-            Dict[PlayerAction, Button]: Dictionnaire associant les actions aux objets boutons
-        """
-        buttons = {
-            PlayerAction.FOLD: Button(300, SCREEN_HEIGHT - 100, 100, 40, "Fold", (200, 0, 0)),
-            PlayerAction.CHECK: Button(450, SCREEN_HEIGHT - 100, 100, 40, "Check", (0, 200, 0)),
-            PlayerAction.CALL: Button(600, SCREEN_HEIGHT - 100, 100, 40, "Call", (0, 0, 200)),
-            PlayerAction.RAISE: Button(750, SCREEN_HEIGHT - 100, 100, 40, "Raise", (200, 200, 0)),
-            PlayerAction.ALL_IN: Button(900, SCREEN_HEIGHT - 100, 100, 40, "All-in", (150, 0, 150))
-        }
-        return buttons
-
     def _evaluate_preflop_strength(self, cards) -> float:
         """
         Évalue la force d'une main preflop selon des heuristiques.
@@ -1644,18 +1690,6 @@ class PokerGame:
             pygame.display.flip()
         
         pygame.quit()
-
-    def update_blinds(self):
-        """
-        Met à jour les blindes selon la structure définie.
-        Augmente les blindes tous les N mains si possible.
-        """
-        self.hands_played += 1
-        if self.hands_played % self.hands_until_blind_increase == 0:
-            if self.current_blind_level < len(self.blind_levels) - 1:
-                self.current_blind_level += 1
-                self.small_blind, self.big_blind = self.blind_levels[self.current_blind_level]
-                print(f"Blindes augmentées à {self.small_blind}/{self.big_blind}")
 
 if __name__ == "__main__":
     list_names = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Player_6"]
