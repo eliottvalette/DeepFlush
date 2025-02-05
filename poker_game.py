@@ -619,126 +619,154 @@ class PokerGame:
 
     def process_action(self, player: Player, action: PlayerAction, bet_amount: Optional[int] = None):
         """
-        Traite l'action d'un joueur pendant son tour et met à jour l'état du jeu.
+        Traite l'action d'un joueur, met à jour l'état du jeu et gère la progression du tour.
+
+        Cette méthode réalise plusieurs vérifications essentielles :
+        - S'assurer que le joueur dispose de suffisamment de fonds.
+        - Interrompre le traitement en cas de phase SHOWDOWN.
+        - Construire un historique des actions pour le suivi.
+        - Gérer distinctement les différents types d'actions : FOLD, CHECK, CALL, RAISE et ALL_IN.
+        - Mettre à jour le pot, les mises des joueurs et la mise maximale en cours.
+        - Traiter les situations d'all-in et créer des side pots le cas échéant.
+        - Déterminer, à l'issue de l'action, si le tour d'enchères est clôturé ou s'il faut passer au joueur suivant.
         
-        Args:
-            player (Player): Le joueur qui effectue l'action
-            action (PlayerAction): L'action choisie
-            bet_amount (Optional[int]): Le montant de la mise si applicable
+        Returns:
+            PlayerAction: L'action traitée (pour garder une cohérence dans le type de retour).
         """
-        # Check if player has sufficient funds for any action
+        #----- Vérification des fonds disponibles -----
         if player.stack <= 0:
+            # S'il n'existe plus aucun fonds pour ce joueur, il ne peut pas agir.
+            # On passe au joueur suivant.
             self._next_player()
-            return False
-        
-        # Don't process actions during showdown
+            return action
+
+        # En phase de showdown, aucune action n'est traitée.
         if self.current_phase == GamePhase.SHOWDOWN:
             return action
-            
-        # Debug print for action start
-        print(f"\n=== Action by {player.name} ===")
-        print(f"Player activity: {player.is_active}")
-        print(f"Action: {action.value}")
-        print(f"Current phase: {self.current_phase}")
-        print(f"Current pot: {self.pot}B")
-        print(f"Current Maximum bet: {self.current_maximum_bet}B")
-        print(f"Player stack before: {player.stack}B")
-        print(f"Player current bet: {player.current_player_bet}B")
-        
-        # Record the action
+
+        #----- Affichage de débogage (pour le suivi durant l'exécution) -----
+        print(f"\n=== Action par {player.name} ===")
+        print(f"Joueur actif : {player.is_active}")
+        print(f"Action choisie : {action.value}")
+        print(f"Phase actuelle : {self.current_phase}")
+        print(f"Pot actuel : {self.pot}B")
+        print(f"Mise maximale actuelle : {self.current_maximum_bet}B")
+        print(f"Stack du joueur avant action : {player.stack}B")
+        print(f"Mise actuelle du joueur : {player.current_player_bet}B")
+
+        #----- Enregistrement de l'action dans l'historique -----
         action_text = f"{player.name}: {action.value}"
-        if bet_amount is not None and action == PlayerAction.RAISE:
-            action_text += f" {bet_amount}B"
-        elif action == PlayerAction.RAISE:
-            # Calculate minimum and maximum possible raise amounts
+        if action == PlayerAction.RAISE:
+            # Détermination de la mise minimale possible pour une raise.
             min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
-            bet_amount = min_raise
+            # Si aucun montant n'est précisé, on utilise la mise minimale.
+            if bet_amount is None:
+                bet_amount = min_raise
+            # Calculer le montant total supplémentaire à engager.
+            total_required = bet_amount - player.current_player_bet
+            if total_required > player.stack:
+                # Le joueur ne peut pas fournir le montant demandé, on le traite alors comme ALL_IN.
+                print(f"{player.name} ne peut pas raise {bet_amount}B (fonds insuffisants) -> All-In.")
+                return self.process_action(player, PlayerAction.ALL_IN)
+            # Enrichissement du texte d'action avec le montant de la raise.
             action_text += f" {bet_amount}B"
 
-        # Add round separator before action if phase is changing
+        # Ajout d'un séparateur dans l'historique si le tour se termine et que la phase change.
         if self.check_phase_completion() and self.current_phase != GamePhase.SHOWDOWN:
             self.pygame_action_history.append(f"--- {self.current_phase.value.upper()} ---")
         
+        # Enregistrement de l'action dans l'historique (limité à 10 entrées).
         self.pygame_action_history.append(action_text)
         if len(self.pygame_action_history) > 10:
             self.pygame_action_history.pop(0)
-        
-        # Process the action
+
+        #----- Traitement de l'action en fonction de son type -----
         if action == PlayerAction.FOLD:
+            # Le joueur se couche il n'est plus actif pour ce tour.
             player.has_folded = True
-            print(f"{player.name} folds")
-            
+            print(f"{player.name} se couche (Fold).")
+
         elif action == PlayerAction.CHECK:
-            print(f"{player.name} checks")
+            # Le joueur check, aucune mise supplémentaire n'est apportée.
+            print(f"{player.name} check.")
 
         elif action == PlayerAction.CALL:
+            # Calcul du montant à payer pour égaler la mise maximale :
             call_amount = self.current_maximum_bet - player.current_player_bet
+            # Si le joueur n'a pas assez de fonds pour caller, le traiter comme ALL_IN.
+            if call_amount > player.stack:
+                print(f"{player.name} n'a pas assez pour caller -> All-In avec {player.stack + player.current_player_bet}B.")
+                return self.process_action(player, PlayerAction.ALL_IN)
             player.stack -= call_amount
             player.current_player_bet = self.current_maximum_bet
             self.pot += call_amount
-            print(f"{player.name} calls {call_amount}B")
-            
-        elif action == PlayerAction.RAISE and bet_amount is not None:
+            print(f"{player.name} call {call_amount}B.")
+
+        elif action == PlayerAction.RAISE:
+            # Le montant supplémentaire à engager pour atteindre la raise souhaitée :
             total_to_put_in = bet_amount - player.current_player_bet
             player.stack -= total_to_put_in
             player.current_player_bet = bet_amount
+            # Mise à jour de la mise maximale pour le tour.
             self.current_maximum_bet = bet_amount
             self.pot += total_to_put_in
+            # Enregistrer le joueur comme dernier raiseur (attention : ici on stocke l'objet, vérifier la cohérence dans l'ensemble du code).
             self.last_raiser_seat = player
-            print(f"{player.name} raises to {bet_amount}B")
-        
+            print(f"{player.name} raise à {bet_amount}B.")
+
         elif action == PlayerAction.ALL_IN:
+            # Calcul de la mise totale possible : stack restant + mise déjà engagée.
             all_in_amount = player.stack + player.current_player_bet
-            total_to_put_in = player.stack
+            total_to_put_in = player.stack  # Tout le stack restant est engagé.
             player.stack = 0
             player.current_player_bet = all_in_amount
             self.pot += total_to_put_in
             player.is_all_in = True
-            
+            # Si l'all-in dépasse la mise maximale, mise à jour de celle-ci et enregistrement du raiseur.
             if all_in_amount > self.current_maximum_bet:
                 self.current_maximum_bet = all_in_amount
                 self.last_raiser_seat = player
-            
-            # Créer un side pot si nécessaire
+            # Vérifier si un side pot doit être créé (si d'autres joueurs ont misé plus que ce montant).
             if any(p.current_player_bet > all_in_amount for p in self.players if p.is_active and not p.has_folded):
                 self._create_side_pot(all_in_amount)
-            
-            print(f"{player.name} fait tapis avec {all_in_amount}B")
-        
+            print(f"{player.name} fait tapis avec {all_in_amount}B.")
+
+        # Marquer que le joueur a agi durant ce tour.
         player.has_acted = True
-        
-        # Check for all-in situations after the action
+
+        #----- Contrôle de fin de tour et passage aux phases/au showdown -----
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
         all_in_players = [p for p in active_players if p.stack == 0]
-        
-        # Check if only one player remains (others folded or inactive)
+
+        # S'il ne reste qu'un seul joueur actif, il remporte directement la main.
         if len(active_players) == 1:
-            print("Moving to showdown (only one player remains)")
+            print("Il ne reste plus qu'un joueur actif : passage au showdown.")
             self.handle_showdown()
             return action
-        
-        # Check if all remaining active players are all-in
-        if (len(all_in_players) == len(active_players)) and (len(active_players) > 1):
-            print("Moving to showdown (all remaining players are all-in)")
+
+        # Si tous les joueurs actifs sont all-in, le tour se termine et on procède au showdown.
+        if len(all_in_players) == len(active_players) and len(active_players) > 1:
+            print("Tous les joueurs actifs sont all-in : passage au showdown.")
             while len(self.community_cards) < 5:
                 self.community_cards.append(self.deck.pop())
             self.handle_showdown()
             return action
-        
-        # Check if round is complete and handle next phase
+
+        # Si le tour d'enchères est complet, on passe au tour suivant ou à la phase suivante.
         if self.check_phase_completion():
-            print("Round complete - advancing phase")
+            print("Tour terminé - passage à la phase suivante.")
             if self.current_phase == GamePhase.RIVER:
-                print("River complete - going to showdown")
+                print("Phase River terminée : passage au showdown.")
                 self.handle_showdown()
             else:
                 self.advance_phase()
-                print(f"Advanced to {self.current_phase}")
-
+                print(f"Phase avancée vers {self.current_phase}.")
         else:
+            # Si le tour n'est pas terminé, passer au joueur suivant.
             self._next_player()
-            print(f"Next player: {self.players[self.current_player_seat].name}")
-        
+            print(f"Prochain joueur : {self.players[self.current_player_seat].name}.")
+
+        # Retourner l'action traitée pour continuer le déroulement du jeu.
         return action
 
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
