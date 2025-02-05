@@ -396,6 +396,40 @@ class PokerGame:
 
         return self.get_state()
 
+    def _initialize_players(self, list_names: List[str]) -> List[Player]:
+        """
+        Crée et initialise tous les joueurs pour la partie.
+        
+        Returns:
+            List[Player]: Liste des objets joueurs initialisés
+        """
+        players = []
+        for idx, name in enumerate(list_names):
+            player = Player(name, self.starting_stack, idx)
+            players.append(player)
+        return players
+    
+    def deal_cards(self):
+        """
+        Distribue deux cartes à chaque joueur actif.
+        Réinitialise et mélange le jeu avant la distribution.
+        """
+        # Deal two cards to each active player
+        for _ in range(2):
+            for player in self.players:
+                if player.is_active:
+                    player.cards.append(self.deck.pop())
+    
+    def deal_community_cards(self):
+        """
+        Distribue les cartes communes selon la phase de jeu actuelle.
+        Distribue 3 cartes pour le flop, 1 pour le turn et 1 pour la river.
+        """
+        if self.current_phase == GamePhase.FLOP:
+            for _ in range(3):
+                self.community_cards.append(self.deck.pop())
+        elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
+            self.community_cards.append(self.deck.pop())
     
     def deal_small_and_big_blind(self):
         """
@@ -897,40 +931,6 @@ class PokerGame:
         rd.shuffle(deck)
         return deck
     
-    def _initialize_players(self, list_names: List[str]) -> List[Player]:
-        """
-        Crée et initialise tous les joueurs pour la partie.
-        
-        Returns:
-            List[Player]: Liste des objets joueurs initialisés
-        """
-        players = []
-        for idx, name in enumerate(list_names):
-            player = Player(name, self.starting_stack, idx)
-            players.append(player)
-        return players
-    
-    def deal_cards(self):
-        """
-        Distribue deux cartes à chaque joueur actif.
-        Réinitialise et mélange le jeu avant la distribution.
-        """
-        # Deal two cards to each active player
-        for _ in range(2):
-            for player in self.players:
-                if player.is_active:
-                    player.cards.append(self.deck.pop())
-    
-    def deal_community_cards(self):
-        """
-        Distribue les cartes communes selon la phase de jeu actuelle.
-        Distribue 3 cartes pour le flop, 1 pour le turn et 1 pour la river.
-        """
-        if self.current_phase == GamePhase.FLOP:
-            for _ in range(3):
-                self.community_cards.append(self.deck.pop())
-        elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
-            self.community_cards.append(self.deck.pop())
 
     def _create_side_pot(self, all_in_amount: int):
         """
@@ -1515,9 +1515,10 @@ class PokerGame:
                 pygame.draw.rect(self.screen, (100, 100, 100), (player.x + i * 60, player.y, 50, 70))
 
 
-        # Draw current bet with 2 decimal places
+        # Draw current bet with 2 decimal places - Updated to show total contribution
         if player.current_player_bet > 0:
-            bet_text = self.font.render(f"Bet: {player.current_player_bet:.2f}B", True, (255, 255, 0))
+            total_contribution = player.current_player_bet
+            bet_text = self.font.render(f"Bet: {total_contribution:.2f}B", True, (255, 255, 0))
             self.screen.blit(bet_text, (player.x - 30, player.y + 80))
     
         # Draw dealer button (D) - Updated positioning logic
@@ -1546,9 +1547,17 @@ class PokerGame:
         for i, card in enumerate(self.community_cards):
             self._draw_card(card, 400 + i * 60, 350)
         
-        # Draw pot with 2 decimal places
-        pot_text = self.font.render(f"Pot: {self.pot:.2f}B", True, (255, 255, 255))
-        self.screen.blit(pot_text, (550, 300))
+        # Draw main pot and side pots
+        total_pots = [pot for pot in [self.pot] + self.side_pots if pot > 0]
+        if total_pots:
+            y_offset = 300
+            for i, pot_amount in enumerate(total_pots):
+                pot_text = self.font.render(
+                    f"{'Main' if i == 0 else f'Side {i}'} Pot: {pot_amount:.2f}B", 
+                    True, 
+                    (255, 255, 0)
+                )
+                self.screen.blit(pot_text, (550, y_offset + i * 30))
         
         # Draw players
         for player in self.players:
