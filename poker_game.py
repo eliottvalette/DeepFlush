@@ -581,7 +581,7 @@ class PokerGame:
         
         # Set first player after dealer button
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
-        while not self.players[self.current_player_seat].is_active:
+        while (not self.players[self.current_player_seat].is_active or self.players[self.current_player_seat].has_folded):
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
     
     def _update_button_states(self):
