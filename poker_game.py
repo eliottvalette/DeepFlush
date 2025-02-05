@@ -313,7 +313,7 @@ class PokerGame:
         # Vérifier qu'il y a au moins 2 joueurs actifs
         active_players = [player for player in self.players if player.is_active]
         if len(active_players) < 2:
-            logging.error("Il doit y avoir au moins 2 joueurs pour continuer la partie")
+            raise ValueError("Il doit y avoir au moins 2 joueurs pour continuer la partie")
 
         # Distribuer les cartes aux joueurs actifs
         self.deal_cards()
@@ -439,7 +439,7 @@ class PokerGame:
         bb_player = next((p for p in self.players if p.is_active and p.role_position == 1), None)
         
         if sb_player is None or bb_player is None:
-            logging.error("Impossible de déterminer la position de la Small Blind ou Big Blind")
+            raise ValueError("Impossible de déterminer la position de la Small Blind ou Big Blind")
         
         sb_seat_position = sb_player.seat_position
         bb_seat_position = bb_player.seat_position
@@ -475,18 +475,27 @@ class PokerGame:
     def _next_player(self):
         """
         Passe au prochain joueur actif et n'ayant pas fold dans le sens horaire.
+        Skip les joueurs all-in.
         """
         self.current_player_seat = (self.current_player_seat + 1) % self.num_players
-        while not self.players[self.current_player_seat].is_active or self.players[self.current_player_seat].has_folded:
+        while (not self.players[self.current_player_seat].is_active or 
+               self.players[self.current_player_seat].has_folded or
+               self.players[self.current_player_seat].is_all_in):  # Added check for all-in
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
     
     def check_phase_completion(self):
         """
-        Vérifie si le tour d'enchères actuel est terminé.
-        Le tour est terminé uniquement lorsque tous les joueurs actifs (et n'ayant pas foldé)
-        ont déjà agi ET que pour chacun, la mise actuelle est égale à la mise maximale (ou qu'il est all-in).
+        Vérifie si le tour d'enchères actuel est terminé et gère la progression du jeu.
+        
+        Le tour est terminé quand :
+        1. Tous les joueurs actifs ont agi
+        2. Tous les joueurs ont égalisé la mise maximale (ou sont all-in)
+        3. Cas spéciaux : un seul joueur reste, tous all-in, ou BB preflop
         """
-        active_players = [p for p in self.players if p.is_active and not p.has_folded]
+        
+        # Récupérer les joueurs actifs et all-in
+        in_game_players = [p for p in self.players if p.is_active and not p.has_folded]
+        all_in_players = [p for p in in_game_players if p.is_all_in]
         current_player = self.players[self.current_player_seat]
 
         # Cas particulier, au PREFLOP, si la BB est limpée, elle doit avoir un droit de parole
@@ -496,23 +505,46 @@ class PokerGame:
         # Même si, en apparence, tous les joueurs ont déjà joué et égalisé la mise maximale,
         # il est nécessaire de laisser le temps au joueur en small blind d'intervenir.
         # C'est pourquoi, si le joueur actif est en position 0 durant le préflop,
-        # la méthode retourne False et indique que la phase d'enchères ne peut pas encore être terminée.
+        # la méthode retourne False et indique que la phase d'enchères ne peut pas encore être terminée
         if self.current_phase == GamePhase.PREFLOP and current_player.role_position == 0:
-            return False
-                
-        # Si un seul joueur reste, le tour est terminé
-        if len(active_players) == 1:
-            return True
+            self._next_player()
+            return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         
-        for player in active_players:
+        # Si un seul joueur reste, la partie est terminée, on déclenche le showdown en auto-win
+        if len(in_game_players) == 1:
+            print("Moving to showdown (only one player remains)")
+            self.handle_showdown()
+            return # Ne rien faire d'autre, la partie est terminée
+        
+        # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
+        elif (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
+            print("Moving to showdown (all remaining players are all-in)")
+            while len(self.community_cards) < 5:
+                self.community_cards.append(self.deck.pop())
+            self.handle_showdown()
+            return # Ne rien faire d'autre, la partie est terminée
+        
+        for player in in_game_players:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player.has_acted:
-                return False
+                self._next_player()
+                return # Ne rien faire de plus, la phase ne peut pas encore être terminée
             # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le tour n'est pas terminé
             if player.current_player_bet < self.current_maximum_bet and not player.is_all_in:
-                return False
+                self._next_player()
+                return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         
-        return True
+        # Atteindre cette partie du code signifie que la phase est terminée
+        if self.current_phase == GamePhase.RIVER:
+            print("River complete - going to showdown")
+            self.handle_showdown()
+        else:
+            self.advance_phase()
+            print(f"Advanced to {self.current_phase}")
+            # Réinitialiser has_acted pour tous les joueurs actifs et non fold au début d'une nouvelle phase
+            for p in self.players:
+                if p.is_active and not p.has_folded:
+                    p.has_acted = False
 
     def advance_phase(self):
         """
@@ -520,18 +552,6 @@ class PokerGame:
         Distribue les cartes communes appropriées et réinitialise les mises.
         """
         print(f"current_phase {self.current_phase}")
-        
-        # Check if all active players are all-in
-        active_players = [p for p in self.players if p.is_active and not p.has_folded]
-        all_in_players = [p for p in active_players if p.stack == 0]
-        
-        if len(all_in_players) == len(active_players) and len(active_players) > 1:
-            print("All players are all-in - proceeding directly to showdown")
-            # Deal all remaining community cards
-            while len(self.community_cards) < 5:
-                self.community_cards.append(self.deck.pop())
-            self.handle_showdown()
-            return
         
         # Normal phase progression
         if self.current_phase == GamePhase.PREFLOP:
@@ -634,11 +654,11 @@ class PokerGame:
         """
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
-            logging.error(f"{player.name} n'était pas censé cargé de faire un action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
+            raise ValueError(f"{player.name} n'était pas censé cargé de faire un action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
         
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if action not in valid_actions:
-            logging.error(f"{player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
+            raise ValueError(f"{player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
         
         #----- Affichage de débogage (pour le suivi durant l'exécution) -----
         print(f"\n=== Action par {player.name} ===")
@@ -663,17 +683,19 @@ class PokerGame:
             print(f"{player.name} call.")
             call_amount = self.current_maximum_bet - player.current_player_bet
             if call_amount > player.stack: 
-                logging.error(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
+                raise ValueError(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
 
             player.stack -= call_amount
             player.current_player_bet += call_amount
             self.pot += call_amount
+            if player.stack == 0:
+                player.is_all_in = True
             print(f"{player.name} a call {call_amount}BB")
         
         elif action == PlayerAction.RAISE:
             print(f"{player.name} raise.")
             if bet_amount is None or bet_amount < self.current_maximum_bet * 2 or bet_amount > player.stack:
-                logging.error(f"{player.name} n'a pas le droit de raise, mise minimale = {self.current_maximum_bet * 2}, mise maximale = {player.stack}")
+                raise ValueError(f"{player.name} n'a pas le droit de raise, mise minimale = {self.current_maximum_bet * 2}, mise maximale = {player.stack}")
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
             self.pot += bet_amount
@@ -683,7 +705,7 @@ class PokerGame:
         elif action == PlayerAction.ALL_IN:
             print(f"{player.name} all-in.")
             if bet_amount is None or bet_amount != player.stack:
-                logging.error(f"{player.name} n'a pas le droit de all-in, mise minimale = {player.stack}, mise maximale = {player.stack}")
+                raise ValueError(f"{player.name} n'a pas le droit de all-in, mise minimale = {player.stack}, mise maximale = {player.stack}")
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
             self.pot += bet_amount
@@ -692,8 +714,8 @@ class PokerGame:
             print(f"{player.name} a all-in {bet_amount}BB")
 
         player.has_acted = True
+        self.check_phase_completion()
 
-        # Retourner l'action traitée pour continuer le déroulement du jeu.
         return action
 
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
@@ -806,10 +828,11 @@ class PokerGame:
         """
         Gère la phase de showdown en tenant compte des side pots.
         """
+
         print("\n=== SHOWDOWN ===")
         self.current_phase = GamePhase.SHOWDOWN
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
-        
+            
         # Désactiver tous les boutons pendant le showdown
         for button in self.action_buttons.values():
             button.enabled = False
@@ -1623,7 +1646,11 @@ class PokerGame:
             # Check button clicks
             for action, button in self.action_buttons.items():
                 if button.rect.collidepoint(mouse_pos) and button.enabled:
-                    bet_amount = self.pygame_slider_bet_amount if action == PlayerAction.RAISE else None
+                    bet_amount = None
+                    if action == PlayerAction.RAISE:
+                        bet_amount = self.pygame_slider_bet_amount
+                    elif action == PlayerAction.ALL_IN:
+                        bet_amount = current_player.stack
                     # Validate bet amount doesn't exceed player's stack
                     if action == PlayerAction.RAISE:
                         max_bet = current_player.stack + current_player.current_player_bet
