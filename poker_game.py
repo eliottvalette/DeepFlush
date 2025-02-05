@@ -276,148 +276,148 @@ class PokerGame:
         
         return self.get_state()
 
-    def start_new_hand(self, first_hand = False):
+    def _move_button(self):
         """
-        Deal une nouvelle main et sans réinitialiser la partie.
+        Déplace le bouton vers le prochain joueur actif.
+        Cette méthode incrémente la position du bouton en vérifiant que le joueur est actif.
+        """
+        next_seat = (self.button_seat_position + 1) % self.num_players
+        # Si le joueur à la nouvelle position n'est pas actif, on continue à chercher.
+        while not self.players[next_seat].is_active:
+            next_seat = (next_seat + 1) % self.num_players
+        self.button_seat_position = next_seat
+
+
+    def start_new_hand(self, first_hand=False):
+        """
+        Distribue une nouvelle main sans réinitialiser la partie.
         
         Returns:
-            List[float]: État initial du jeu après réinitialisation
+            L'état initial du jeu après distribution.
         """
         # Réinitialiser les variables d'état du jeu
         self.pot = 0
-        self.deck = self._create_deck() # Réinitialiser le deck
+        self.deck = self._create_deck()  # Réinitialiser le deck
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
 
-        # Actualiser les états variables des joueurs
+        # Réinitialiser l'état des joueurs
         for player in self.players:
             player.cards = []
             player.current_bet = 0
             player.is_all_in = False
             player.has_folded = False
-            player.range = None   
+            player.range = None
             player.is_active = player.stack > 0
 
-        # Si il n'y a pas assez de Joeurs, Raise une erreur
+        # Vérifier qu'il y a au moins 2 joueurs actifs
         active_players = [player for player in self.players if player.is_active]
         if len(active_players) < 2:
             raise ValueError("Il doit y avoir au moins 2 joueurs pour continuer la partie")
-        
-        self.deal_cards()
-            
-        # Réinitialiser les variables de jeu
-        if first_hand:
-            # Réorganiser les joueurs pour que le bouton soit le premier joueur
-            role_player_idx_list = [player.role_position for player in self.players]
-        else :
-            # Filtrer pour n'avoir que les joueurs actifs (avec des jetons)
-            active_players = [player for player in self.players if player.is_active]
-            
-            # Obtenir la liste des positions (role_position) actuelles des joueurs actifs, les liste est triées par ordre de seat_position de 0 à 5
-            role_player_idx_list = [player.role_position for player in active_players]
-            
-            # Trouver l'index du bouton actuel dans la liste des positions, si l'ancien Button n'est plus dans la liste, le joueur encore actif le plus proche à la suite de lui 
-            # Comme les roles vont dans l'ordre croissanrt de 0 à 5, on a juste à chercher l'index du plus petit role
-            if self.button_seat_position in role_player_idx_list: # Si le bouton est encore actif
-                button_role_idx = role_player_idx_list.index(self.button_seat_position)
-            else :
-                button_role_idx = role_player_idx_list.index(min(role_player_idx_list))
-            
-            # Réorganiser la liste pour commencer par le bouton actuel
-            # Ex: Si button_role_idx = 2 et role_player_idx_list = [0,1,2,3,4,5]
-            # Devient: [2,3,4,5,0,1]
-            role_player_idx_list = role_player_idx_list[button_role_idx:] + role_player_idx_list[:button_role_idx]
-            
-            # Réassigner les positions selon le nombre de joueurs actifs (le code est très peu optimisé mais il est très simple à comprendre)
-            if len(active_players) == 2:  # Heads-Up
-                # En Heads-Up, le bouton est aussi la petite blinde
-                self.players[role_player_idx_list[1]].role_position = 5  # Button/BB
-                self.players[role_player_idx_list[0]].role_position = 0  # SB
-                
-            elif len(active_players) == 3:
-                # Si ils sont 3, Deuxieme devient BU (5), Troisième devient SB (0) 1er devient BB (1)
-                self.players[role_player_idx_list[1]].role_position = 5  # Button
-                self.players[role_player_idx_list[2]].role_position = 0  # Small blind
-                self.players[role_player_idx_list[0]].role_position = 1  # Big blind
-                
-            elif len(active_players) == 4:
-                # Si ils sont 4, Deuxieme devient BU (5), Troisième devient SB (0), Quatrième devient BB (1), 1er devient UTG (2)
-                self.players[role_player_idx_list[1]].role_position = 5  # Button
-                self.players[role_player_idx_list[2]].role_position = 0  # Small blind
-                self.players[role_player_idx_list[3]].role_position = 1  # Big blind
-                self.players[role_player_idx_list[0]].role_position = 2  # UTG (Under The Gun)
-                
-            elif len(active_players) == 5:
-                # Si ils sont 5, Deuxieme devient BU (5), Troisième devient SB (0), Quatrième devient BB (1), Cinquième devient UTG (2), 1er devient CO (3)
-                self.players[role_player_idx_list[1]].role_position = 5  # Button
-                self.players[role_player_idx_list[2]].role_position = 0  # Small blind
-                self.players[role_player_idx_list[3]].role_position = 1  # Big blind
-                self.players[role_player_idx_list[4]].role_position = 2  # UTG
-                self.players[role_player_idx_list[0]].role_position = 3  # Cutoff (CO)
-                
-            else:  # 6 joueurs
-                # Si ils sont 6, Deuxieme devient BU (5), Troisième devient SB (0), Quatrième devient BB (1), Cinquième devient UTG (2), Sixième devient HJ (3), 1er devient CO (4)
-                self.players[role_player_idx_list[1]].role_position = 5  # Button
-                self.players[role_player_idx_list[2]].role_position = 0  # Small blind
-                self.players[role_player_idx_list[3]].role_position = 1  # Big blind
-                self.players[role_player_idx_list[4]].role_position = 2  # UTG
-                self.players[role_player_idx_list[5]].role_position = 3  # Hijack (HJ)
-                self.players[role_player_idx_list[0]].role_position = 4  # Cutoff (CO)
 
-            
-        # Cas classique (>= 3 Joueurs)
-        if len(active_players) == 2:    
-            self.BUTTON_SEAT_POSITION = role_player_idx_list[1]
-            self.SMALL_BLIND_SEAT_POSITION = role_player_idx_list[0]
-            self.BIG_BLIND_SEAT_POSITION = role_player_idx_list[1]
-        elif len(active_players) == 3:
-            self.BUTTON_SEAT_POSITION = role_player_idx_list[1]
-            self.SMALL_BLIND_SEAT_POSITION = role_player_idx_list[2]
-            self.BIG_BLIND_SEAT_POSITION = role_player_idx_list[0]
-        else :
-            self.BUTTON_SEAT_POSITION = role_player_idx_list[1]
-            self.SMALL_BLIND_SEAT_POSITION = role_player_idx_list[2]
-            self.BIG_BLIND_SEAT_POSITION = role_player_idx_list[3]
-        
-        # Initialiser les variables d'état du jeu
-        self.button_seat_position = self.players[role_player_idx_list[1]].seat_position # Actualisé après les nouvelles positions des joueurs
-        self.current_player_seat = self.players[role_player_idx_list[2]].seat_position
-        self.current_maximum_bet = 0  # initialisé à 0 mais s'updatera automatiquement à BB
+        # Distribuer les cartes aux joueurs actifs
+        self.deal_cards()
+
+        # Pour les mains suivantes, déplacer le bouton vers le prochain joueur actif
+        if not first_hand:
+            self._move_button()
+
+        # Construire une liste ordonnée des joueurs actifs en fonction de leur seat_position
+        active_players = sorted([p for p in self.players if p.is_active],
+                                key=lambda p: p.seat_position)
+
+        # Trouver l'index du joueur possédant le bouton dans cette liste
+        button_index = 0
+        for i, player in enumerate(active_players):
+            if player.seat_position == self.button_seat_position:
+                button_index = i
+                break
+
+        # Réorganiser la liste pour que le premier joueur soit celui qui a le bouton
+        ordered_players = active_players[button_index:] + active_players[:button_index]
+        n = len(ordered_players)
+
+        # Réattribuer les rôles en fonction du nombre de joueurs actifs
+        if n == 2:
+            # Heads-Up : le joueur en bouton joue la Small Blind
+            ordered_players[0].role_position = 0  # Small Blind (SB)
+            ordered_players[1].role_position = 5  # Button / Big Blind (BB)
+        elif n == 3:
+            ordered_players[0].role_position = 1  # Big Blind (BB)
+            ordered_players[1].role_position = 5  # Button
+            ordered_players[2].role_position = 0  # Small Blind (SB)
+        elif n == 4:
+            ordered_players[0].role_position = 2  # UTG (Under The Gun)
+            ordered_players[1].role_position = 5  # Button
+            ordered_players[2].role_position = 0  # Small Blind (SB)
+            ordered_players[3].role_position = 1  # Big Blind (BB)
+        elif n == 5:
+            ordered_players[0].role_position = 3  # Cutoff (CO)
+            ordered_players[1].role_position = 5  # Button
+            ordered_players[2].role_position = 0  # Small Blind (SB)
+            ordered_players[3].role_position = 1  # Big Blind (BB)
+            ordered_players[4].role_position = 2  # UTG
+        elif n == 6:
+            ordered_players[0].role_position = 4  # Cutoff (CO)
+            ordered_players[1].role_position = 5  # Button
+            ordered_players[2].role_position = 0  # Small Blind (SB)
+            ordered_players[3].role_position = 1  # Big Blind (BB)
+            ordered_players[4].role_position = 2  # UTG
+            ordered_players[5].role_position = 3  # Hijack (HJ)
+
+        # Mettre à jour la position du bouton et du joueur courant en fonction des rôles réattribués
+        for player in self.players:
+            if player.is_active and player.role_position == 5:
+                self.button_seat_position = player.seat_position
+                break
+
+        for player in self.players:
+            if player.is_active and player.role_position == 0:
+                self.current_player_seat = player.seat_position
+                break
+
+        # Initialiser les variables de jeu complémentaires
+        self.current_maximum_bet = 0  # Sera mis à jour par les blinds
         self.last_raiser_seat = None
-        
         self.number_raise_this_game_phase = 0
-        
+
         # Réinitialiser les pots
         self.main_pot = 0
         self.side_pots = [0] * 4
 
-        # --------------------
-        # Réinitialiser les variables d'interface Pygame
+        # Réinitialiser les variables d'interface (exemple avec Pygame)
         self.pygame_winner_info = None
         self.pygame_winner_display_start = 0
         self.pygame_slider_bet_amount = self.big_blind
         self.pygame_action_history = []
-        # --------------------
 
         self._update_button_states()
         self.deal_small_and_big_blind()
 
         return self.get_state()
+
     
     def deal_small_and_big_blind(self):
         """
-        Methode à run en début de main pour distribuer automatiquement les blindes
+        Méthode à run en début de main pour distribuer automatiquement les blindes
         """
-        sb_seat_position = self.SMALL_BLIND_SEAT_POSITION
-        bb_seat_position = self.BIG_BLIND_SEAT_POSITION
+        # Déterminer les positions SB et BB en se basant sur les rôles attribués
+        sb_player = next((p for p in self.players if p.is_active and p.role_position == 0), None)
+        bb_player = next((p for p in self.players if p.is_active and p.role_position == 1), None)
+        
+        if sb_player is None or bb_player is None:
+            raise ValueError("Impossible de déterminer la position de la Small Blind ou Big Blind")
+        
+        sb_seat_position = sb_player.seat_position
+        bb_seat_position = bb_player.seat_position
 
         # SB
         if self.players[sb_seat_position].stack < self.small_blind:
             self.players[sb_seat_position].is_all_in = True
-            self.players[sb_seat_position].current_bet = self.players[sb_seat_position].stack # Le Bet du joueur n'ayant pas assez pour payant la SB, est égal à son stack
-            self.players[sb_seat_position].stack = 0 # Le stack du joueur est donc 0
+            self.players[sb_seat_position].current_bet = self.players[sb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la SB devient son stack
+            self.players[sb_seat_position].stack = 0  # Le stack du joueur est donc 0
             self.players[sb_seat_position].has_acted = True
-        else :
+        else:
             self.players[sb_seat_position].stack -= self.small_blind
             self.players[sb_seat_position].current_bet = self.small_blind
             self.players[sb_seat_position].has_acted = True
@@ -428,10 +428,10 @@ class PokerGame:
         # BB
         if self.players[bb_seat_position].stack < self.big_blind:
             self.players[bb_seat_position].is_all_in = True
-            self.players[bb_seat_position].current_bet = self.players[bb_seat_position].stack # Le Bet du joueur n'ayant pas assez pour payant la BB, est égal à son stack
-            self.players[bb_seat_position].stack = 0 # Le stack du joueur est donc 0
+            self.players[bb_seat_position].current_bet = self.players[bb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la BB devient son stack
+            self.players[bb_seat_position].stack = 0  # Le stack du joueur devient 0
             self.players[bb_seat_position].has_acted = True
-        else :
+        else:
             self.players[bb_seat_position].stack -= self.big_blind
             self.players[bb_seat_position].current_bet = self.big_blind
             self.players[bb_seat_position].has_acted = True
