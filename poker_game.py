@@ -886,6 +886,11 @@ class PokerGame:
             self.community_cards.append(self.deck.pop())
         print(f"Cartes communes finales: {[str(card) for card in self.community_cards]}")
         
+        # Afficher les mains des joueurs actifs
+        print("\nMains des joueurs:")
+        for player in active_players:
+            print(f"- {player.name}: {[str(card) for card in player.cards]}")
+        
         # --- Distribution des gains ---
         # Si un seul joueur reste (tous les autres ont fold)
         if len(active_players) == 1:
@@ -960,7 +965,30 @@ class PokerGame:
                 print("Évaluation des mains:")
                 for player in pot["eligible"]:
                     hand_eval = self.evaluate_final_hand(player)
-                    print(f"- {player.name}: {hand_eval[0].name} {[str(x) for x in hand_eval[1]]}")
+                    # Formatage amélioré de l'affichage des mains
+                    kickers_str = ""
+                    if hand_eval[0] == HandRank.ROYAL_FLUSH:
+                        hand_str = "Quinte Flush Royale"
+                    elif hand_eval[0] == HandRank.STRAIGHT_FLUSH:
+                        hand_str = f"Quinte Flush hauteur {hand_eval[1][0]}"
+                    elif hand_eval[0] == HandRank.FOUR_OF_A_KIND:
+                        hand_str = f"Carré de {hand_eval[1][0]} kicker {hand_eval[1][1]}"
+                    elif hand_eval[0] == HandRank.FULL_HOUSE:
+                        hand_str = f"Full aux {hand_eval[1][0]} par les {hand_eval[1][1]}"
+                    elif hand_eval[0] == HandRank.FLUSH:
+                        hand_str = f"Couleur {', '.join(str(x) for x in hand_eval[1])}"
+                    elif hand_eval[0] == HandRank.STRAIGHT:
+                        hand_str = f"Quinte hauteur {hand_eval[1][0]}"
+                    elif hand_eval[0] == HandRank.THREE_OF_A_KIND:
+                        hand_str = f"Brelan de {hand_eval[1][0]}, kickers {hand_eval[1][1:]}"
+                    elif hand_eval[0] == HandRank.TWO_PAIR:
+                        hand_str = f"Double paire {hand_eval[1][0]} et {hand_eval[1][1]}, kicker {hand_eval[1][2]}"
+                    elif hand_eval[0] == HandRank.PAIR:
+                        hand_str = f"Paire de {hand_eval[1][0]}, kickers {hand_eval[1][1:]}"
+                    else:  # HIGH_CARD
+                        hand_str = f"Carte haute: {', '.join(str(x) for x in hand_eval[1])}"
+                    
+                    print(f"- {player.name}: {hand_str}")
                     current_key = (hand_eval[0].value, tuple(hand_eval[1]))
                     if best_eval is None or current_key > best_eval:
                         best_eval = current_key
@@ -1015,7 +1043,7 @@ class PokerGame:
         """
 
         side_pots = []
-        for i in range(5):
+        for i in range(6):
             side_pots.append(SidePot(id=i))
 
         return side_pots
