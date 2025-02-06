@@ -697,11 +697,8 @@ class PokerGame:
             self.action_buttons[PlayerAction.RAISE].enabled = False
 
         # ---- ALL-IN ----
-        # All-in toujours disponible si le joueur a des jetons et n'a pas déjà égalisé la mise maximale
-        self.action_buttons[PlayerAction.ALL_IN].enabled = (
-            current_player.stack > 0 and 
-            current_player.current_player_bet < self.current_maximum_bet
-        )
+        # All-in disponible si le joueur a des jetons, qu'il soit le premier à agir ou non
+        self.action_buttons[PlayerAction.ALL_IN].enabled = current_player.stack > 0
 
         if self.current_phase == GamePhase.SHOWDOWN:
             for button in self.action_buttons.values():
