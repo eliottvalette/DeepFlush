@@ -351,37 +351,45 @@ class PokerGame:
 
         # Réattribuer les rôles en fonction du nombre de joueurs actifs
         if n == 2:
-            # Heads-Up : le joueur en bouton joue la Small Blind
-            ordered_players[0].role_position = 0  # Small Blind (SB)
-            ordered_players[1].role_position = 5  # Button / Big Blind (BB)
+            # Heads-Up : dans le heads-up, le joueur en bouton (qui est également SB) et l'autre (BB)
+            ordered_players[0].role_position = 0  # Small Blind (et Dealer)
+            ordered_players[1].role_position = 5  # Big Blind
         elif n == 3:
-            ordered_players[0].role_position = 1  # Big Blind (BB)
-            ordered_players[1].role_position = 5  # Button
-            ordered_players[2].role_position = 0  # Small Blind (SB)
+            # Dans le 3-handed, le joueur en bouton est SB.
+            ordered_players[0].role_position = 5  # Button (et Small Blind)
+            ordered_players[1].role_position = 0  # Small Blind (si nécessaire)
+            ordered_players[2].role_position = 1  # Big Blind
         elif n == 4:
-            ordered_players[0].role_position = 2  # UTG (Under The Gun)
-            ordered_players[1].role_position = 5  # Button
-            ordered_players[2].role_position = 0  # Small Blind (SB)
-            ordered_players[3].role_position = 1  # Big Blind (BB)
+            ordered_players[0].role_position = 5  # Button
+            ordered_players[1].role_position = 0  # Small Blind (SB)
+            ordered_players[2].role_position = 1  # Big Blind (BB)
+            ordered_players[3].role_position = 2  # UTG
         elif n == 5:
-            ordered_players[0].role_position = 3  # Cutoff (CO)
-            ordered_players[1].role_position = 5  # Button
-            ordered_players[2].role_position = 0  # Small Blind (SB)
-            ordered_players[3].role_position = 1  # Big Blind (BB)
-            ordered_players[4].role_position = 2  # UTG
+            ordered_players[0].role_position = 5  # Button
+            ordered_players[1].role_position = 0  # Small Blind (SB)
+            ordered_players[2].role_position = 1  # Big Blind (BB)
+            ordered_players[3].role_position = 2  # UTG
+            ordered_players[4].role_position = 3  # Cutoff (CO)
         elif n == 6:
-            ordered_players[0].role_position = 4  # Cutoff (CO)
-            ordered_players[1].role_position = 5  # Button
-            ordered_players[2].role_position = 0  # Small Blind (SB)
-            ordered_players[3].role_position = 1  # Big Blind (BB)
-            ordered_players[4].role_position = 2  # UTG
-            ordered_players[5].role_position = 3  # Hijack (HJ)
+            ordered_players[0].role_position = 5  # Button
+            ordered_players[1].role_position = 0  # Small Blind (SB)
+            ordered_players[2].role_position = 1  # Big Blind (BB)
+            ordered_players[3].role_position = 2  # UTG
+            ordered_players[4].role_position = 3  # Hijack (HJ)
+            ordered_players[5].role_position = 4  # Cutoff (CO)
 
         # Mettre à jour la position du bouton et du joueur courant en fonction des rôles réattribués
-        for player in self.players:
-            if player.is_active and player.role_position == 5:
-                self.button_seat_position = player.seat_position
-                break
+        if n == 2:
+            # En heads-up, le Bouton (qui poste la Small Blind) est celui avec role_position == 0
+            for player in self.players:
+                if player.is_active and player.role_position == 0:
+                    self.button_seat_position = player.seat_position
+                    break
+        else:
+            for player in self.players:
+                if player.is_active and player.role_position == 5:
+                    self.button_seat_position = player.seat_position
+                    break
 
         for player in self.players:
             if player.is_active and player.role_position == 0:
@@ -512,7 +520,7 @@ class PokerGame:
         Le tour est terminé quand :
         1. Tous les joueurs actifs ont agi
         2. Tous les joueurs ont égalisé la mise maximale (ou sont all-in)
-        3. Cas spéciaux : un seul joueur reste, tous all-in, ou BB preflop
+        3. Cas particuliers : un seul joueur reste, tous all-in, ou BB preflop
         """
         
         # Récupérer les joueurs actifs et all-in
@@ -1819,9 +1827,8 @@ class PokerGame:
                 # Draw main text
                 self.screen.blit(winner_text, text_rect)
             else:
-                # After display duration, start new hand
+                # Après la durée d'affichage, commencer une nouvelle main
                 self.pygame_winner_info = None
-                self.button_seat_position = (self.button_seat_position + 1) % self.num_players
                 active_players = [p for p in self.players if p.stack >= self.big_blind]
                 if len(active_players) > 1:
                     self.start_new_hand()
