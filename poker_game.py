@@ -171,6 +171,7 @@ class SidePot:
         self.contributions_dict = {} # Dictionnaire des contributions de chaque joueur dans le side pot
         self.sum_of_contributions = 0 # Montant total dans le side pot
 
+
 class PokerGame:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
@@ -934,12 +935,12 @@ class PokerGame:
         nb_equal_diff = 0
         for i in range(len(ordered_players)):
 
-            diff_bet = ordered_bets[i] - ordered_bets[i+1] if i < len(ordered_players) - 1 else 1
-            if diff_bet > 0:
+            diff_bet = ordered_bets[i] - (ordered_bets[i+1] if i < len(ordered_players) - 1 else 0)
+            if diff_bet < 0:
                 for player in ordered_players[i-nb_equal_diff:]:
                     side_pots[i].contributions_dict[player] = diff_bet
                     ordered_bets[i] -= diff_bet
-                side_pots[i].sum_of_contributions_in_side_pot = diff_bet * (len(ordered_players) - i - nb_equal_diff +1)
+                side_pots[i].sum_of_contributions = diff_bet * (len(ordered_players) - i - nb_equal_diff +1)
                 nb_equal_diff = 0
             else:
                 nb_equal_diff +=1
