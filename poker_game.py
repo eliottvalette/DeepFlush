@@ -643,7 +643,7 @@ class PokerGame:
 
         # ---- RAISE ----
         # Désactiver raise si pas assez de jetons pour la mise minimale
-        min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2) # La mise minimale est le double de la mise maximale ou du big blind
+        min_raise = (self.current_maximum_bet - current_player.current_player_bet) * 2 # La mise minimale est le double de la mise maximale ou du big blind
         if current_player.stack + current_player.current_player_bet < min_raise: # Si le joueur n'a pas assez de jetons pour la mise minimale, il ne peut pas raise
             self.action_buttons[PlayerAction.RAISE].enabled = False
 
@@ -734,8 +734,9 @@ class PokerGame:
         
         elif action == PlayerAction.RAISE:
             print(f"{player.name} raise.")
-            if bet_amount is None or bet_amount < self.current_maximum_bet * 2 or bet_amount > player.stack:
-                raise ValueError(f"{player.name} n'a pas le droit de raise, mise minimale = {self.current_maximum_bet * 2}, mise maximale = {player.stack}")
+            min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
+            if bet_amount is None or bet_amount < min_raise or bet_amount > player.stack:
+                raise ValueError(f"{player.name} n'a pas le droit de raise, mise minimale = {min_raise}, mise maximale = {player.stack}")
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
             self.phase_pot += bet_amount
@@ -857,7 +858,8 @@ class PokerGame:
         if len(pairs) >= 2:
             # Garde la meilleure carte restante comme kicker
             kickers = [v for v in values if v not in pairs[:2]]
-            return (HandRank.TWO_PAIR, pairs[:2] + [max(kickers)])
+            kicker = max(kickers) if kickers else 0
+            return (HandRank.TWO_PAIR, pairs[:2] + [kicker])
         
         # Vérifie la paire simple
         if pairs:
@@ -1036,10 +1038,10 @@ class PokerGame:
 
     def _create_side_pots(self) -> List[SidePot]:
         """
-        Crée 4 side pots vierges.
+        Crée 6 side pots vierges.
         
         Returns:
-            List[SidePot]: Liste de 4 side pots vierges
+            List[SidePot]: Liste de 6 side pots vierges
         """
 
         side_pots = []
@@ -1169,25 +1171,25 @@ class PokerGame:
         # 6. Argent restant (tailles des stacks normalisées par le stack initial)
         initial_stack = self.starting_stack
         for player in self.players:
-            state.append(player.stack / initial_stack) # (taille = 3)
+            state.append(player.stack / initial_stack) # (taille = 6)
 
         # 7. Informations sur les mises (normalisées par la grosse blinde)
         for player in self.players:
-            state.append(player.current_player_bet / initial_stack) # (taille = 3)
+            state.append(player.current_player_bet / initial_stack) # (taille = 6)
 
         # 8. Informations sur l'activité (binaire extrême : actif/ruiné)
         for player in self.players:
-            state.append(1 if player.is_active else -1) # (taille = 3)
+            state.append(1 if player.is_active else -1) # (taille = 6)
         
         # 9. Informations sur l'activité in game (binaire extrême : en jeu/a foldé)
         for player in self.players:
-            state.append(1 if player.has_folded else -1) # (taille = 3)
+            state.append(1 if player.has_folded else -1) # (taille = 6)
 
         # 10. Informations sur la position (encodage one-hot des positions relatives)
         relative_positions = [0.1] * self.num_players
         relative_pos = (self.current_player_seat - self.button_seat_position) % self.num_players
         relative_positions[relative_pos] = 1
-        state.extend(relative_positions) # (taille = 3)
+        state.extend(relative_positions) # (taille = 6)
 
         # 11. Actions disponibles (binaire extrême : disponible/indisponible)
         action_availability = []
@@ -1196,7 +1198,7 @@ class PokerGame:
                 action_availability.append(1)
             else:
                 action_availability.append(-1)
-        state.extend(action_availability) # (taille = 3)
+        state.extend(action_availability) # (taille = 6)
 
         # 12. Actions précédentes (dernière action de chaque joueur, encodée en vecteurs one-hot)
         action_encoding = {
