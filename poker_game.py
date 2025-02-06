@@ -637,7 +637,13 @@ class PokerGame:
         """
         current_player = self.players[self.current_player_seat]
         
-        # Activer tous les boutons par défaut
+        # Désactiver tous les boutons si le joueur est all-in
+        if current_player.is_all_in:
+            for button in self.action_buttons.values():
+                button.enabled = False
+            return
+        
+        # ---- Activer tous les boutons par défaut ----
         for button in self.action_buttons.values():
             button.enabled = True
         
@@ -655,6 +661,10 @@ class PokerGame:
             self.action_buttons[PlayerAction.CALL].enabled = False
         elif current_player.stack < (self.current_maximum_bet - current_player.current_player_bet): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call
             self.action_buttons[PlayerAction.CALL].enabled = False
+            # Activer all-in si le joueur a des jetons mais pas assez pour call
+            if current_player.stack > 0:
+                self.action_buttons[PlayerAction.ALL_IN].enabled = True
+            self.action_buttons[PlayerAction.RAISE].enabled = False
 
         # ---- RAISE ----
         # Désactiver raise si pas assez de jetons pour la mise minimale
@@ -667,8 +677,11 @@ class PokerGame:
             self.action_buttons[PlayerAction.RAISE].enabled = False
 
         # ---- ALL-IN ----
-        # All-in toujours disponible si le joueur a des jetons
-        self.action_buttons[PlayerAction.ALL_IN].enabled = current_player.stack > 0
+        # All-in toujours disponible si le joueur a des jetons et n'a pas déjà égalisé la mise maximale
+        self.action_buttons[PlayerAction.ALL_IN].enabled = (
+            current_player.stack > 0 and 
+            current_player.current_player_bet < self.current_maximum_bet
+        )
 
         if self.current_phase == GamePhase.SHOWDOWN:
             for button in self.action_buttons.values():
@@ -765,11 +778,16 @@ class PokerGame:
             print(f"{player.name} all-in.")
             if bet_amount is None or bet_amount != player.stack:
                 raise ValueError(f"{player.name} n'a pas le droit de all-in, mise minimale = {player.stack}, mise maximale = {player.stack}")
+            
+            # Mise à jour de la mise maximale seulement si l'all-in est supérieur
+            if bet_amount + player.current_player_bet > self.current_maximum_bet:
+                self.current_maximum_bet = bet_amount + player.current_player_bet
+                self.number_raise_this_game_phase += 1
+            
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
             self.phase_pot += bet_amount
             player.total_bet += bet_amount
-            self.current_maximum_bet = bet_amount
             player.is_all_in = True
             print(f"{player.name} a all-in {bet_amount}BB")
 
@@ -1635,6 +1653,24 @@ class PokerGame:
         name_text = self.font.render(f"{player.name} ({player.stack:.2f}BB)", True, name_color)
         self.screen.blit(name_text, (player.x - 50, player.y - 40))
         
+        # Ajout de l'indicateur ALL-IN
+        if player.is_all_in:
+            # Créer une surface semi-transparente pour le fond
+            allin_surface = pygame.Surface((100, 30))
+            allin_surface.set_alpha(180)
+            allin_surface.fill((200, 0, 0))  # Rouge foncé
+            
+            # Position de l'indicateur ALL-IN au-dessus des cartes
+            allin_x = player.x - 25
+            allin_y = player.y - 70
+            
+            # Dessiner le fond
+            self.screen.blit(allin_surface, (allin_x, allin_y))
+            
+            # Dessiner le texte "ALL-IN" en blanc
+            allin_text = self.font.render("ALL-IN", True, (255, 255, 255))
+            self.screen.blit(allin_text, (allin_x + 10, allin_y + 2))
+        
         # Draw player cards
         if player.is_active and not player.has_folded and len(player.cards) > 0:
             if player.is_human or self.current_phase == GamePhase.SHOWDOWN:
@@ -1857,7 +1893,7 @@ class PokerGame:
             mouse_pos = pygame.mouse.get_pos()
             current_player = self.players[self.current_player_seat]
             
-            # Check button clicks
+            # Vérifier les clics sur les boutons
             for action, button in self.action_buttons.items():
                 if button.rect.collidepoint(mouse_pos) and button.enabled:
                     bet_amount = None
@@ -1865,10 +1901,11 @@ class PokerGame:
                         bet_amount = self.pygame_slider_bet_amount
                     elif action == PlayerAction.ALL_IN:
                         bet_amount = current_player.stack
-                    # Validate bet amount doesn't exceed player's stack
+                    # RAISE : utiliser la formule correcte pour la mise minimale
                     if action == PlayerAction.RAISE:
                         max_bet = current_player.stack + current_player.current_player_bet
-                        min_bet = max(self.current_maximum_bet * 2, self.big_blind * 2)
+                        # Utiliser la même logique que dans process_action :
+                        min_bet = (self.current_maximum_bet - current_player.current_player_bet) * 2
                         bet_amount = min(bet_amount, max_bet)
                         bet_amount = max(bet_amount, min_bet)
                     self.process_action(current_player, action, bet_amount)
