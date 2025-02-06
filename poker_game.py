@@ -872,9 +872,69 @@ class PokerGame:
         while len(self.community_cards) < 5:
             self.community_cards.append(self.deck.pop())
         
-        # Distribuer les gains de chaque joeurs en fonction des side pots et de leurs contributeurs
-       
+        # --- Distribution des gains ---
+        # Si un seul joueur reste (tous les autres ont fold)
+        if len(active_players) == 1:
+            winner = active_players[0]
+            total_pot = self.phase_pot + sum(pot.sum_of_contributions for pot in self.side_pots)
+            winner.stack += total_pot
+            self.pygame_winner_info = f"{winner.name} gagne {total_pot:.2f}BB (tous les autres joueurs ont fold)"
+        else:
+            # Récupérer les contributions de chaque joueur (mises effectuées)
+            contributions = {player: player.current_player_bet for player in self.players if player.current_player_bet > 0}
+            
+            # Ajouter les contributions des side pots précédents
+            for side_pot in self.side_pots:
+                if side_pot.sum_of_contributions > 0:
+                    for player, contribution in side_pot.contributions_dict.items():
+                        if player in contributions:
+                            contributions[player] += contribution
+                        else:
+                            contributions[player] = contribution
+            
+            pots = []
+            last = 0.0
+            # Calculer les différents seuils de mises pour déterminer les pots
+            sorted_thresholds = sorted(set(contributions.values()))
+            for i, threshold in enumerate(sorted_thresholds):
+                # Le pot correspondant inclut la contribution de tous les joueurs ayant mis au moins "threshold"
+                count_all = sum(1 for bet in contributions.values() if bet >= threshold)
+                pot_amount = (threshold - last) * count_all
+                # Les joueurs éligibles sont ceux qui ont mis au moins "threshold" et qui n'ont pas foldé
+                eligible = [player for player in contributions if contributions[player] >= threshold and not player.has_folded]
+                pot_name = "Main Pot" if i == 0 else f"Side Pot {i}"
+                pots.append({"name": pot_name, "amount": pot_amount, "eligible": eligible})
+                last = threshold
+
+            distribution_info = []
+            # Pour chaque pot, évaluer la main des joueurs éligibles et déterminer le(s) vainqueur(s)
+            for pot in pots:
+                if not pot["eligible"]:
+                    continue  # Aucun joueur éligible pour ce pot
+                best_eval = None
+                winners = []
+                for player in pot["eligible"]:
+                    hand_eval = self.evaluate_final_hand(player)
+                    # On crée une clé de comparaison : (valeur du rang, kickers sous forme de tuple)
+                    current_key = (hand_eval[0].value, tuple(hand_eval[1]))
+                    if best_eval is None or current_key > best_eval:
+                        best_eval = current_key
+                        winners = [player]
+                    elif current_key == best_eval:
+                        winners.append(player)
+                share = pot["amount"] / len(winners) if winners else 0
+                for winner in winners:
+                    winner.stack += share
+                winners_names = ", ".join([winner.name for winner in winners])
+                distribution_info.append(f"{pot['name']} ({pot['amount']:.2f}BB): {winners_names} gagnent {share:.2f}BB chacun")
+            
+            # Enregistrer le résumé de la distribution pour l'affichage
+            self.pygame_winner_info = "\n".join(distribution_info)
         
+        # Réinitialiser les mises des joueurs
+        for player in self.players:
+            player.current_player_bet = 0
+
         # Reset pots
         self.phase_pot = 0
         self.side_pots = self._create_side_pots() 
