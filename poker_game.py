@@ -207,7 +207,7 @@ class PokerGame:
         self.current_maximum_bet = 0 # initialisé à 0 mais s'updatera automatiquement à BB après la mise de SB puis BB
         
         self.number_raise_this_game_phase = 0 # Nombre de raises dans la phase courante (4 max, 4 inclus)
-
+        self.last_raiser = None  # Dernier joueur ayant raisé
         self.action_buttons = self._create_action_buttons() # Dictionnaire des boutons d'action, a chaque bouton est associé la propriété enabled qui détermine si le bouton est actif ou non
         
         # --------------------
@@ -250,6 +250,7 @@ class PokerGame:
         self.deck = self._create_deck()
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
+        self.last_raiser = None
 
         # Réinitialiser les variables de jeu
         self.button_seat_position = rd.randint(0, 5)  # 0-5 (c'est une toute nouvelle partie donc on réassigne la position du bouton aléatoirement)
@@ -311,6 +312,7 @@ class PokerGame:
         self.deck = self._create_deck()  # Réinitialiser le deck
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
+        self.last_raiser = None
 
         # Réinitialiser l'état des joueurs
         for player in self.players:
@@ -583,12 +585,30 @@ class PokerGame:
                 if p.is_active and not p.has_folded:
                     p.has_acted = False
 
+        # Si l'action revient au dernier raiser, terminer le tour d'enchères
+        if self.last_raiser is not None and self.current_player_seat == self.last_raiser:
+            # Exception : au préflop, la BB qui a limpé (c'est-à-dire dont la mise reste égale à la big blind) peut checker pour voir le flop
+            if not (self.current_phase == GamePhase.PREFLOP and 
+                    ((current_player.role_position == 1 or current_player.role_position == 5) and 
+                     current_player.current_player_bet == self.big_blind)):
+                if self.current_phase == GamePhase.RIVER:
+                    print("River complete - going to showdown")
+                    self.handle_showdown()
+                else:
+                    self.advance_phase()
+                    print(f"Advanced to {self.current_phase}")
+                    for p in self.players:
+                        if p.is_active and not p.has_folded:
+                            p.has_acted = False
+                return
+
     def advance_phase(self):
         """
         Passe à la phase suivante du jeu (préflop -> flop -> turn -> river).
         Distribue les cartes communes appropriées et réinitialise les mises.
         """
         print(f"current_phase {self.current_phase}")
+        self.last_raiser = None  # Réinitialiser le dernier raiser pour la nouvelle phase
 
         # ---- SIDE POTS ----
         # Pour la répartition en side pots, on laisse tout le monde bet dans le phase_pot et on attend la fin de la phase.
@@ -771,6 +791,7 @@ class PokerGame:
             player.total_bet += bet_amount
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
+            self.last_raiser = player.seat_position  # Enregistrer le raiser
 
             print(f"{player.name} a raise {bet_amount}BB")
 
@@ -783,6 +804,7 @@ class PokerGame:
             if bet_amount + player.current_player_bet > self.current_maximum_bet:
                 self.current_maximum_bet = bet_amount + player.current_player_bet
                 self.number_raise_this_game_phase += 1
+                self.last_raiser = player.seat_position  # Enregistrer le all-in comme raise
             
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
