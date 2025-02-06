@@ -526,6 +526,13 @@ class PokerGame:
         # Récupérer les joueurs actifs et all-in
         in_game_players = [p for p in self.players if p.is_active and not p.has_folded]
         all_in_players = [p for p in in_game_players if p.is_all_in]
+        
+        # Vérifier s'il ne reste qu'un seul joueur actif
+        if len(in_game_players) == 1:
+            print("Moving to showdown (only one player remains)")
+            self.handle_showdown()
+            return
+
         current_player = self.players[self.current_player_seat]
 
         # Cas particulier, au PREFLOP, si la BB est limpée, elle doit avoir un droit de parole
@@ -701,7 +708,7 @@ class PokerGame:
         """
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
-            raise ValueError(f"{player.name} n'était pas censé cargé de faire un action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
+            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
         
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if action not in valid_actions:
