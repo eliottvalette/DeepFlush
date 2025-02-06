@@ -1,0 +1,28 @@
+# main.py
+from train import main_training_loop, set_seed, EPISODES, GAMMA, ALPHA, STATE_SIZE, RENDERING
+from poker_agents import PokerAgent
+
+# Définir la graine pour la reproductibilité
+set_seed(42)
+
+# Liste des noms des joueurs
+list_names = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Player_6"]
+
+agent_list = []
+
+# Créer les agents pour 6 joueurs
+for i in range(6):
+    agent = PokerAgent(
+        state_size=STATE_SIZE,
+        action_size=5,  # [fold, check, call, raise, all-in]
+        gamma=GAMMA,
+        learning_rate=ALPHA,
+        load_model=False,
+        load_path=f"saved_models/poker_agent_{list_names[i]}.pth"
+    )
+    agent.name = list_names[i]
+    agent.is_human = False  # Tous les agents sont des IA
+    agent_list.append(agent)
+
+# Démarrer l'entraînement
+main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1000)
