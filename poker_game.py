@@ -158,6 +158,19 @@ class Player:
         self.x, self.y = POSITIONS[self.seat_position]
         self.has_acted = False # True si le joueur a fait une action dans la phase courante (nécessaire pour savoir si le tour est terminé, car si le premier joueur de la phase check, tous les jouers sont a bet égal et ca déclencherait la phase suivante)
 
+class SidePot:
+    """
+    Représente un pot additionnel qui peut être créé lors d'un all-in.
+
+    Pour la répartition en side pots, on laisse les plus pauvres all-in dans le main pot et on attend la fin de la phase.
+    Si les joeurs les plus pauvres son all-in et que les plus riches sont soit all-in aussi soit à un bet égal, la phase est terminée et on réparti les surplus en side pots.
+    """
+    def __init__(self, id: int):
+        self.id = id # 0-4 (5 Pots max pour 6 joueurs, un main pot et 4 side pots)
+        self.players = []
+        self.contributions_dict = {} # Dictionnaire des contributions de chaque joueur dans le side pot
+        self.sum_of_contributions = 0 # Montant total dans le side pot
+
 class PokerGame:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
@@ -174,7 +187,8 @@ class PokerGame:
         self.small_blind = 0.5
         self.big_blind = 1
         self.starting_stack = 100 # Stack de départ en BB
-        self.pot = 0
+        self.phase_pot = 0
+        self.side_pots = self._create_side_pots() 
 
         self.deck: List[Card] = self._create_deck()
         self.community_cards: List[Card] = []
@@ -193,10 +207,6 @@ class PokerGame:
         self.number_raise_this_game_phase = 0 # Nombre de raises dans la phase courante (4 max, 4 inclus)
 
         self.action_buttons = self._create_action_buttons() # Dictionnaire des boutons d'action, a chaque bouton est associé la propriété enabled qui détermine si le bouton est actif ou non
-        
-        # Ajouter la gestion des side pots
-        self.main_pot = 0
-        self.side_pots = [0] * 4 # 4 side pots max (Pire des cas : 1 Main et 4 Side)
         
         # --------------------
         # Initialiser pygame et les variables d'interface
@@ -233,7 +243,8 @@ class PokerGame:
             List[float]: État initial du jeu après réinitialisation
         """
         # Réinitialiser les variables d'état du jeu
-        self.pot = 0
+        self.phase_pot = 0
+        self.side_pots = self._create_side_pots() 
         self.deck = self._create_deck()
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
@@ -258,10 +269,6 @@ class PokerGame:
         self.current_maximum_bet = 0  # initialisé à 0 mais s'updatera automatiquement à BB
 
         self.number_raise_this_game_phase = 0
-        
-        # Réinitialiser les pots
-        self.main_pot = 0
-        self.side_pots = [0] * 4
 
         # --------------------
         # Réinitialiser les variables d'interface Pygame
@@ -296,7 +303,8 @@ class PokerGame:
             L'état initial du jeu après distribution.
         """
         # Réinitialiser les variables d'état du jeu
-        self.pot = 0
+        self.phase_pot = 0
+        self.side_pots = self._create_side_pots() 
         self.deck = self._create_deck()  # Réinitialiser le deck
         self.community_cards = []
         self.current_phase = GamePhase.PREFLOP
@@ -380,10 +388,6 @@ class PokerGame:
         self.current_maximum_bet = 0  # Sera mis à jour par les blinds
         self.number_raise_this_game_phase = 0
 
-        # Réinitialiser les pots
-        self.main_pot = 0
-        self.side_pots = [0] * 4
-
         # Réinitialiser les variables d'interface (exemple avec Pygame)
         self.pygame_winner_info = None
         self.pygame_winner_display_start = 0
@@ -454,12 +458,12 @@ class PokerGame:
         if self.players[sb_seat_position].stack < self.small_blind:
             self.players[sb_seat_position].is_all_in = True
             self.players[sb_seat_position].current_player_bet = self.players[sb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la SB devient son stack
-            self.pot += self.players[sb_seat_position].stack  # Le pot est augmenté du stack du joueur
+            self.phase_pot += self.players[sb_seat_position].stack  # Le pot est augmenté du stack du joueur
             self.players[sb_seat_position].stack = 0  # Le stack du joueur est donc 0
             self.players[sb_seat_position].has_acted = True
         else:
             self.players[sb_seat_position].stack -= self.small_blind
-            self.pot += self.small_blind  # Le pot est augmenté de la SB
+            self.phase_pot += self.small_blind  # Le pot est augmenté de la SB
             self.players[sb_seat_position].current_player_bet = self.small_blind
             self.players[sb_seat_position].has_acted = True
 
@@ -470,12 +474,12 @@ class PokerGame:
         if self.players[bb_seat_position].stack < self.big_blind:
             self.players[bb_seat_position].is_all_in = True
             self.players[bb_seat_position].current_player_bet = self.players[bb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la BB devient son stack
-            self.pot += self.players[bb_seat_position].stack  # Le pot est augmenté du stack du joueur
+            self.phase_pot += self.players[bb_seat_position].stack  # Le pot est augmenté du stack du joueur
             self.players[bb_seat_position].stack = 0  # Le stack du joueur devient 0
             self.players[bb_seat_position].has_acted = True
         else:
             self.players[bb_seat_position].stack -= self.big_blind
-            self.pot += self.big_blind  # Le pot est augmenté de la BB
+            self.phase_pot += self.big_blind  # Le pot est augmenté de la BB
             self.players[bb_seat_position].current_player_bet = self.big_blind
             self.players[bb_seat_position].has_acted = True
         
@@ -562,6 +566,19 @@ class PokerGame:
         Distribue les cartes communes appropriées et réinitialise les mises.
         """
         print(f"current_phase {self.current_phase}")
+
+        # ---- SIDE POTS ----
+        # Pour la répartition en side pots, on laisse tout le monde bet dans le phase_pot et on attend la fin de la phase.
+        all_in_players = [p for p in self.players if p.is_all_in]
+        in_game_players = [p for p in self.players if p.is_active and not p.has_folded]
+        if len(all_in_players) > 1: 
+            poorest_all_in_player = min(all_in_players, key=lambda x: x.current_player_bet)
+            if poorest_all_in_player.current_player_bet < self.current_maximum_bet:
+                self.side_pots = self._distribute_side_pots(in_game_players, self.side_pots, self.phase_pot)
+        else:
+            self.side_pots[0].sum_of_contributions = self.phase_pot
+            self.side_pots[0].players = in_game_players
+            self.side_pots[0].contributions_dict = {p: p.current_player_bet for p in in_game_players}
         
         # Normal phase progression
         if self.current_phase == GamePhase.PREFLOP:
@@ -679,7 +696,7 @@ class PokerGame:
         print(f"Joueur actif : {player.is_active}")
         print(f"Action choisie : {action.value}")
         print(f"Phase actuelle : {self.current_phase}")
-        print(f"Pot actuel : {self.pot}BB")
+        print(f"Pot actuel : {self.phase_pot}BB")
         print(f"Mise maximale actuelle : {self.current_maximum_bet}BB")
         print(f"Stack du joueur avant action : {player.stack}BB")
         print(f"Mise actuelle du joueur : {player.current_player_bet}BB")
@@ -701,7 +718,7 @@ class PokerGame:
 
             player.stack -= call_amount
             player.current_player_bet += call_amount
-            self.pot += call_amount
+            self.phase_pot += call_amount
             if player.stack == 0:
                 player.is_all_in = True
             print(f"{player.name} a call {call_amount}BB")
@@ -712,7 +729,7 @@ class PokerGame:
                 raise ValueError(f"{player.name} n'a pas le droit de raise, mise minimale = {self.current_maximum_bet * 2}, mise maximale = {player.stack}")
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
-            self.pot += bet_amount
+            self.phase_pot += bet_amount
             self.current_maximum_bet = bet_amount
             print(f"{player.name} a raise {bet_amount}BB")
 
@@ -722,7 +739,7 @@ class PokerGame:
                 raise ValueError(f"{player.name} n'a pas le droit de all-in, mise minimale = {player.stack}, mise maximale = {player.stack}")
             player.stack -= bet_amount
             player.current_player_bet += bet_amount
-            self.pot += bet_amount
+            self.phase_pot += bet_amount
             self.current_maximum_bet = bet_amount
             player.is_all_in = True
             print(f"{player.name} a all-in {bet_amount}BB")
@@ -842,7 +859,6 @@ class PokerGame:
         """
         Gère la phase de showdown en tenant compte des side pots.
         """
-
         print("\n=== SHOWDOWN ===")
         self.current_phase = GamePhase.SHOWDOWN
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
@@ -855,56 +871,12 @@ class PokerGame:
         while len(self.community_cards) < 5:
             self.community_cards.append(self.deck.pop())
         
-        # Traiter d'abord les side pots (du plus petit au plus grand)
-        total_winnings = defaultdict(int)
-        
-        # Traiter les side pots dans l'ordre inverse (du plus grand au plus petit)
-        for i in range(len(self.side_pots) - 1, -1, -1):
-            if self.side_pots[i] > 0:
-                # Identifier les joueurs éligibles pour ce side pot
-                eligible_players = [p for p in active_players if not p.is_all_in or p.stack == 0]
-                if len(eligible_players) > 1:
-                    # Évaluer les mains des joueurs éligibles
-                    player_hands = [(player, self.evaluate_final_hand(player)) for player in eligible_players]
-                    player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
-                    
-                    # Trouver le(s) gagnant(s) du side pot
-                    best_hand = player_hands[0][1]
-                    winners = [p for p, h in player_hands if h == best_hand]
-                    
-                    # Distribuer le side pot équitablement entre les gagnants
-                    split_amount = self.side_pots[i] / len(winners)
-                    for winner in winners:
-                        total_winnings[winner] += split_amount
-                elif len(eligible_players) == 1:
-                    total_winnings[eligible_players[0]] += self.side_pots[i]
-        
-        # Traiter le pot principal
-        if len(active_players) == 1:
-            winner = active_players[0]
-            total_winnings[winner] += self.pot
-        else:
-            player_hands = [(player, self.evaluate_final_hand(player)) for player in active_players]
-            player_hands.sort(key=lambda x: (x[1][0].value, x[1][1]), reverse=True)
-            best_hand = player_hands[0][1]
-            winners = [p for p, h in player_hands if h == best_hand]
-            split_amount = self.pot / len(winners)
-            for winner in winners:
-                total_winnings[winner] += split_amount
-                winning_hand = best_hand[0].name.replace('_', ' ').title()
-                print(f"{winner.name}'s winning hand: {winning_hand}")
-        
-        # Distribuer les gains
-        for winner, amount in total_winnings.items():
-            winner.stack += amount
-            if len(total_winnings) == 1:
-                self.pygame_winner_info = f"{winner.name} wins {amount}BB"
-            else:
-                self.pygame_winner_info = "Multiple winners: " + ", ".join(f"{p.name} ({amt}BB)" for p, amt in total_winnings.items())
+        # Distribuer les gains de chaque joeurs en fonction des side pots et de leurs contributeurs
+       
         
         # Reset pots
-        self.pot = 0
-        self.side_pots = [0] * 4
+        self.phase_pot = 0
+        self.side_pots = self._create_side_pots() 
         
         # Set the winner display start time
         self.pygame_winner_display_start = pygame.time.get_ticks()
@@ -922,46 +894,57 @@ class PokerGame:
         deck = [Card(suit, value) for suit in suits for value in values]
         rd.shuffle(deck)
         return deck
-    
 
-    def _create_side_pot(self, all_in_amount: int):
+    def _create_side_pots(self) -> List[SidePot]:
         """
-        Crée un side pot lorsqu'un joueur est all-in.
+        Crée 4 side pots vierges.
         
-        Args:
-            all_in_amount (int): Montant du all-in du joueur
+        Returns:
+            List[SidePot]: Liste de 4 side pots vierges
         """
-        active_players = [p for p in self.players if p.is_active and not p.has_folded]
+
+        side_pots = []
+        for i in range(5):
+            side_pots.append(SidePot(id=i))
+
+        return side_pots
+
+    def _distribute_side_pots(self, in_game_players: List[Player], side_pots: List[SidePot], phase_pot: float):
+        """
+        Répartit les surplus en side pots.
+
+        Pour la répartition en side pots, on laisse les joueurs - qui ne seront pas capable d'atteindre le maxbet - all-in dans le main pot 
+        On attend la fin de la phase.
+        Si les joueurs les plus pauvres sont all-in et que les plus riches sont soit all-in aussi soit à un bet égal au bet_maximum, 
+        La phase est terminée et on réparti les surplus en side pots.
         
-        # Calculer les contributions au side pot
-        side_pot_amount = 0
-        main_pot_amount = 0
+        _distribute_side_pots est appelée sachant qu'on moins un joueur est all-in, et que tous les non-all-in égalisent la mise maximale.
+        side_pot_list est une liste de 4 SidePot, on verra d'après la logique suivante que maximum 4 SidePots distincts seront nécessaires pour une partie à 6 joueurs.
+
+        Exemple : J1 et J2 sont pauvres et sont all-in. J3 et J4 sont plus riches qu'eux, non all-in avec des bets égaux à la mise maximale.
+        Notons s_i la mise du joueur i. s_1 < s_2 < s_3 = s_4.
+        J1 met toute sa mise dans le main pot.
+        J2 met s_1 dans le main pot et met s_2 - s_1 dans le premier side pot.
+        J3 et J4 mettent s_1 dans le main pot, puis s_2 - s_1 dans le premier side pot.
+        Il leur reste s_3 - s_2 qu'il mettent dans le deuxième side pot.        
+        """
+        ordered_players = sorted(in_game_players, key=lambda x: x.current_player_bet)
+        ordered_bets = [p.current_player_bet for p in ordered_players]
         
-        # Première passe : calculer les montants des pots
-        for player in active_players:
-            if player.current_player_bet > all_in_amount:
-                # L'excédent va dans le side pot
-                excess = player.current_player_bet - all_in_amount
-                side_pot_amount += excess
-                # La partie égale va dans le pot principal
-                main_pot_amount += all_in_amount
+        nb_equal_diff = 0
+        for i in range(len(ordered_players)):
+
+            diff_bet = ordered_bets[i] - ordered_bets[i+1] if i < len(ordered_players) - 1 else 1
+            if diff_bet > 0:
+                for player in ordered_players[i-nb_equal_diff:]:
+                    side_pots[i].contributions_dict[player] = diff_bet
+                    ordered_bets[i] -= diff_bet
+                side_pots[i].sum_of_contributions_in_side_pot = diff_bet * (len(ordered_players) - i - nb_equal_diff +1)
+                nb_equal_diff = 0
             else:
-                # Tout va dans le pot principal
-                main_pot_amount += player.current_player_bet
+                nb_equal_diff +=1
         
-        # Deuxième passe : ajuster les mises des joueurs
-        for player in active_players:
-            if player.current_player_bet > all_in_amount:
-                player.current_player_bet = all_in_amount
-        
-        # Mettre à jour les pots
-        self.pot = main_pot_amount
-        
-        # Trouver le premier side pot vide
-        for i, pot in enumerate(self.side_pots):
-            if pot == 0:
-                self.side_pots[i] = side_pot_amount
-                break
+        return side_pots
 
     # --------------------------------
     # Methodes Nécessaires pour le RL
@@ -1130,7 +1113,7 @@ class PokerGame:
 
         # 14. Cotes du pot
         call_amount = self.current_maximum_bet - current_player.current_player_bet
-        pot_odds = call_amount / (self.pot + call_amount) if (self.pot + call_amount) > 0 else 0
+        pot_odds = call_amount / (self.phase_pot + call_amount) if (self.phase_pot + call_amount) > 0 else 0
         state.append(pot_odds) # (taille = 1)
 
         # 15. Équité
@@ -1160,12 +1143,12 @@ class PokerGame:
 
         # Capturer l'état du jeu avant de traiter l'action pour le calcul des cotes du pot
         call_amount_before = self.current_maximum_bet - current_player.current_player_bet
-        pot_before = self.pot
+        pot_before = self.phase_pot
 
         # --- Récompenses stratégiques des actions ---
         # Récompense basée sur l'action par rapport à la force de la main
         hand_strength = self._evaluate_hand_strength(current_player)
-        pot_potential = self.pot / (self.big_blind * 100)
+        pot_potential = self.phase_pot / (self.big_blind * 100)
     
         if action == PlayerAction.RAISE:
             reward += 0.2 * hand_strength  # Ajuster la récompense selon la force de la main
@@ -1421,7 +1404,7 @@ class PokerGame:
         position_multiplier = 1.0 + (0.1 * (self.num_players - relative_pos) / self.num_players)
         
         # Pot odds consideration
-        total_pot = self.pot + sum(p.current_player_bet for p in self.players)
+        total_pot = self.phase_pot + sum(p.current_player_bet for p in self.players)
         call_amount = self.current_maximum_bet - player.current_player_bet
         if call_amount > 0 and total_pot > 0:
             pot_odds = call_amount / (total_pot + call_amount)
@@ -1510,24 +1493,43 @@ class PokerGame:
                 pygame.draw.rect(self.screen, (100, 100, 100), (player.x + i * 60, player.y, 50, 70))
 
 
-        # Draw current bet with decomposition into main pot and side pots
+        # Draw current bet with better formatting
         if player.current_player_bet > 0:
+            bet_lines = []
             total_contribution = player.current_player_bet
-            bet_lines = [f"Total bet: {total_contribution:.2f}BB"]
             
-            # Add main pot contribution if any
-            if self.pot > 0:
-                bet_lines.append(f"Main: {min(total_contribution, self.pot):.2f}BB")
+            # Calculate bet contributions
+            main_pot_contrib = min(total_contribution, self.phase_pot) if self.phase_pot > 0 else total_contribution
+            if main_pot_contrib > 0:
+                bet_lines.append(f"Main: {main_pot_contrib:.2f}BB")
             
-            # Add side pot contributions if any
+            remaining_contrib = total_contribution - main_pot_contrib
             for i, side_pot in enumerate(self.side_pots):
-                if side_pot > 0:
-                    bet_lines.append(f"Side {i+1}: {min(total_contribution, side_pot):.2f}BB")
+                if side_pot.sum_of_contributions > 0:  # Correction ici
+                    pot_contrib = min(remaining_contrib, side_pot.sum_of_contributions)
+                    if pot_contrib > 0:
+                        bet_lines.append(f"Side {i+1}: {pot_contrib:.2f}BB")
+                    remaining_contrib -= pot_contrib
             
-            # Draw each line of bet text
-            for i, line in enumerate(bet_lines):
-                bet_text = self.font.render(line, True, (255, 255, 0))
-                self.screen.blit(bet_text, (player.x - 30, player.y + 80 + i * 25))
+            # Draw total bet with background
+            total_text = f"Bet: {total_contribution:.2f}BB"
+            bet_surface = pygame.Surface((150, 25 * (len(bet_lines) + 1)))
+            bet_surface.set_alpha(128)
+            bet_surface.fill((0, 0, 0))
+            
+            # Position the bet display
+            bet_x = player.x - 30
+            bet_y = player.y + 80
+            self.screen.blit(bet_surface, (bet_x, bet_y))
+            
+            # Draw total first
+            total_text_surface = self.font.render(total_text, True, (255, 255, 0))
+            self.screen.blit(total_text_surface, (bet_x + 5, bet_y))
+            
+            # Draw contribution breakdown
+            for i, line in enumerate(bet_lines, 1):
+                text_surface = self.font.render(line, True, (200, 200, 200))
+                self.screen.blit(text_surface, (bet_x + 10, bet_y + i * 25))
     
     
         # Draw dealer button (D) - Updated positioning logic
@@ -1556,18 +1558,47 @@ class PokerGame:
         for i, card in enumerate(self.community_cards):
             self._draw_card(card, 400 + i * 60, 350)
         
-        # Draw main pot and side pots
-        total_pots = [pot for pot in [self.pot] + self.side_pots if pot > 0]
-        if total_pots:
-            y_offset = 300
-            for i, pot_amount in enumerate(total_pots):
-                pot_text = self.font.render(
-                    f"{'Main' if i == 0 else f'Side {i}'} Pot: {pot_amount:.2f}BB", 
-                    True, 
-                    (255, 255, 0)
-                )
-                self.screen.blit(pot_text, (550, y_offset + i * 30))
+        # Draw pots with better formatting and positioning
+        total_pots = []
         
+        # Add main pot if it exists
+        if self.phase_pot > 0:
+            total_pots.append(("Main Pot", self.phase_pot))
+        
+        # Add side pots if they exist
+        for i, pot in enumerate(self.side_pots):
+            if pot.sum_of_contributions > 0:
+                total_pots.append((f"Side Pot {i+1}", pot.sum_of_contributions))
+
+        if total_pots:
+            # Calculate center position and spacing
+            center_x = SCREEN_WIDTH // 2
+            start_y = 280  # Position above community cards
+            pot_spacing = 30
+            
+            # Draw decorative pot icon and background
+            for i, (pot_name, amount) in enumerate(total_pots):
+                # Calculate position for this pot display
+                y_pos = start_y + i * pot_spacing
+                
+                # Draw semi-transparent background
+                pot_surface = pygame.Surface((300, 25))
+                pot_surface.set_alpha(128)
+                pot_surface.fill((50, 50, 50))
+                pot_rect = pot_surface.get_rect(center=(center_x, y_pos))
+                self.screen.blit(pot_surface, pot_rect)
+                
+                # Draw pot text with shadow for better visibility
+                pot_text = f"{pot_name}: {amount:.2f}BB"
+                # Shadow
+                shadow_text = self.font.render(pot_text, True, (0, 0, 0))
+                shadow_rect = shadow_text.get_rect(center=(center_x + 1, y_pos + 1))
+                self.screen.blit(shadow_text, shadow_rect)
+                # Main text
+                text = self.font.render(pot_text, True, (255, 215, 0))  # Gold color
+                text_rect = text.get_rect(center=(center_x, y_pos))
+                self.screen.blit(text, text_rect)
+
         # Draw players
         for player in self.players:
             self._draw_player(player)
