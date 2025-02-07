@@ -12,7 +12,7 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Uncomment to unforce CPU
 
 class PokerAgent:
-    def __init__(self, state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False, load_path=None):
+    def __init__(self, state_size, action_size, gamma, learning_rate, hidden_size = 1024, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False, load_path=None):
         self.device = device
         self.state_size = state_size
         self.action_size = action_size
@@ -21,12 +21,11 @@ class PokerAgent:
         self.entropy_coeff = entropy_coeff
         self.value_loss_coeff = value_loss_coeff
 
-        self.model = ActorCriticModel(state_size, action_size).to(device)
+        self.model = ActorCriticModel(state_size, action_size, hidden_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = deque(maxlen=10000)  # Experience replay buffer
 
-        self.load_model = load_model
-        if self.load_model:
+        if load_model:
             self.load(load_path)
 
         self.old_action_probs = None  # For tracking KL divergence

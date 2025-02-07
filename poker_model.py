@@ -4,35 +4,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ActorCriticModel(nn.Module):
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, hidden_size):
         super(ActorCriticModel, self).__init__()
 
         self.shared_layers = nn.Sequential(
-            nn.Linear(state_size, 256),
-            nn.LayerNorm(256),
+            nn.Linear(state_size, hidden_size // 2),
+            nn.LayerNorm(hidden_size // 2),
             nn.ReLU(),
-            nn.Linear(256, 512),
-            nn.LayerNorm(512),
+            nn.Linear(hidden_size // 2, hidden_size),
+            nn.LayerNorm(hidden_size),
             nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.LayerNorm(512),
+            nn.Linear(hidden_size, hidden_size),
+            nn.LayerNorm(hidden_size),
             nn.ReLU(),
-            nn.Linear(512, 256),
-            nn.LayerNorm(256),
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.LayerNorm(hidden_size // 2),
             nn.ReLU(),
         )
 
         # Separate streams for actor and critic
         self.actor_layers = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
-            nn.Linear(128, action_size),
+            nn.Linear(hidden_size // 4, action_size),
         )
 
         self.critic_layers = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
-            nn.Linear(128, 1),
+            nn.Linear(hidden_size // 4, 1),
         )
 
         self.action_size = action_size

@@ -557,7 +557,9 @@ class PokerGame:
         for player in in_game_players:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player.has_acted:
-                print('Un des joueurs en jeu n\'a pas encore agi')
+                print(f'{player.name} n\'a pas encore agi')
+                for p in self.players:
+                    print(f"p.name : {p.name}, p.has_acted : {p.has_acted}, p.is_all_in : {p.is_all_in}, p.current_player_bet : {p.current_player_bet}, self.current_maximum_bet : {self.current_maximum_bet}")
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
 
@@ -576,7 +578,7 @@ class PokerGame:
             print(f"Advanced to {self.current_phase}")
             # Réinitialiser has_acted pour tous les joueurs actifs et non fold au début d'une nouvelle phase
             for p in self.players:
-                if p.is_active and not p.has_folded:
+                if p.is_active and not p.has_folded and not p.is_all_in:
                     p.has_acted = False
 
         # Si l'action revient au dernier raiser, terminer le tour d'enchères
@@ -592,7 +594,7 @@ class PokerGame:
                     self.advance_phase()
                     print(f"Advanced to {self.current_phase}")
                     for p in self.players:
-                        if p.is_active and not p.has_folded:
+                        if p.is_active and not p.has_folded and not p.is_all_in:
                             p.has_acted = False
                 return
 
@@ -636,7 +638,7 @@ class PokerGame:
         for player in self.players:
             if player.is_active:
                 player.current_player_bet = 0
-                if not player.has_folded:
+                if not player.has_folded and not player.is_all_in:
                     player.has_acted = False  # Réinitialisation du flag
         
         # Set first player after dealer button
@@ -746,6 +748,8 @@ class PokerGame:
         print(f"Action choisie : {action.value}")
         print(f"Phase actuelle : {self.current_phase}")
         print(f"Pot actuel : {self.phase_pot}BB")
+        print(f"A agi : {player.has_acted}")
+        print(f"Est all-in : {player.is_all_in}")
         print(f"Mise maximale actuelle : {self.current_maximum_bet}BB")
         print(f"Stack du joueur avant action : {player.stack}BB")
         print(f"Mise actuelle du joueur : {player.current_player_bet}BB")

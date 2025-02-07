@@ -6,7 +6,8 @@ import re
 def purify_saved_models():
     # Path to saved_models directory
     saved_models_dir = "saved_models"
-    
+    print("Purifying saved models...")
+
     # Check if directory exists
     if not os.path.exists(saved_models_dir):
         print(f"Directory '{saved_models_dir}' does not exist.")
@@ -30,10 +31,9 @@ def purify_saved_models():
                 print(f"Deleted: {file}")
             except Exception as e:
                 print(f"Error deleting {file}: {e}")
-    
     # Then rename files with epoch to their simplified form
     files = os.listdir(saved_models_dir)  # Get updated file list
-    pattern = r'(poker_agent_player_\d+)_epoch_\d+(.pth)'
+    pattern = r'(poker_agent_Player_\d+)_epoch_\d+(.pth)'
     
     for file in files:
         match = re.match(pattern, file)
