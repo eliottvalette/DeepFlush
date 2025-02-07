@@ -14,7 +14,7 @@ from visualization import TrainingVisualizer, plot_winning_stats
 from typing import List, Tuple
 
 # Hyperparamètres
-EPISODES = 1000
+EPISODES = 100
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
@@ -61,8 +61,8 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                force des mains, métriques d'entraînement)
     """
 
-    active_players = [p for p in env.players if p.is_active]
-    if len(active_players) < 3:
+    active_players = [p for p in env.players if p.stack > 0]
+    if len(active_players) < 2:
         env.reset()
     else:
         env.start_new_hand()
@@ -125,11 +125,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                              env.current_phase == GamePhase.SHOWDOWN)
         # Stocker l'action pour l'agent spécifique
         actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
-        
-        # Vérifier si un seul joueur est actif (les autres ont abandonné)
-        active_players = sum(1 for p in env.players if p.is_active and not p.has_folded)
-        if active_players == 1:
-            break
             
         # Gérer l'affichage si le rendering est activé
         if rendering and (episode % render_every == 0):

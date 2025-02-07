@@ -324,10 +324,10 @@ class PokerGame:
             player.range = None
             player.is_active = player.stack > 0
 
-        # Vérifier qu'il y a au moins 2 joueurs actifs
+        # Vérifier qu'il y a au moins 2 joueurs actifs sinon on réinitialise la partie
         active_players = [player for player in self.players if player.is_active]
         if len(active_players) < 2:
-            raise ValueError("Il doit y avoir au moins 2 joueurs pour continuer la partie")
+            self.reset()
 
         # Distribuer les cartes aux joueurs actifs
         self.deal_cards()
@@ -776,15 +776,22 @@ class PokerGame:
         elif action == PlayerAction.RAISE:
             print(f"{player.name} raise.")
             min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
-            if bet_amount is None or bet_amount < min_raise or bet_amount > player.stack:
-                raise ValueError(f"{player.name} n'a pas le droit de raise, mise minimale = {min_raise}, mise maximale = {player.stack}")
-            player.stack -= bet_amount
-            player.current_player_bet += bet_amount
-            self.phase_pot += bet_amount
-            player.total_bet += bet_amount
+            if bet_amount is None:
+                bet_amount = min_raise
+                
+            # Vérifier si le joueur a assez de jetons pour le raise minimum
+            if player.stack < min_raise - player.current_player_bet:
+                raise ValueError(f"{player.name} n'a pas assez de jetons pour le raise minimum")
+                            
+            # Traitement du raise
+            actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
+            player.stack -= actual_bet
+            player.current_player_bet = bet_amount
+            self.phase_pot += actual_bet
+            player.total_bet += actual_bet
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
-            self.last_raiser = player.seat_position  # Enregistrer le raiser
+            self.last_raiser = player.seat_position
 
             print(f"{player.name} a raise {bet_amount}BB")
 
@@ -1343,7 +1350,7 @@ class PokerGame:
             reward += 0.2 * hand_strength  # Ajuster la récompense selon la force de la main
             if hand_strength > 0.7:
                 reward += 0.5 * pot_potential  # Bonus pour jeu agressif avec main forte
-            bet_amount = self.current_maximum_bet * 2
+            bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
                 
         elif action == PlayerAction.ALL_IN:
             reward += 0.3 * hand_strength
@@ -1918,11 +1925,9 @@ class PokerGame:
                         bet_amount = current_player.stack
                     # RAISE : utiliser la formule correcte pour la mise minimale
                     if action == PlayerAction.RAISE:
-                        max_bet = current_player.stack + current_player.current_player_bet
                         # Utiliser la même logique que dans process_action :
                         min_bet = (self.current_maximum_bet - current_player.current_player_bet) * 2
-                        bet_amount = min(bet_amount, max_bet)
-                        bet_amount = max(bet_amount, min_bet)
+                        bet_amount = min_bet
                     self.process_action(current_player, action, bet_amount)
             
             # Check bet slider
