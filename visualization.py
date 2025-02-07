@@ -20,7 +20,8 @@ class TrainingVisualizer:
         self.ax3.set_title('Action Distribution per Agent')
         self.ax4.set_title('Hand Strength vs Win Rate Correlation')
         
-        # Initialize data for 6 players instead of 3
+        # Initialize data
+        self.window_size = 50
         self.rewards_data = {f"Agent {i+1}": [] for i in range(6)}
         self.wins_data = {f"Agent {i+1}": [] for i in range(6)}
         self.action_data = {f"Agent {i+1}": {
@@ -29,7 +30,7 @@ class TrainingVisualizer:
         self.hand_strength_data = {f"Agent {i+1}": {'strength': [], 'win': []} for i in range(6)}
         self.episodes = []
         
-        # Expand colors for 6 players
+        # Colors for agents and actions
         self.colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown']
 
         self.action_colors = {
@@ -290,8 +291,8 @@ def plot_winning_stats(winning_history: dict, window_size: int = 50, save_path: 
     """
     Plot the total number of wins for each agent as bars.
     """
-    plt.figure(figsize=(12, 6))  # Made figure wider to accommodate more bars
-    colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown']  # Added more colors
+    plt.figure(figsize=(12, 6))
+    colors = ['red', 'green', 'blue', 'orange', 'purple', 'brown']
     
     agent_names = list(winning_history.keys())
     total_wins = []
