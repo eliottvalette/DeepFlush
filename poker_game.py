@@ -545,18 +545,9 @@ class PokerGame:
         # il est nécessaire de laisser le temps au joueur en small blind d'intervenir.
         # C'est pourquoi, si le joueur actif est en position 0 durant le préflop,
         # la méthode retourne False et indique que la phase d'enchères ne peut pas encore être terminée
-        if self.current_phase == GamePhase.PREFLOP and current_player.role_position == 0:
-            self._next_player()
-            return # Ne rien faire de plus, la phase ne peut pas encore être terminée
-        
-        # Si un seul joueur reste, la partie est terminée, on déclenche le showdown en auto-win
-        if len(in_game_players) == 1:
-            print("Moving to showdown (only one player remains)")
-            self.handle_showdown()
-            return # Ne rien faire d'autre, la partie est terminée
         
         # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
-        elif (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
+        if (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
             print("Moving to showdown (all remaining players are all-in)")
             while len(self.community_cards) < 5:
                 self.community_cards.append(self.deck.pop())
@@ -566,10 +557,13 @@ class PokerGame:
         for player in in_game_players:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player.has_acted:
+                print('Un des joueurs en jeu n\'a pas encore agi')
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
+
             # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le tour n'est pas terminé
             if player.current_player_bet < self.current_maximum_bet and not player.is_all_in:
+                print('Un des joueurs en jeu n\'a pas égalisé la mise maximale')
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         
@@ -647,7 +641,9 @@ class PokerGame:
         
         # Set first player after dealer button
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
-        while (not self.players[self.current_player_seat].is_active or self.players[self.current_player_seat].has_folded):
+        while (not self.players[self.current_player_seat].is_active or 
+               self.players[self.current_player_seat].has_folded or 
+               self.players[self.current_player_seat].is_all_in):
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
     
     def _update_button_states(self):

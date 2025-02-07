@@ -1,5 +1,6 @@
 # poker_train.py
 import os
+import logging
 import numpy as np
 import random as rd
 import pygame
@@ -10,17 +11,17 @@ from poker_game import PokerGame, GamePhase, PlayerAction
 import matplotlib
 matplotlib.use('Agg')  # Utiliser le backend Agg qui ne nécessite pas de GUI
 from visualization import TrainingVisualizer, plot_winning_stats
-from typing import List
+from typing import List, Tuple
 
 # Hyperparamètres
-EPISODES = 100000
+EPISODES = 1000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
 START_EPS = 1.0
-STATE_SIZE = 169
-RENDERING = True
-FPS = 30
+STATE_SIZE = 201
+RENDERING = False
+FPS = 0.5
 
 WINDOW_SIZE = 50  
 PLOT_UPDATE_INTERVAL = 10  
@@ -61,7 +62,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     """
 
     active_players = [p for p in env.players if p.is_active]
-    if len(active_players) < 2:
+    if len(active_players) < 3:
         env.reset()
     else:
         env.start_new_hand()
@@ -73,10 +74,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     
     # Initialiser les récompenses cumulatives pour chaque joueur
     cumulative_rewards = [0] * len(agent_list)
-    # Stocker les stacks initiaux (en tenant compte des blindes déjà déduites)
     initial_stacks = [player.stack for player in env.players]
-    initial_stacks[env.sb_pos] += env.small_blind
-    initial_stacks[env.bb_pos] += env.big_blind
 
     # Modifier les actions_taken pour suivre par agent
     actions_taken = {f"Agent {i+1}": [] for i in range(len(agent_list))}
@@ -84,35 +82,49 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Boucle principale du jeu
     while not env.current_phase == GamePhase.SHOWDOWN:
+        
+        # Ajouter une limite de sécurité pour éviter les boucles infinies
+        if len(actions_taken[f"Agent {env.current_player_seat + 1}"]) > 100:
+            raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 100 actions")
+
         # Récupérer le joueur actuel et l'agent correspondant
-        current_player = env.players[env.current_player_idx]
-        current_agent = agent_list[env.current_player_idx]
+        current_player = env.players[env.current_player_seat]
+        current_agent = agent_list[env.current_player_seat]
         
         # Obtenir l'état actuel du jeu et les actions valides
         state = env.get_state()
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
-        print('valid_actions', valid_actions)
+        
+        if len(valid_actions) == 0:
+            print(f"\nBug pour {current_player.name} ===")
+            print(f"Joueur actif : {current_player.is_active}")
+            print(f"Phase actuelle : {env.current_phase}")
+            print(f"Actions valides : {valid_actions}")
+            print(f"A folded : {current_player.has_folded}")
+            print(f"A all-in : {current_player.is_all_in}")
+            print(f"Pot actuel : {env.phase_pot}BB")
+            print(f"Mise maximale actuelle : {env.current_maximum_bet}BB")
+            print(f"Stack du joueur avant action : {current_player.stack}BB")
+            print(f"Mise actuelle du joueur : {current_player.current_player_bet}BB")
+            raise Exception(f"Agent {env.current_player_seat + 1} n'a plus d'actions valides et il lui a pourtant été demandé de jouer")
         
         # Calculate and store hand strength for current player
         strength = env._evaluate_hand_strength(current_player)
-        hand_strengths[env.current_player_idx] = strength  # Store strength for current player
+        hand_strengths[env.current_player_seat] = strength  # Store strength for current player
         
         # Obtenir l'action choisie par l'agent et la pénalité associée
         action_chosen = current_agent.get_action(state, epsilon, valid_actions)
         
         # Exécuter l'action et obtenir le nouvel état et la récompense
         next_state, reward = env.step(action_chosen)
-        cumulative_rewards[env.current_player_idx] += reward
-        
-        # Update current bet display for the player who just acted
-        current_player.current_bet = env.current_bet
+        cumulative_rewards[env.current_player_seat] += reward
         
         # Stocker l'expérience dans la mémoire de l'agent
         current_agent.remember(state, action_chosen, reward, next_state, 
                              env.current_phase == GamePhase.SHOWDOWN)
         # Stocker l'action pour l'agent spécifique
-        actions_taken[f"Agent {env.current_player_idx + 1}"].append(action_chosen)
+        actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
         
         # Vérifier si un seul joueur est actif (les autres ont abandonné)
         active_players = sum(1 for p in env.players if p.is_active and not p.has_folded)
@@ -124,6 +136,21 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             env._draw()
             pygame.display.flip()
             env.clock.tick(FPS)
+            
+            # Attendre que le temps d'affichage du gagnant soit écoulé
+            if env.pygame_winner_info:
+                current_time = pygame.time.get_ticks()
+                while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
+                    # Continuer à gérer les événements pygame pendant l'attente
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            pygame.quit()
+                            return
+                    # Redessiner et mettre à jour l'affichage
+                    env._draw()
+                    pygame.display.flip()
+                    env.clock.tick(FPS)
+                    current_time = pygame.time.get_ticks()
     
     # Calculer les récompenses finales en fonction des changements de stack et du statut de victoire
     final_stacks = [player.stack for player in env.players]
@@ -144,7 +171,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Calculer la récompense finale en utilisant la force de la main
     for i, agent in enumerate(agent_list):
-        env.current_player_idx = i
+        env.current_player_seat = i
         terminal_state = env.get_state()
         is_winner = winning_list[i]
         
@@ -177,7 +204,20 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     if rendering and (episode % render_every == 0):
         env._draw()
         pygame.display.flip()
-        time.sleep(2)
+        # Attendre que le temps d'affichage du gagnant soit écoulé
+        if env.pygame_winner_info:
+            current_time = pygame.time.get_ticks()
+            while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
+                # Continuer à gérer les événements pygame pendant l'attente
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
+                # Redessiner et mettre à jour l'affichage
+                env._draw()
+                pygame.display.flip()
+                env.clock.tick(FPS)
+                current_time = pygame.time.get_ticks()
 
     return final_rewards, winning_list, actions_taken, hand_strengths, metrics_list
 

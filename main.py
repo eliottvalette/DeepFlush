@@ -1,5 +1,5 @@
 # main.py
-from train import main_training_loop, set_seed, EPISODES, GAMMA, ALPHA, STATE_SIZE, RENDERING
+from poker_train import main_training_loop, set_seed, EPISODES, GAMMA, ALPHA, STATE_SIZE, RENDERING
 from poker_agents import PokerAgent
 
 # Définir la graine pour la reproductibilité
@@ -21,7 +21,7 @@ for i in range(6):
         load_path=f"saved_models/poker_agent_{list_names[i]}.pth"
     )
     agent.name = list_names[i]
-    agent.is_human = False  # Tous les agents sont des IA
+    agent.is_human = True  # True pour voir leurs cartes
     agent_list.append(agent)
 
 # Démarrer l'entraînement
