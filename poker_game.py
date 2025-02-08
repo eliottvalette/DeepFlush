@@ -14,12 +14,12 @@ import logging
 SCREEN_WIDTH = 1400
 SCREEN_HEIGHT = 900
 POSITIONS = [
-    (SCREEN_WIDTH-550, SCREEN_HEIGHT-250),     # Bas-Droite (Joueur 1)
-    (420, SCREEN_HEIGHT-250),                  # Bas-Gauche (Joueur 2) 
-    (80, (SCREEN_HEIGHT-150) / 2),             # Milieu-Gauche (Joueur 3)
-    (420, 140),                                # Haut-Gauche (Joueur 4)
-    (SCREEN_WIDTH-550, 140),                   # Haut-Droite (Joueur 5)
-    (SCREEN_WIDTH-190, (SCREEN_HEIGHT-150)/2)  # Milieu-Droite (Joueur 6)
+    (SCREEN_WIDTH-550, SCREEN_HEIGHT-250),         # Bas-Droite (Joueur 1)
+    (420             , SCREEN_HEIGHT-250),         # Bas-Gauche (Joueur 2) 
+    (80              , (SCREEN_HEIGHT-150) / 2),   # Milieu-Gauche (Joueur 3)
+    (420             , 140),                       # Haut-Gauche (Joueur 4)
+    (SCREEN_WIDTH-550, 140),                       # Haut-Droite (Joueur 5)
+    (SCREEN_WIDTH-190, (SCREEN_HEIGHT-150)/2)      # Milieu-Droite (Joueur 6)
 ]
 
 class Card:
@@ -224,7 +224,7 @@ class PokerGame:
         self.pygame_slider_bet_amount = self.big_blind # Valeur de la raise actualle déterminée grace a un slider (uniquement utilisé en jeu manuel)
 
         # Suivi de l'historique des actions
-        self.pygame_action_history = []
+        self.pygame_action_history = {'Player_1': [], 'Player_2': [], 'Player_3': [], 'Player_4': [], 'Player_5': [], 'Player_6': []}
 
         # Ajouter le suivi des informations du gagnant
         self.pygame_winner_info = None
@@ -279,7 +279,7 @@ class PokerGame:
         self.pygame_winner_info = None
         self.pygame_winner_display_start = 0
         self.pygame_slider_bet_amount = self.big_blind
-        self.pygame_action_history = []
+        self.pygame_action_history = {'Player_1': [], 'Player_2': [], 'Player_3': [], 'Player_4': [], 'Player_5': [], 'Player_6': []}
         # --------------------
 
         self.start_new_hand(first_hand = True)
@@ -406,10 +406,13 @@ class PokerGame:
         self.pygame_winner_info = None
         self.pygame_winner_display_start = 0
         self.pygame_slider_bet_amount = self.big_blind
-        self.pygame_action_history = []
+        self.pygame_action_history = {'Player_1': [], 'Player_2': [], 'Player_3': [], 'Player_4': [], 'Player_5': [], 'Player_6': []}
 
         self._update_button_states()
         self.deal_small_and_big_blind()
+
+        # Clear action history for new hand
+        self.pygame_action_history = {player.name: [] for player in self.players}
 
         return self.get_state()
 
@@ -442,6 +445,10 @@ class PokerGame:
         Distribue les cartes communes selon la phase de jeu actuelle.
         Distribue 3 cartes pour le flop, 1 pour le turn et 1 pour la river.
         """
+
+        if self.current_phase == GamePhase.PREFLOP:
+            raise ValueError("Cannot deal community cards during pre-flop")
+        
         if self.current_phase == GamePhase.FLOP:
             for _ in range(3):
                 self.community_cards.append(self.deck.pop())
@@ -509,12 +516,25 @@ class PokerGame:
         Passe au prochain joueur actif et n'ayant pas fold dans le sens horaire.
         Skip les joueurs all-in.
         """
+        initial_seat = self.current_player_seat
         self.current_player_seat = (self.current_player_seat + 1) % self.num_players
+        
+        # Vérifier qu'on ne boucle pas indéfiniment
         while (not self.players[self.current_player_seat].is_active or 
-               self.players[self.current_player_seat].has_folded or
-               self.players[self.current_player_seat].is_all_in):  # Added check for all-in
+               self.players[self.current_player_seat].has_folded or 
+               self.players[self.current_player_seat].is_all_in):
+            # Ajouter le fait que le joueur a passé son tour dans l'historique
+            skipped_player = self.players[self.current_player_seat]
+            if skipped_player.has_folded:
+                self.pygame_action_history[skipped_player.name].append("none")
+                # On ne garde que les 5 dernières actions du joueur
+                if len(self.pygame_action_history[skipped_player.name]) > 5:
+                    self.pygame_action_history[skipped_player.name].pop(0)
+            
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
-    
+            if self.current_player_seat == initial_seat:
+                raise RuntimeError("No valid next player found - all players are inactive, folded, or all-in")
+        
     def check_phase_completion(self):
         """
         Vérifie si le tour d'enchères actuel est terminé et gère la progression du jeu.
@@ -558,8 +578,6 @@ class PokerGame:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player.has_acted:
                 print(f'{player.name} n\'a pas encore agi')
-                for p in self.players:
-                    print(f"p.name : {p.name}, p.has_acted : {p.has_acted}, p.is_all_in : {p.is_all_in}, p.current_player_bet : {p.current_player_bet}, self.current_maximum_bet : {self.current_maximum_bet}")
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
 
@@ -734,6 +752,9 @@ class PokerGame:
         Returns:
             PlayerAction: L'action traitée (pour garder une cohérence dans le type de retour).
         """
+        #----- Vérification que c'est bien au tour du joueur de jouer -----
+        if player.seat_position != self.current_player_seat:
+            raise ValueError(f"It's not {player.name}'s turn to act")
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
             raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
@@ -820,18 +841,29 @@ class PokerGame:
         player.has_acted = True
         self.check_phase_completion()
 
+        # Update action history with formatted action text
+        action_text = f"{action.value}"
+        if action in [PlayerAction.RAISE, PlayerAction.ALL_IN]:
+            action_text += f" {bet_amount}BB"
+        elif action == PlayerAction.CALL:
+            call_amount = self.current_maximum_bet - player.current_player_bet
+            action_text += f" {call_amount}BB"
+        
+        # Add action to player's history
+        self.pygame_action_history[player.name].append(action_text)
+        # Keep only last 5 actions per player
+        if len(self.pygame_action_history[player.name]) > 5:
+            self.pygame_action_history[player.name].pop(0)
+
         return action
 
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
         """
-        Évalue la meilleure main possible d'un joueur avec les cartes communes.
-        
-        Args:
-            player (Player): Le joueur dont on évalue la main
-            
-        Returns:
-            Tuple[HandRank, List[int]]: Le rang de la main et les valeurs pour départager
+        Évalue la meilleure main possible d'un joueur.
         """
+        if not player.cards:
+            raise ValueError("Cannot evaluate hand - player has no cards")
+        
         # Combine les cartes du joueur avec les cartes communes
         all_cards = player.cards + self.community_cards
         # Extrait les valeurs et couleurs de toutes les cartes
@@ -1242,10 +1274,10 @@ class PokerGame:
         
         # 9. Informations sur l'activité in game (binaire extrême : en jeu/a foldé)
         for player in self.players:
-            state.append(1 if player.has_folded else -1) # (taille = 6)
+            state.append(1 if ((not player.has_folded) and player.is_active) else -1) # (taille = 6)
 
         # 10. Informations sur la position (encodage one-hot des positions relatives)
-        relative_positions = [0.1] * self.num_players
+        relative_positions = [0.01] * self.num_players
         relative_pos = (self.current_player_seat - self.button_seat_position) % self.num_players
         relative_positions[relative_pos] = 1
         state.extend(relative_positions) # (taille = 6)
@@ -1259,37 +1291,35 @@ class PokerGame:
                 action_availability.append(-1)
         state.extend(action_availability) # (taille = 6)
 
-        # 12. Actions précédentes (dernière action de chaque joueur, encodée en vecteurs one-hot)
+        # Update action encoding for previous actions
         action_encoding = {
-            None: 0,
-            PlayerAction.FOLD: 1,
-            PlayerAction.CHECK: 2,
-            PlayerAction.CALL: 3,
-            PlayerAction.RAISE: 4,
-            PlayerAction.ALL_IN: 5
+            None: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],  # Default encoding for no action
+            "fold": [1, 0.1, 0.1, 0.1, 0.1, 0.1],
+            "check": [0.1, 1, 0.1, 0.1, 0.1, 0.1],
+            "call": [0.1, 0.1, 1, 0.1, 0.1, 0.1],
+            "raise": [0.1, 0.1, 0.1, 1, 0.1, 0.1],
+            "all-in": [0.1, 0.1, 0.1, 0.1, 1, 0.1]
         }
 
-        # Initialisation du tableau des dernières actions avec des zéros
-        last_actions = [[0.1] * 6 for _ in range(self.num_players)]  # 6 actions possibles (y compris None)
-
-        # Traitement des actions récentes
-        for pygame_action_text in reversed(self.pygame_action_history[-self.num_players:]):
-            if ":" in pygame_action_text:
-                player_name, action = pygame_action_text.split(":")
-                player_idx = int(player_name.split("_")[-1]) - 1
-                action = action.strip()
-                
-                # Recherche du type d'action correspondant
-                for action_type in PlayerAction:
-                    if action_type.value in action:
-                        # Création de l'encodage one-hot
-                        last_actions[player_idx] = [0.1] * 6  # Réinitialisation à zéro
-                        last_actions[player_idx][action_encoding[action_type]] = 1
-                        break
-
-        # 12. Liste des actions précédentes des 3 joueurs
-        flattened_actions = [val for sublist in last_actions for val in sublist]
-        state.extend(flattened_actions)  
+        # Obtenir la dernière action de chaque joueur, ordonnée relativement au joueur actuel
+        current_player = self.players[self.current_player_seat]
+        last_actions = []
+        
+        # Commencer par le joueur actuel et parcourir les positions dans l'ordre relatif
+        for i in range(self.num_players):
+            relative_seat = (self.current_player_seat + i) % self.num_players
+            player = self.players[relative_seat]
+            player_actions = self.pygame_action_history[player.name]
+            
+            if player_actions:
+                # Extraction du type d'action de la dernière action
+                last_action = player_actions[-1].split()[0]  # Obtenir juste le type d'action
+                last_actions.append(action_encoding.get(last_action, action_encoding[None]))
+            else:
+                last_actions.append(action_encoding[None])
+        
+        # Ajout des actions aplaties à l'état
+        state.extend([val for sublist in last_actions for val in sublist])
 
         # 13. Estimation de la probabilité de victoire
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
@@ -1853,18 +1883,21 @@ class PokerGame:
         history_text = self.font.render("Action History:", True, (255, 255, 255))
         self.screen.blit(history_text, (history_x, history_y - 30))
         
-        for i, action in enumerate(self.pygame_action_history):
-            # Use different colors for different types of text
-            if action.startswith("==="):  # New hand separator
-                color = (255, 215, 0)  # Gold
-            elif action.startswith("---"):  # Round separator
-                color = (0, 255, 255)  # Cyan
-            else:  # Normal action
-                color = (255, 255, 255)  # White
-            
-            text = self.font.render(action, True, color)
-            self.screen.blit(text, (history_x, history_y + i * 25))
-        
+        y_offset = 0
+        for player_name, actions in self.pygame_action_history.items():
+            if actions:  # Only show players with actions
+                # Draw player name
+                player_text = self.font.render(f"{player_name}:", True, (255, 215, 0))  # Gold color
+                self.screen.blit(player_text, (history_x, history_y + y_offset))
+                y_offset += 25
+                
+                # Draw last 3 actions for this player
+                for action in actions[-3:]:
+                    action_text = self.font.render(f"  {action}", True, (255, 255, 255))
+                    self.screen.blit(action_text, (history_x + 20, history_y + y_offset))
+                    y_offset += 25
+                y_offset += 5  # Add spacing between players
+
         # Draw game info
         game_info_text = self.font.render(f"Game Info: {self.current_phase}", True, (255, 255, 255))
         self.screen.blit(game_info_text, (50, 50))
@@ -1973,8 +2006,8 @@ class PokerGame:
                         for i in range(2):  # 2 cards
                             value_range = state[i*17:(i*17)+13]  # 13 possible values
                             suit_range = state[i*17+13:(i*17)+17]  # 4 possible suits
-                            value = value_range.index(1) + 2  # Convert back to card value
-                            suit = ["♠", "♥", "♦", "♣"][suit_range.index(1)]  # Convert back to suit
+                            value = np.where(value_range == 1)[0][0] + 2  # Convert back to card value
+                            suit = ["♠", "♥", "♦", "♣"][np.where(suit_range == 1)[0][0]]  # Convert back to suit
                             print(f"Card {i+1}: {value}{suit}")
                         
                         # Print community cards (up to 5 cards)
@@ -1984,27 +2017,30 @@ class PokerGame:
                             value_range = state[base_idx:base_idx+13]
                             suit_range = state[base_idx+13:base_idx+17]
                             if 1 in value_range:  # Check if card exists
-                                value = value_range.index(1) + 2
-                                suit = ["♠", "♥", "♦", "♣"][suit_range.index(1)]
+                                value = np.where(value_range == 1)[0][0] + 2
+                                suit = ["♠", "♥", "♦", "♣"][np.where(suit_range == 1)[0][0]]
                                 print(f"Card {i+1}: {value}{suit}")
                         
                         # Print rest of state information
                         print(f"\nHand rank: {state[119] * len(HandRank)}")  # Index after card encodings
                         print(f"Game phase: {state[120:125]}")  # 5 values for game phase
-                        print(f"Round number: {state[125]}")
-                        print(f"Current bet: {state[126]}")
-                        print(f"Stack sizes: {[x * self.starting_stack for x in state[127:130]]}")
-                        print(f"Current bets: {state[130:133]}")
-                        print(f"Player activity: {state[133:136]}")
-                        print(f"Relative positions: {state[136:139]}")
-                        print(f"Available actions: {state[139:144]}")
-                        print(f"Previous actions Player 1: {state[144:150]}")
-                        print(f"Previous actions Player 2: {state[150:156]}")
-                        print(f"Previous actions Player 3: {state[156:162]}")
-                        print(f"Win probability: {state[162]}")
-                        print(f"Pot odds: {state[163]}")
-                        print(f"Equity: {state[164]}")
-                        print(f"Aggression factor: {state[165]}")
+                        print(f"Current Maximum Bet: {state[125]}")
+                        print(f"Stack sizes: {state[126:132]}")  # 6 players
+                        print(f"Current bets: {state[132:138]}")  # 6 players
+                        print(f"Player activity: {state[138:144]}")  # 6 players
+                        print(f"Player fold status: {state[144:150]}")  # 6 players
+                        print(f"Relative positions: {state[150:156]}")  # 6 positions
+                        print(f"Available actions: {state[156:161]}")  # 5 possible actions
+                        
+                        # Print previous actions for each player (6 players x 6 action types)
+                        for i in range(6):
+                            start_idx = 161 + (i * 6)
+                            print(f"Previous actions Player {i+1}: {state[start_idx:start_idx+6]}")
+                        
+                        print(f"Win probability: {state[197]}")
+                        print(f"Pot odds: {state[198]}")
+                        print(f"Equity: {state[199]}")
+                        print(f"Aggression factor: {state[200]}")
                         print('--------------------------------')
                 
                 self.handle_input(event)

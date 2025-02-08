@@ -8,7 +8,7 @@ from collections import defaultdict
 class TrainingVisualizer:
     def __init__(self, save_interval: int = 1000):
         # Create subplots
-        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4), (self.ax5, self.ax6)) = plt.subplots(3, 2, figsize=(16, 18))
         
         # Create new figure for metrics
         self.metrics_fig, self.metrics_axs = plt.subplots(3, 2, figsize=(15, 12))
@@ -19,6 +19,15 @@ class TrainingVisualizer:
         self.ax2.set_title('Win Rate per Agent')
         self.ax3.set_title('Action Distribution per Agent')
         self.ax4.set_title('Hand Strength vs Win Rate Correlation')
+        self.ax5.set_title('Epsilon Decay')
+        
+        # Configure new epsilon decay plot
+        self.ax5.set_xlabel('Episodes')
+        self.ax5.set_ylabel('Epsilon Value')
+        self.ax5.grid(True)
+        
+        # Keep ax6 empty for now or hide it
+        self.ax6.set_visible(False)
         
         # Initialize data
         self.window_size = 50
@@ -84,6 +93,11 @@ class TrainingVisualizer:
         # Add counter for file saves
         self.save_counter = 0
         self.save_interval = save_interval // 10
+        
+        # Initialize epsilon data
+        self.epsilon_data = []
+        self.epsilon_line, = self.ax5.plot([], [], 'k-', label='Epsilon')
+        self.ax5.legend()
 
     def update_action_distribution(self, agent_name, action):
         """Update action distribution for an agent"""
@@ -214,7 +228,7 @@ class TrainingVisualizer:
         plt.tight_layout()
         self.metrics_fig.savefig('viz_pdf/training_metrics.jpg')
 
-    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None):
+    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None):
         """Update all plots with new data"""
         self.episodes.append(episode)
         
@@ -279,6 +293,14 @@ class TrainingVisualizer:
         if metrics_list is not None:
             self.update_metrics(episode, metrics_list)
         
+        # Update epsilon plot if epsilon is provided
+        if epsilon is not None:
+            self.epsilon_data.append(epsilon)
+            self.epsilon_line.set_data(self.episodes, self.epsilon_data)
+            self.ax5.relim()
+            self.ax5.autoscale_view()
+            self.ax5.set_ylim([-0.05, 1.05])  # Set y-axis limits for epsilon
+        
         # Save plots at intervals
         self.save_counter += 1
         if self.save_counter >= self.save_interval:
@@ -323,3 +345,17 @@ def plot_winning_stats(winning_history: dict, window_size: int = 50, save_path: 
     plt.grid(True, axis='y')
     plt.savefig(save_path)
     plt.close()
+
+def update_rewards_history(rewards_history: dict, reward_list: list, agent_list: list) -> dict:
+    for i, agent in enumerate(agent_list):
+        if agent.name not in rewards_history:
+            rewards_history[agent.name] = []
+        rewards_history[agent.name].append(reward_list[i])
+    return rewards_history
+
+def update_winning_history(winning_history: dict, winning_list: list, agent_list: list) -> dict:
+    for i, agent in enumerate(agent_list):
+        if agent.name not in winning_history:
+            winning_history[agent.name] = []
+        winning_history[agent.name].append(winning_list[i])
+    return winning_history
