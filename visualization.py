@@ -131,6 +131,17 @@ class TrainingVisualizer:
         if won:
             self.hand_rank_stats[agent_name][hand_rank]['wins'] += 1
 
+    def update_hand_rank_data(self, final_hand_ranks):
+        """
+        Met à jour les statistiques de win rate par hand rank pour chaque agent.
+        
+        Args:
+            final_hand_ranks (list): Liste de tuples (HandRank, bool) pour chaque agent.
+        """
+        for i, (rank, won) in enumerate(final_hand_ranks):
+            agent_name = f"Agent {i+1}"
+            self.update_hand_rank_stats(agent_name, rank, won)
+
     def plot_action_distribution(self):
         """Plot action distribution for each agent"""
         self.ax3.clear()
@@ -310,7 +321,7 @@ class TrainingVisualizer:
         fig.savefig('viz_pdf/hand_rank_win_rates_all_agents.jpg')
         plt.close(fig)
 
-    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None, final_hand_ranks=None):
+    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None):
         """Update all plots with new data"""
         self.episodes.append(episode)
         
@@ -382,12 +393,6 @@ class TrainingVisualizer:
             self.ax5.relim()
             self.ax5.autoscale_view()
             self.ax5.set_ylim([-0.05, 1.05])  # Set y-axis limits for epsilon
-        
-        # Mettre à jour les statistiques de hand rank si fournies
-        if final_hand_ranks is not None:
-            for i, (rank, won) in enumerate(final_hand_ranks):
-                agent_name = f"Agent {i+1}"
-                self.update_hand_rank_stats(agent_name, rank, won)
         
         # Sauvegarder les graphiques à intervalles réguliers
         self.save_counter += 1

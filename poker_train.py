@@ -195,23 +195,22 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     final_hand_ranks = []
     for i, player in enumerate(env.players):
         if not player.cards:  # Si le joueur n'a pas de cartes
-            # On considère ça comme une défaite avec la main la plus basse possible
             final_hand_ranks.append((HandRank.HIGH_CARD, False))
         elif player.has_folded:
-            # Pour les joueurs qui ont fold, utiliser leur hand rank au moment du fold
-            # et le compter comme une défaite
             hand_rank, _ = env.evaluate_current_hand(player)
             final_hand_ranks.append((hand_rank, False))
         else:
-            # Pour les joueurs qui ont atteint le showdown, utiliser leur hand rank final
             hand_rank, _ = env.evaluate_final_hand(player)
             final_hand_ranks.append((hand_rank, winning_list[i] == 1))
 
-    # Ajouter final_hand_ranks aux arguments de update_plots
+    # Mettre à jour les statistiques de hand rank à chaque épisode
+    visualizer.update_hand_rank_data(final_hand_ranks)
+
+    # Mise à jour des autres graphiques selon l'intervalle habituel
     if episode % PLOT_UPDATE_INTERVAL == 0:
         visualizer.update_plots(episode, final_rewards, winning_list, 
-                              actions_taken, hand_strengths, metrics_list,
-                              epsilon=epsilon, final_hand_ranks=final_hand_ranks)
+                                actions_taken, hand_strengths, metrics_list,
+                                epsilon=epsilon)
 
     return final_rewards, winning_list, actions_taken, hand_strengths, metrics_list
 
