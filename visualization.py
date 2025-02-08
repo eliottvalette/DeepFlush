@@ -4,6 +4,8 @@ matplotlib.use('Agg')  # Use Agg backend that doesn't require GUI
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
+from poker_game import HandRank
+import seaborn as sns
 
 class TrainingVisualizer:
     def __init__(self, save_interval: int = 1000):
@@ -99,6 +101,12 @@ class TrainingVisualizer:
         self.epsilon_line, = self.ax5.plot([], [], 'k-', label='Epsilon')
         self.ax5.legend()
 
+        # Ajouter un dictionnaire pour suivre les win rates par hand rank
+        self.hand_rank_stats = {
+            f"Agent {i+1}": {rank: {'wins': 0, 'total': 0} for rank in HandRank} 
+            for i in range(6)
+        }
+
     def update_action_distribution(self, agent_name, action):
         """Update action distribution for an agent"""
         action_name = action.name if hasattr(action, 'name') else action
@@ -109,6 +117,19 @@ class TrainingVisualizer:
         """Update hand strength and win data"""
         self.hand_strength_data[agent_name]['strength'].append(strength)
         self.hand_strength_data[agent_name]['win'].append(1 if win_status else 0)
+
+    def update_hand_rank_stats(self, agent_name: str, hand_rank: HandRank, won: bool):
+        """
+        Met à jour les statistiques de win rate par hand rank pour un agent.
+        
+        Args:
+            agent_name (str): Nom de l'agent
+            hand_rank (HandRank): Le rang de la main finale ou au moment du fold
+            won (bool): Si l'agent a gagné ou non
+        """
+        self.hand_rank_stats[agent_name][hand_rank]['total'] += 1
+        if won:
+            self.hand_rank_stats[agent_name][hand_rank]['wins'] += 1
 
     def plot_action_distribution(self):
         """Plot action distribution for each agent"""
@@ -228,7 +249,52 @@ class TrainingVisualizer:
         plt.tight_layout()
         self.metrics_fig.savefig('viz_pdf/training_metrics.jpg')
 
-    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None):
+    def plot_hand_rank_win_rates(self):
+        """
+        Crée un bar plot des win rates par hand rank pour chaque agent.
+        """
+        for agent_name, stats in self.hand_rank_stats.items():
+            # Créer une nouvelle figure pour chaque agent
+            plt.figure(figsize=(12, 6))
+            
+            # Préparer les données pour toutes les ranks
+            ranks = [rank.name for rank in HandRank]  # Tous les noms de ranks
+            win_rates = []
+            total_hands = []
+            
+            # Calculer les win rates pour chaque rank
+            for rank in HandRank:
+                total = stats[rank]['total']
+                win_rate = (stats[rank]['wins'] / total * 100) if total > 0 else 0
+                win_rates.append(win_rate)
+                total_hands.append(total)
+            
+            # Créer le bar plot
+            bars = plt.bar(ranks, win_rates)
+            
+            # Personnaliser le graphique
+            plt.title(f'{agent_name} Win Rates by Hand Rank')
+            plt.xlabel('Hand Rank')
+            plt.ylabel('Win Rate (%)')
+            
+            # Rotation des labels pour meilleure lisibilité
+            plt.xticks(rotation=45, ha='right')
+            
+            # Ajouter les valeurs sur les barres
+            for i, bar in enumerate(bars):
+                height = bar.get_height()
+                plt.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{win_rates[i]:.1f}%\n({total_hands[i]})',
+                        ha='center', va='bottom')
+            
+            # Ajuster la mise en page
+            plt.tight_layout()
+            
+            # Sauvegarder le graphique
+            plt.savefig(f'viz_pdf/agent_{agent_name.split()[-1]}_win_rates.jpg')
+            plt.close()
+
+    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None, final_hand_ranks=None):
         """Update all plots with new data"""
         self.episodes.append(episode)
         
@@ -301,12 +367,19 @@ class TrainingVisualizer:
             self.ax5.autoscale_view()
             self.ax5.set_ylim([-0.05, 1.05])  # Set y-axis limits for epsilon
         
-        # Save plots at intervals
+        # Mettre à jour les statistiques de hand rank si fournies
+        if final_hand_ranks is not None:
+            for i, (rank, won) in enumerate(final_hand_ranks):
+                agent_name = f"Agent {i+1}"
+                self.update_hand_rank_stats(agent_name, rank, won)
+        
+        # Sauvegarder les graphiques à intervalles réguliers
         self.save_counter += 1
         if self.save_counter >= self.save_interval:
             plt.tight_layout()
             self.fig.savefig('viz_pdf/training_progress.jpg')
             self.plot_metrics()
+            self.plot_hand_rank_win_rates()
             self.save_counter = 0
 
 def plot_winning_stats(winning_history: dict, window_size: int = 50, save_path: str = "viz_pdf/poker_wins.jpg"):

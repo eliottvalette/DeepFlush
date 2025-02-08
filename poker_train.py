@@ -7,7 +7,7 @@ import pygame
 import torch
 import time
 from poker_agents import PokerAgent
-from poker_game import PokerGame, GamePhase, PlayerAction
+from poker_game import PokerGame, GamePhase, PlayerAction, HandRank
 import matplotlib
 matplotlib.use('Agg')  # Utiliser le backend Agg qui ne nécessite pas de GUI
 from visualization import TrainingVisualizer, plot_winning_stats, update_rewards_history, update_winning_history
@@ -44,7 +44,7 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int):
+def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int, visualizer: TrainingVisualizer):
     """
     Exécute un épisode complet du jeu de poker en utilisant une séquence d'états.
     Chaque agent reçoit en entrée la séquence complète des états depuis le début de l'épisode.
@@ -91,16 +91,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
         if len(valid_actions) == 0:
-            print(f"\nBug pour {current_player.name} ===")
-            print(f"Joueur actif : {current_player.is_active}")
-            print(f"Phase actuelle : {env.current_phase}")
-            print(f"Actions valides : {valid_actions}")
-            print(f"A folded : {current_player.has_folded}")
-            print(f"A all-in : {current_player.is_all_in}")
-            print(f"Pot actuel : {env.phase_pot}BB")
-            print(f"Mise maximale actuelle : {env.current_maximum_bet}BB")
-            print(f"Stack du joueur avant action : {current_player.stack}BB")
-            print(f"Mise actuelle du joueur : {current_player.current_player_bet}BB")
             raise Exception(f"Agent {env.current_player_seat + 1} n'a plus d'actions valides et il lui a pourtant été demandé de jouer")
         
         # Calculer et stocker la force de la main pour le joueur courant
@@ -201,6 +191,28 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                 env.clock.tick(FPS)
                 current_time = pygame.time.get_ticks()
 
+    # Collecter les hand ranks finaux et les résultats
+    final_hand_ranks = []
+    for i, player in enumerate(env.players):
+        if not player.cards:  # Si le joueur n'a pas de cartes
+            # On considère ça comme une défaite avec la main la plus basse possible
+            final_hand_ranks.append((HandRank.HIGH_CARD, False))
+        elif player.has_folded:
+            # Pour les joueurs qui ont fold, utiliser leur hand rank au moment du fold
+            # et le compter comme une défaite
+            hand_rank, _ = env.evaluate_current_hand(player)
+            final_hand_ranks.append((hand_rank, False))
+        else:
+            # Pour les joueurs qui ont atteint le showdown, utiliser leur hand rank final
+            hand_rank, _ = env.evaluate_final_hand(player)
+            final_hand_ranks.append((hand_rank, winning_list[i] == 1))
+
+    # Ajouter final_hand_ranks aux arguments de update_plots
+    if episode % PLOT_UPDATE_INTERVAL == 0:
+        visualizer.update_plots(episode, final_rewards, winning_list, 
+                              actions_taken, hand_strengths, metrics_list,
+                              epsilon=epsilon, final_hand_ranks=final_hand_ranks)
+
     return final_rewards, winning_list, actions_taken, hand_strengths, metrics_list
 
 
@@ -237,7 +249,7 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_list, winning_list, actions_taken, hand_strengths, metrics_list = run_episode(
-                env, agent_list, epsilon, rendering, episode, render_every
+                env, agent_list, epsilon, rendering, episode, render_every, visualizer
             )
             
             # Mettre à jour les historiques
