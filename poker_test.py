@@ -1,67 +1,49 @@
 # poker_train.py
-import numpy as np
+import numpy as np 
 import random as rd
 import pygame
-import torch
 import time
-from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction
+from bot import hardcoded_poker_bot
 import matplotlib
 matplotlib.use('Agg')
-
-# Hyperparameters
-EPISODES = 10000
-GAMMA = 0.9985
-ALPHA = 0.003
-EPS_DECAY = 0.9998
-STATE_SIZE = 169
-RENDERING = True
 
 def set_seed(seed=42):
     rd.seed(seed)
     np.random.seed(seed)
-    
-    torch.manual_seed(seed)
-    if torch.backends.mps.is_available():
-        torch.mps.manual_seed(seed)
-    
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
 
-set_seed(42)
-
-def load_trained_agents():
+def create_bot_players():
     """
-    Charge les agents entraînés à partir des modèles sauvegardés.
+    Crée une liste de 6 joueurs dont 5 bots et 1 humain.
     
     Returns:
-        list: Liste des agents chargés avec leurs modèles entraînés
+        list: Liste des joueurs avec leurs paramètres
     """
-    agent_list = []    
-    # Créer et charger les agents
-    for i in range(3):
-        agent = PokerAgent(
-            state_size=STATE_SIZE,
-            action_size=5,
-            gamma=0.9985,
-            learning_rate=0.001,
-            load_model=True,  # Charger le modèle sauvegardé
-            load_path=f"saved_models/poker_agent_player_{i+1}.pth"
-        )
-        agent.name = f"player_{i+1}"
-        agent.is_human = False  # Les agents sont des IA
-        agent_list.append(agent)
+    player_list = []
     
-    # Définir le premier joueur comme humain pour les tests
-    agent_list[0].is_human = True
-    return agent_list
+    # Créer le joueur humain
+    player_list.append({
+        'name': 'Human',
+        'is_human': True,
+        'bot_function': None
+    })
+    
+    # Créer 5 bots
+    for i in range(5):
+        player_list.append({
+            'name': f'Bot_{i+1}',
+            'is_human': False,
+            'bot_function': hardcoded_poker_bot
+        })
+    
+    return player_list
 
-def run_test_games(agent_list, env):
+def run_test_games(player_list, env):
     """
-    Exécute des parties de test avec les agents chargés.
+    Exécute des parties de test avec les bots.
     
     Args:
-        agent_list (list): Liste des agents à tester
+        player_list (list): Liste des joueurs (humain + bots)
         env (PokerGame): Environnement du jeu
     """
     running = True
@@ -80,8 +62,8 @@ def run_test_games(agent_list, env):
                     env.reset()
             
             # Gérer les entrées du joueur humain 
-            current_player = env.players[env.current_player_idx]
-            current_agent = agent_list[env.current_player_idx]
+            current_player = env.players[env.current_player_seat]
+            current_player_info = player_list[env.current_player_seat]
             
             if current_player.is_human:
                 env.handle_input(event)
@@ -92,11 +74,16 @@ def run_test_games(agent_list, env):
                 valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
                 print('valid_actions', valid_actions)
                 
-                print(f"AI {current_player.name} is playing")
-                # Ne pas décompresser le retour de get_action
-                action_chosen = current_agent.get_action(state, 0.01, valid_actions)
+                print(f"Bot {current_player.name} is playing")
+                # Utiliser le bot hardcodé pour choisir l'action parmi les actions autorisées
+                action_vector = current_player_info['bot_function'](state, valid_actions)
+                # Si aucune action n'est retournée, on passe au tour suivant
+                if action_vector is None:
+                    continue
+                action_index = np.argmax(action_vector)
+                action_chosen = list(PlayerAction)[action_index]
                 
-                # Ajouter un délai pour voir l'action de l'IA
+                # Ajouter un délai pour voir l'action du bot
                 time.sleep(1)
                 
                 # Exécuter l'action choisie
@@ -110,16 +97,18 @@ def run_test_games(agent_list, env):
     pygame.quit()
 
 if __name__ == "__main__":
-    # Initialiser l'environnement
-    env = PokerGame()
+    # Créer les joueurs (1 humain + 5 bots)
+    player_list = create_bot_players()
     
-    # Charger les agents entraînés
-    agent_list = load_trained_agents()
+    # Extraire les noms des joueurs pour initialiser l'environnement
+    list_names = [player['name'] for player in player_list]
     
-    # Synchroniser les noms des joueurs
-    for i, agent in enumerate(agent_list):
-        env.players[i].name = agent.name
-        env.players[i].is_human = agent.is_human
+    # Initialiser l'environnement avec les noms
+    env = PokerGame(list_names)
+    
+    # Synchroniser les types des joueurs
+    for i, player_info in enumerate(player_list):
+        env.players[i].is_human = player_info['is_human']
     
     # Lancer les parties de test
-    run_test_games(agent_list, env)
+    run_test_games(player_list, env)
