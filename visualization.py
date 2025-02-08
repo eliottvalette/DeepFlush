@@ -251,48 +251,64 @@ class TrainingVisualizer:
 
     def plot_hand_rank_win_rates(self):
         """
-        Crée un bar plot des win rates par hand rank pour chaque agent.
+        Crée un bar plot des win rates par hand rank pour chaque agent dans une seule figure.
+        Utilise toutes les données sans fenêtrage.
         """
-        for agent_name, stats in self.hand_rank_stats.items():
-            # Créer une nouvelle figure pour chaque agent
-            plt.figure(figsize=(12, 6))
-            
+        # Créer une figure avec 6 subplots (pour 6 agents)
+        fig, axs = plt.subplots(3, 2, figsize=(16, 18))
+        axs = axs.flatten()
+        
+        for idx, (agent_name, stats) in enumerate(self.hand_rank_stats.items()):
+            ax = axs[idx]
             # Préparer les données pour toutes les ranks
-            ranks = [rank.name for rank in HandRank]  # Tous les noms de ranks
+            ranks = [rank.name for rank in HandRank]
             win_rates = []
             total_hands = []
-            
-            # Calculer les win rates pour chaque rank
+            win_counts = []  # Nouveau: stocker (nombre gagné, nombre perdu)
             for rank in HandRank:
                 total = stats[rank]['total']
-                win_rate = (stats[rank]['wins'] / total * 100) if total > 0 else 0
+                wins = stats[rank]['wins']
+                losses = total - wins
+                # Utilisation de toutes les données pour calculer le win rate
+                win_rate = (wins / total * 100) if total > 0 else 0
                 win_rates.append(win_rate)
                 total_hands.append(total)
+                win_counts.append((wins, losses))
             
-            # Créer le bar plot
-            bars = plt.bar(ranks, win_rates)
+            # Créer le bar plot sur l'axe correspondant
+            bars = ax.bar(ranks, win_rates, color='skyblue')
+            ax.set_title(f'{agent_name} Win Rates by Hand Rank')
+            ax.set_xlabel('Hand Rank')
+            ax.set_ylabel('Win Rate (%)')
+            ax.set_ylim(0, 100)
             
-            # Personnaliser le graphique
-            plt.title(f'{agent_name} Win Rates by Hand Rank')
-            plt.xlabel('Hand Rank')
-            plt.ylabel('Win Rate (%)')
+            # Rotation des labels pour une meilleure lisibilité
+            ax.set_xticks(np.arange(len(ranks)))
+            ax.set_xticklabels(ranks, rotation=45, ha='right')
             
-            # Rotation des labels pour meilleure lisibilité
-            plt.xticks(rotation=45, ha='right')
-            
-            # Ajouter les valeurs sur les barres
+            # Ajouter les valeurs sur les barres avec le win rate et le tuple (gagné, perdu)
             for i, bar in enumerate(bars):
                 height = bar.get_height()
-                plt.text(bar.get_x() + bar.get_width()/2., height,
-                        f'{win_rates[i]:.1f}%\n({total_hands[i]})',
-                        ha='center', va='bottom')
-            
-            # Ajuster la mise en page
-            plt.tight_layout()
-            
-            # Sauvegarder le graphique
-            plt.savefig(f'viz_pdf/agent_{agent_name.split()[-1]}_win_rates.jpg')
-            plt.close()
+                ylim = ax.get_ylim()[1]
+                if height > 0.95 * ylim:
+                    va = 'top'
+                    text_color = 'white'
+                    offset = -2
+                else:
+                    va = 'bottom'
+                    text_color = 'black'
+                    offset = 2
+                ax.text(
+                    bar.get_x() + bar.get_width()/2., height + offset,
+                    f'{win_rates[i]:.1f}%\n({win_counts[i][0]}, {win_counts[i][1]})',
+                    ha='center', va=va, color=text_color, fontweight='bold', fontsize=10,
+                    bbox=dict(facecolor='white', alpha=0.6, edgecolor='none')
+                )
+            ax.grid(True)
+        
+        plt.tight_layout()
+        fig.savefig('viz_pdf/hand_rank_win_rates_all_agents.jpg')
+        plt.close(fig)
 
     def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None, final_hand_ranks=None):
         """Update all plots with new data"""

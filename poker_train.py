@@ -14,7 +14,7 @@ from visualization import TrainingVisualizer, plot_winning_stats, update_rewards
 from typing import List, Tuple
 
 # Hyperparamètres
-EPISODES = 15_000
+EPISODES = 1_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
