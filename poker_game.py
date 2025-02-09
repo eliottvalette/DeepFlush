@@ -803,14 +803,20 @@ class PokerGame:
         
         elif action == PlayerAction.RAISE:
             print(f"{player.name} raise.")
-            min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
-            if bet_amount is None:
+            # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
+            if self.current_maximum_bet == 0:
+                min_raise = self.big_blind
+            else:
+                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
+
+            # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
+            if bet_amount is None or bet_amount < min_raise:
                 bet_amount = min_raise
-                
-            # Vérifier si le joueur a assez de jetons pour le raise minimum
-            if player.stack < min_raise - player.current_player_bet:
+
+            # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
+            if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(f"{player.name} n'a pas assez de jetons pour le raise minimum")
-                            
+
             # Traitement du raise
             actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
             player.stack -= actual_bet
@@ -825,20 +831,23 @@ class PokerGame:
 
         elif action == PlayerAction.ALL_IN:
             print(f"{player.name} all-in.")
-            if bet_amount is None or bet_amount != player.stack:
+            # Si aucune valeur n'est passée pour bet_amount, on assigne automatiquement tout le stack
+            if bet_amount is None:
+                bet_amount = player.stack
+            elif bet_amount != player.stack:
                 raise ValueError(f"{player.name} n'a pas le droit de all-in, mise minimale = {player.stack}, mise maximale = {player.stack}")
             
             # Mise à jour de la mise maximale seulement si l'all-in est supérieur
-            if bet_amount + player.current_player_bet > self.current_maximum_bet:
-                self.current_maximum_bet = bet_amount + player.current_player_bet
-                self.number_raise_this_game_phase += 1
+            if bet_amount + player.current_player_bet > self.current_maximum_bet:  # Si le all-in est supérieur à la mise maximale, on met à jour la mise maximale
+                self.current_maximum_bet = bet_amount + player.current_player_bet  # On met à jour la mise maximale
+                self.number_raise_this_game_phase += 1  # On incrémente le nombre de raise dans la phase
                 self.last_raiser = player.seat_position  # Enregistrer le all-in comme raise
             
-            player.stack -= bet_amount
-            player.current_player_bet += bet_amount
-            self.phase_pot += bet_amount
-            player.total_bet += bet_amount
-            player.is_all_in = True
+            player.stack -= bet_amount  # On retire le all-in du stack du joueur
+            player.current_player_bet += bet_amount  # On ajoute le all-in à la mise du joueur
+            self.phase_pot += bet_amount  # On ajoute le all-in au pot de la phase
+            player.total_bet += bet_amount  # On ajoute le all-in à la mise totale du joueur
+            player.is_all_in = True  # On indique que le joueur est all-in
             print(f"{player.name} a all-in {bet_amount}BB")
 
         player.has_acted = True
