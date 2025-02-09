@@ -450,7 +450,10 @@ class PokerGame:
         """
 
         if self.current_phase == GamePhase.PREFLOP:
-            raise ValueError("Cannot deal community cards during pre-flop")
+            raise ValueError(
+                "Erreur d'état : Distribution des community cards pendant le pré-flop. "
+                "Les cartes communes ne doivent être distribuées qu'après le pré-flop."
+            )
         
         if self.current_phase == GamePhase.FLOP:
             for _ in range(3):
@@ -473,7 +476,10 @@ class PokerGame:
             bb_player = next((p for p in self.players if p.is_active and p.role_position == 1), None)
         
         if sb_player is None or bb_player is None:
-            raise ValueError("Impossible de déterminer la position de la Small Blind ou Big Blind")
+            raise ValueError(
+                f"Impossible de déterminer la position de la Small Blind ou Big Blind : "
+                f"sb_player={sb_player}, bb_player={bb_player}. Vérifiez l'assignation des rôles des joueurs."
+            )
         
         sb_seat_position = sb_player.seat_position
         bb_seat_position = bb_player.seat_position
@@ -536,8 +542,13 @@ class PokerGame:
             
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
             if self.current_player_seat == initial_seat:
-                raise RuntimeError("No valid next player found - all players are inactive, folded, or all-in")
-        
+                # Affiche l'état de chaque joueur pour faciliter le débogage
+                details = [(p.name, p.is_active, p.has_folded, p.is_all_in) for p in self.players]
+                raise RuntimeError(
+                    "Aucun joueur valide trouvé. Cela signifie que tous les joueurs sont inactifs, foldés ou all-in. "
+                    f"Détails des joueurs : {details}"
+                )
+
     def check_phase_completion(self):
         """
         Vérifie si le tour d'enchères actuel est terminé et gère la progression du jeu.
@@ -770,7 +781,11 @@ class PokerGame:
         """
         #----- Vérification que c'est bien au tour du joueur de jouer -----
         if player.seat_position != self.current_player_seat:
-            raise ValueError(f"It's not {player.name}'s turn to act")
+            current_turn_player = self.players[self.current_player_seat].name
+            raise ValueError(
+                f"Erreur d'action : Ce n'est pas le tour de {player.name}. "
+                f"C'est au tour de {current_turn_player} d'agir."
+            )
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
             raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
@@ -828,7 +843,10 @@ class PokerGame:
 
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
             if player.stack < (bet_amount - player.current_player_bet):
-                raise ValueError(f"{player.name} n'a pas assez de jetons pour le raise minimum")
+                raise ValueError(
+                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
+                )
 
             # Traitement du raise
             actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
@@ -848,7 +866,9 @@ class PokerGame:
             if bet_amount is None:
                 bet_amount = player.stack
             elif bet_amount != player.stack:
-                raise ValueError(f"{player.name} n'a pas le droit de all-in, mise minimale = {player.stack}, mise maximale = {player.stack}")
+                raise ValueError(
+                    f"Erreur ALL-IN : {player.name} doit miser exactement tout son stack ({player.stack}BB)."
+                )
             
             # Mise à jour de la mise maximale seulement si l'all-in est supérieur
             if bet_amount + player.current_player_bet > self.current_maximum_bet:  # Si le all-in est supérieur à la mise maximale, on met à jour la mise maximale
@@ -883,6 +903,11 @@ class PokerGame:
         return action
 
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
+        if not player.cards:
+            raise ValueError(
+                f"Erreur d'évaluation : le joueur {player.name} n'a pas de cartes pour évaluer sa main. "
+                "Assurez-vous que les cartes ont été distribuées correctement."
+            )
         """
         Évalue la meilleure main possible d'un joueur.
         """
