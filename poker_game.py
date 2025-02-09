@@ -619,6 +619,19 @@ class PokerGame:
                             p.has_acted = False
                 return
 
+        # Nouvelle vérification : si un seul joueur non all-in reste, déclencher le showdown
+        # Si un seul joueur non all-in reste, déclencher le showdown car il ne va pas jouer seul.
+        # Cette situation arrive lorsque qu'un joueur raise un montant supérieur au stack de ses adversaires. Dès lors, les autres joueurs peuvent soit call, soit all-in. 
+        # Or s'ils all-in, le joueur qui a raise est le seul actif, non all-in, non foldé restant. 
+        # Dès lors, il n'y a pas de sens à continuer la partie, donc on va au showdown.
+        non_all_in_players = [p for p in in_game_players if not p.is_all_in]
+        if len(non_all_in_players) == 1 and len(in_game_players) > 1:
+            print("Moving to showdown (only one non all-in player remains)")
+            while len(self.community_cards) < 5:
+                self.community_cards.append(self.deck.pop())
+            self.handle_showdown()
+            return
+
     def advance_phase(self):
         """
         Passe à la phase suivante du jeu (préflop -> flop -> turn -> river).
@@ -1980,11 +1993,7 @@ class PokerGame:
                         bet_amount = self.pygame_slider_bet_amount
                     elif action == PlayerAction.ALL_IN:
                         bet_amount = current_player.stack
-                    # RAISE : utiliser la formule correcte pour la mise minimale
-                    if action == PlayerAction.RAISE:
-                        # Utiliser la même logique que dans process_action :
-                        min_bet = (self.current_maximum_bet - current_player.current_player_bet) * 2
-                        bet_amount = min_bet
+                    # Suppression de l'ancienne logique qui remplaçait bet_amount
                     self.process_action(current_player, action, bet_amount)
             
             # Check bet slider

@@ -53,7 +53,7 @@ def hardcoded_poker_bot(state, valid_actions=None):
                 - phase (int): 0=preflop, 1=flop, 2=turn, 3=river
                 - position (int): 0=précoce, 1=milieu, 2=tardive
                 - stack_ratio (float): Ratio stack/pot (ex: 2.5 = stack 2.5x plus grand que le pot)
-                - num_active_opponents (int): Nombre d'adversaires encore en jeu
+                - num_opponents_in_the_hand (int): Nombre d'adversaires encore en jeu
         valid_actions (set): Set des actions valides pour ce joueur
     
     Returns:
@@ -102,13 +102,8 @@ def hardcoded_poker_bot(state, valid_actions=None):
         
     # Extraction des cartes communes en fonction de la phase
     if len(state) >= (34 + 5*17 + 4):
-        print("\n=== État du jeu ===")
-        # État d'activité des joueurs
-        player_activity = state[138:144]
-        print(f"État d'activité des joueurs: {player_activity}")
-        num_active_opponents = int(np.count_nonzero(np.array(state[138:144]) == 1) - 1)
-        if num_active_opponents < 0:
-            num_active_opponents = 0
+        print("\n=== ANALYSE NOUVEAU JOUEUR ===")
+        print("\n=== Récupération des informations contextuelles ===")
         
         # Extraction des paramètres contextuels depuis le vecteur d'état.
         # On suppose que l'état contient les informations suivantes :
@@ -116,7 +111,10 @@ def hardcoded_poker_bot(state, valid_actions=None):
         # - Indices 120 à 124 : vecteur one-hot pour la phase [Préflop, Flop, Turn, River, Showdown].
         #   On détermine la phase en utilisant argmax.
         # - Index 125 : Mise maximale actuelle.
-        # - Indices 138 à 143 : Activité des joueurs (on en déduit le nombre d'adversaires actifs).
+        # - Indices 138 à 143 : Activité des joueurs (on en déduit le nombre d'adversaires actifs
+
+        allowed_actions = state[156:161]
+        print(f"Actions disponibles: {allowed_actions}")
         #
         # Décodage de la phase (0: Préflop, 1: Flop, 2: Turn, 3: River, 4: Showdown)
         phase_vector = state[120:125]
@@ -126,34 +124,22 @@ def hardcoded_poker_bot(state, valid_actions=None):
         current_maximum_bet = state[125]
 
         # Extraction du nombre d'adversaires actifs (on suppose qu'au moins 2 joueurs sont en jeu)
-        num_active_opponents = int(np.count_nonzero(np.array(state[138:144]) == 1) - 1)
-        if num_active_opponents < 0:
-            num_active_opponents = 0
+        num_opponents_in_the_hand = sum(1 for player in np.array(state[144:150]) if player > 0) - 1
+        print(f"Nombre d'adversaires actifs: {num_opponents_in_the_hand}")  # On regarde si les joueurs sont encore en jeu
+        if num_opponents_in_the_hand < 0:
+            num_opponents_in_the_hand = 0
         
         # Paramètres contextuels
         position = int(state[-3])
         stack_ratio = state[-2]
         
         print(f"Indices d'état:")
-        print(f"- Cartes personnelles (0-33): {state[0:34]}")
-        print(f"- Cartes communes (34-118): {state[34:119]}")
-        print(f"- Rang de la main (119): {state[119]}")
         print(f"- Phase de jeu (120-124): {state[120:125]}")
-        print(f"- Mise maximale (125): {state[125]}")
-        print(f"- Stacks (126-131): {state[126:132]}")
-        print(f"- Mises actuelles (132-137): {state[132:138]}")
-        print(f"- Activité des joueurs (138-143): {state[138:144]}")
-        print(f"- Status fold (144-149): {state[144:150]}")
         print(f"- Positions relatives (150-155): {state[150:156]}")
         print(f"- Actions disponibles (156-160): {state[156:161]}")
-        print(f"- Historique des actions (161-196): {state[161:197]}")
-        print(f"- Probabilité de victoire (197): {state[197]}")
-        print(f"- Cotes du pot (198): {state[198]}")
-        print(f"- Équité (199): {state[199]}")
-        print(f"- Facteur d'agressivité (200): {state[200]}")
     else:
         print("\nÉtat incomplet - utilisation des valeurs par défaut")
-        num_active_opponents = 5
+        num_opponents_in_the_hand = 5
         phase = 1
         position = 1
         stack_ratio = 1.0
@@ -198,30 +184,68 @@ def hardcoded_poker_bot(state, valid_actions=None):
         print(f"\nForce de la main (Monte Carlo): {strength:.2f}")
 
     # Définir des seuils de décision en fonction de la phase et du nombre d'adversaires
-    all_in_threshold, raise_threshold, call_threshold = get_thresholds(phase, num_active_opponents)
+    all_in_threshold, raise_threshold, call_threshold, check_threshold = get_thresholds(phase, num_opponents_in_the_hand)
     
     print("\nSeuils de décision:")
     print(f"- All-in : {all_in_threshold:.2f}")
     print(f"- Raise  : {raise_threshold:.2f}")
     print(f"- Call   : {call_threshold:.2f}")
+    print(f"- Check  : {check_threshold:.2f}")
 
-    # Détermination de l'action en fonction de la force (strength)
-    if strength >= all_in_threshold:
-        action_index = 4  # ALL-IN
-        decision = "ALL-IN"
-    elif strength >= raise_threshold:
-        action_index = 3  # RAISE
-        decision = "RAISE"
-    elif strength >= call_threshold:
-        action_index = 2  # CALL
-        decision = "CALL"
-    else:
-        action_index = 0  # FOLD
-        decision = "FOLD"
+    # Début des logs
+    print("\n=== ANALYSE DE LA SITUATION ===")
     
-    print(f"Décision initiale: {decision}")
+    # 1. Information sur les cartes
+    print("\n>> Cartes en jeu:")
+    if phase == 0:
+        print(f"Main: {format_cards([(card1_value, card1_suit), (card2_value, card2_suit)])}")
+    else:
+        print(f"Main: {format_cards([(card1_value, card1_suit), (card2_value, card2_suit)])}")
+        print(f"Board: {format_cards([(valeurs[i], couleurs[i]) for i in range(2, len(valeurs))])}")
 
-    # Vérification de la validité de l'action
+    # 2. État du jeu
+    print("\n>> État du jeu:")
+    print(f"Phase: {'Preflop' if phase == 0 else 'Flop' if phase == 1 else 'Turn' if phase == 2 else 'River'}")
+    print(f"Position: {'Précoce' if position == 0 else 'Milieu' if position == 1 else 'Tardive'}")
+    print(f"Nombre d'adversaires: {num_opponents_in_the_hand}")
+    # 3. Évaluation de la force
+    print("\n>> Évaluation de la force:")
+    if phase == 0:
+        print(f"Force de la main (préflop): {strength:.3f}")
+    else:
+        print(f"Force de la main (Monte Carlo): {strength:.3f}")
+
+    # 4. Seuils de décision
+    print("\n>> Seuils de décision:")
+    print(f"ALL-IN : {all_in_threshold:.3f}")
+    print(f"RAISE  : {raise_threshold:.3f}")
+    print(f"CALL   : {call_threshold:.3f}")
+    print(f"CHECK  : {check_threshold:.3f}")
+
+    # 5. Prise de décision
+    print("\n>> Processus de décision:")
+    if strength >= all_in_threshold:
+        action_index = 4
+        decision = "ALL-IN"
+        print(f"Force ({strength:.3f}) ≥ seuil ALL-IN ({all_in_threshold:.3f})")
+    elif strength >= raise_threshold and allowed_actions[3] == 1:
+        action_index = 3
+        decision = "RAISE"
+        print(f"Force ({strength:.3f}) ≥ seuil RAISE ({raise_threshold:.3f})")
+    elif strength >= call_threshold and allowed_actions[2] == 1:
+        action_index = 2
+        decision = "CALL"
+        print(f"Force ({strength:.3f}) ≥ seuil CALL ({call_threshold:.3f})")
+    elif strength >= check_threshold and allowed_actions[1] == 1:
+        action_index = 1
+        decision = "CHECK"
+        print(f"Force ({strength:.3f}) ≥ seuil CHECK ({check_threshold:.3f})")
+    else:
+        action_index = 0
+        decision = "FOLD"
+        print(f"Force ({strength:.3f}) < tous les seuils - FOLD")
+
+    # 6. Vérification de la validité
     if valid_actions is not None:
         chosen_action = list(PlayerAction)[action_index]
         if chosen_action not in valid_actions:
@@ -235,10 +259,15 @@ def hardcoded_poker_bot(state, valid_actions=None):
                         action_index = list(PlayerAction).index(a)
                         decision = a.name
                         break
-            print(f"Action {old_decision} non valide, choix alternatif: {decision}")
+            print(f"\n>> Correction de l'action:")
+            print(f"Action {old_decision} non valide")
+            print(f"Choix alternatif: {decision}")
             print(f"Actions valides: {[a.name for a in valid_actions]}")
 
-    # Construction du vecteur one-hot correspondant à l'action choisie
+    print(f"\n>> Décision finale: {decision}")
+    print("="*40)
+
+    # Construction du vecteur one-hot
     action_vector = np.zeros(5)
     action_vector[action_index] = 1
     return action_vector
@@ -623,9 +652,9 @@ def get_allowed_adversary_hands(range_matrix, deck):
 # Fonction pour obtenir les seuils de décision en fonction de la phase et du nombre d'adversaires
 # ----------------------------------------------------------------
 
-def get_thresholds(phase, num_active_opponents):
+def get_thresholds(phase, num_opponents_in_the_hand):
     """
-    Renvoie les seuils (all_in, raise, call) pour le bot de poker en fonction de la phase du jeu et du nombre d'adversaires.
+    Renvoie les seuils (all_in, raise, call, check) pour le bot de poker en fonction de la phase du jeu et du nombre d'adversaires.
     
     Pour le préflop (phase == 0), on se base sur une évaluation heuristique de la main.
       - L'idée est d'exiger une main plus forte face à un plus grand nombre d'adversaires.
@@ -641,37 +670,38 @@ def get_thresholds(phase, num_active_opponents):
 
     Dans tous les cas, les valeurs retournées sont bornées entre 0 et 1.
     """
-    effective_opponents = min(num_active_opponents, 5)
+    effective_opponents = min(num_opponents_in_the_hand, 5)
     
     if phase == 0:
         # Préflop : utilisation de seuils basés sur l'évaluation heuristique de la main
-        # Plus il y a d'adversaires, plus il faut avoir une main premium pour s'engager.
-        delta = (effective_opponents - 1) * 0.03  # augmentation de 0.03 par adversaire supplémentaire
+        delta = (effective_opponents - 1) * 0.03
         base_all_in = 0.80
         base_raise  = 0.70
         base_call   = 0.60
+        base_check  = 0.40  # Nouveau seuil pour CHECK
         final_all_in = min(base_all_in + delta, 1.0)
         final_raise  = min(base_raise + delta, 1.0)
         final_call   = min(base_call + delta, 1.0)
+        final_check  = min(base_check + delta, 1.0)
     else:
         # Postflop : utilisation de l'équité obtenue par Monte Carlo
-        # Avec de nombreux adversaires, l'équité tend à être très faible, 
-        # il faut donc fixer des seuils faibles pour permettre d'agir.
-        delta = (effective_opponents - 1) * 0.01  # effet ajusté plus faible par adversaire
+        delta = (effective_opponents - 1) * 0.01
         if phase == 1:
             phase_offset = 0.0
         elif phase in [2, 3]:
-            phase_offset = -0.03  # en turn et river, on baisse légèrement les seuils
+            phase_offset = -0.03
         else:
             phase_offset = 0.0
         base_all_in = 0.45
         base_raise  = 0.35
         base_call   = 0.25
+        base_check  = 0.15  # Nouveau seuil pour CHECK
         final_all_in = max(0.0, min(base_all_in - delta + phase_offset, 1.0))
         final_raise  = max(0.0, min(base_raise - delta + phase_offset, 1.0))
         final_call   = max(0.0, min(base_call - delta + phase_offset, 1.0))
+        final_check  = max(0.0, min(base_check - delta + phase_offset, 1.0))
     
-    return final_all_in, final_raise, final_call
+    return final_all_in, final_raise, final_call, final_check
 
 def _evaluate_preflop_strength(cards) -> float:
     """
@@ -690,7 +720,7 @@ def _evaluate_preflop_strength(cards) -> float:
     card1, card2 = cards
     # Paires
     if card1.value == card2.value:
-        return 0.5 + (card1.value / 28)  # Plus la paire est haute, plus le score est fort.
+        return 0.6 + (card1.value / 28)  # Plus la paire est haute, plus le score est fort.
     
     # Cartes assorties
     suited = (card1.suit == card2.suit)
