@@ -730,9 +730,14 @@ class PokerGame:
             self.action_buttons[PlayerAction.RAISE].enabled = False
 
         # ---- RAISE ----
-        # Désactiver raise si pas assez de jetons pour la mise minimale
-        min_raise = (self.current_maximum_bet - current_player.current_player_bet) * 2 # La mise minimale est le double de la mise maximale ou du big blind
-        if current_player.stack + current_player.current_player_bet < min_raise: # Si le joueur n'a pas assez de jetons pour la mise minimale, il ne peut pas raise
+        # Calculer le raise minimal
+        if self.current_maximum_bet == 0:
+            min_raise = self.big_blind
+        else:
+            min_raise = (self.current_maximum_bet - current_player.current_player_bet) * 2
+
+        # Désactiver l'action raise si le joueur n'a pas suffisamment de jetons pour couvrir le raise minimum
+        if current_player.stack < min_raise:
             self.action_buttons[PlayerAction.RAISE].enabled = False
 
         # Désactiver raise si déjà 4 relances dans le tour
