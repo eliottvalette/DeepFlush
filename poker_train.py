@@ -14,7 +14,7 @@ from visualization import TrainingVisualizer, plot_winning_stats, update_rewards
 from typing import List, Tuple
 
 # Hyperparamètres
-EPISODES = 1_000
+EPISODES = 500
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
@@ -206,11 +206,21 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     # Mettre à jour les statistiques de hand rank à chaque épisode
     visualizer.update_hand_rank_data(final_hand_ranks)
 
-    # Mise à jour des autres graphiques selon l'intervalle habituel
+    # Supposons que, dans PokerGame.handle_showdown, vous avez enregistré les stacks initiales dans env.initial_stacks
+    # et que les stacks finaux sont disponibles dans chaque player.stack.
+    # Calculez la variation de stack pour chaque joueur (en BB).
+    hand_variations = []
+    for player in env.players:
+        initial = env.initial_stacks.get(player.name, 0)
+        final = player.stack
+        hand_variations.append(final - initial)
+
+    # Puis, lorsque vous appelez update_plots, transmettez hand_variations
     if episode % PLOT_UPDATE_INTERVAL == 0:
-        visualizer.update_plots(episode, final_rewards, winning_list, 
-                                actions_taken, hand_strengths, metrics_list,
-                                epsilon=epsilon)
+        visualizer.update_plots(
+            episode, final_rewards, winning_list, actions_taken, hand_strengths,
+            metrics_list, epsilon=epsilon, hand_variations=hand_variations
+        )
 
     return final_rewards, winning_list, actions_taken, hand_strengths, metrics_list
 

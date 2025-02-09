@@ -324,6 +324,9 @@ class PokerGame:
             player.range = None
             player.is_active = player.stack > 0
 
+        # --- Nouvelle ligne ajoutée pour enregistrer les stacks initiales des joueurs
+        self.initial_stacks = {player.name: player.stack for player in self.players}
+        
         # Vérifier qu'il y a au moins 2 joueurs actifs sinon on réinitialise la partie
         active_players = [player for player in self.players if player.is_active]
         if len(active_players) < 2:
@@ -1103,8 +1106,16 @@ class PokerGame:
         print("\nStacks finaux:")
         for player in self.players:
             print(f"- {player.name}: {player.stack:.2f}BB")
-            player.current_player_bet = 0
-
+        
+        print("\nVariations :")
+        for player in self.players:
+            initial = self.initial_stacks.get(player.name, 0)
+            variation = player.stack - initial
+            signe = "+" if variation >= 0 else ""
+            print(f"- {player.name}: {signe}{variation:.2f}BB")
+        
+        print("=== FIN SHOWDOWN ===")
+        
         # Reset pots
         self.phase_pot = 0
         self.side_pots = self._create_side_pots() 

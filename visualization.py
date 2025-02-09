@@ -101,6 +101,20 @@ class TrainingVisualizer:
         self.epsilon_line, = self.ax5.plot([], [], 'k-', label='Epsilon')
         self.ax5.legend()
 
+        # -----------------------------------------------------------------
+        # Ajout d'un suivi des variations de stack (en milli big blind par main)
+        # Utiliser ax6 (précédemment masqué) pour le graphique des variations de stack
+        self.stack_variations = {f"Agent {i+1}": [] for i in range(6)}
+        self.ax6.set_visible(True)
+        self.ax6.set_title('Variation de Stack (mBB/h)')
+        self.ax6.set_xlabel('Mains (x100)')
+        self.ax6.set_ylabel('Variation (mBB/h)')
+        self.stack_lines = {}
+        for i, agent_name in enumerate(self.stack_variations.keys()):
+            self.stack_lines[agent_name], = self.ax6.plot([], [], label=agent_name, color=self.colors[i])
+        self.ax6.legend()
+        # -----------------------------------------------------------------
+
         # Ajouter un dictionnaire pour suivre les win rates par hand rank
         self.hand_rank_stats = {
             f"Agent {i+1}": {rank: {'wins': 0, 'total': 0} for rank in HandRank} 
@@ -321,7 +335,7 @@ class TrainingVisualizer:
         fig.savefig('viz_pdf/hand_rank_win_rates_all_agents.jpg')
         plt.close(fig)
 
-    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None):
+    def update_plots(self, episode, rewards, wins, actions_dict, hand_strengths, metrics_list=None, epsilon=None, hand_variations=None):
         """Update all plots with new data"""
         self.episodes.append(episode)
         
@@ -370,16 +384,14 @@ class TrainingVisualizer:
                 ]
                 self.win_lines[agent_name].set_data(self.episodes, win_rates)
         
-        # Update plots
+        # Update additional plots
         self.plot_action_distribution()
         self.plot_hand_strength_analysis()
         
-        # Adjust axis limits
+        # Adjust axis limits for rewards and wins
         for ax in [self.ax1, self.ax2]:
             ax.relim()
             ax.autoscale_view()
-        
-        # Adjust y-axis limits for win rate
         self.ax2.set_ylim([-5, 105])
         
         # Update and plot metrics if provided
@@ -393,6 +405,24 @@ class TrainingVisualizer:
             self.ax5.relim()
             self.ax5.autoscale_view()
             self.ax5.set_ylim([-0.05, 1.05])  # Set y-axis limits for epsilon
+
+        # -----------------------------------------------------------------
+        # Mise à jour du graphique des variations de stack (mBB/h)
+        # hand_variations : liste (pour chaque agent) de la variation de stack en BB pour la main actuelle
+        if hand_variations is not None:
+            block_size = 100  # Lissage sur 100 mains
+            for i, agent_name in enumerate(self.stack_variations.keys()):
+                # Convertir la variation en milli big blinds et stocker
+                self.stack_variations[agent_name].append(hand_variations[i] * 1000)
+                data = self.stack_variations[agent_name]
+                num_complete_blocks = len(data) // block_size
+                if num_complete_blocks > 0:
+                    x_vals = list(range(1, num_complete_blocks + 1))
+                    block_avgs = [np.mean(data[j*block_size:(j+1)*block_size]) for j in range(num_complete_blocks)]
+                    self.stack_lines[agent_name].set_data(x_vals, block_avgs)
+            self.ax6.relim()
+            self.ax6.autoscale_view()
+        # -----------------------------------------------------------------
         
         # Sauvegarder les graphiques à intervalles réguliers
         self.save_counter += 1
