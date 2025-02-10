@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from poker_model import ActorCriticModel
-from poker_model_new import PokerTransformerModel
+from poker_model import PokerTransformerModel
 from poker_game import PlayerAction
 from collections import deque
 import random

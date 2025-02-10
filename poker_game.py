@@ -1270,33 +1270,33 @@ class PokerGame:
         # 1. Informations sur les cartes (encodage one-hot)
         # Cartes du joueur
         for card in current_player.cards:
-            value_range = [0.0] * 13
+            value_range = [-0.5] * 13
             value_range[card.value - 2] = 1
             state.extend(value_range)  # Extension pour la valeur
-            suit_range = [0.0] * 4
+            suit_range = [-0.5] * 4
             suit_range[suit_map[card.suit]] = 1
             state.extend(suit_range)  # Extension pour la couleur
         
         # Ajout de remplissage pour les cartes manquantes du joueur
         remaining_player_cards = 2 - len(current_player.cards)
         for _ in range(remaining_player_cards):
-            state.extend([0.0] * 13)  # Remplissage des valeurs
-            state.extend([0.0] * 4)   # Remplissage des couleurs
+            state.extend([-0.5] * 13)  # Remplissage des valeurs
+            state.extend([-0.5] * 4)   # Remplissage des couleurs
         
         # Cartes communes
         for i, card in enumerate(self.community_cards):
-            value_range = [0.0] * 13
+            value_range = [-0.5] * 13
             value_range[card.value - 2] = 1
             state.extend(value_range)  # Extension
-            suit_range = [0.0] * 4
+            suit_range = [-0.5] * 4
             suit_range[suit_map[card.suit]] = 1
             state.extend(suit_range)  # Extension
         
         # Ajout de remplissage pour les cartes communes manquantes
         remaining_community_cards = 5 - len(self.community_cards)
         for _ in range(remaining_community_cards):
-            state.extend([0.0] * 13)  # Remplissage des valeurs
-            state.extend([0.0] * 4)   # Remplissage des couleurs
+            state.extend([-0.5] * 13)  # Remplissage des valeurs
+            state.extend([-0.5] * 4)   # Remplissage des couleurs
         
         # 2. Rang de la main actuelle (si assez de cartes sont visibles)
         if len(current_player.cards) + len(self.community_cards) >= 5:
@@ -1315,7 +1315,7 @@ class PokerGame:
             GamePhase.SHOWDOWN: 4
         }
 
-        phase_range = [0.0] * 5
+        phase_range = [-0.5] * 5
         phase_range[phase_values[self.current_phase]] = 1
         state.extend(phase_range)
 
@@ -1340,7 +1340,7 @@ class PokerGame:
             state.append(1 if ((not player.has_folded) and player.is_active) else -1) # (taille = 6)
 
         # 10. Informations sur la position (encodage one-hot des positions relatives)
-        relative_positions = [0.0] * self.num_players
+        relative_positions = [-0.5] * self.num_players
         relative_pos = (self.current_player_seat - self.button_seat_position) % self.num_players
         relative_positions[relative_pos] = 1
         state.extend(relative_positions) # (taille = 6)
@@ -1356,12 +1356,12 @@ class PokerGame:
 
         # Update action encoding for previous actions
         action_encoding = {
-            None: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Default encoding for no action
-            "fold": [1, 0.0, 0.0, 0.0, 0.0, 0.0],
-            "check": [0.0, 1, 0.0, 0.0, 0.0, 0.0],
-            "call": [0.0, 0.0, 1, 0.0, 0.0, 0.0],
-            "raise": [0.0, 0.0, 0.0, 1, 0.0, 0.0],
-            "all-in": [0.0, 0.0, 0.0, 0.0, 1, 0.0]
+            None: [-0.5, -0.5, -0.5, -0.5, -0.5, -0.5],  # Default encoding for no action
+            "fold": [1, -0.5, -0.5, -0.5, -0.5, -0.5],
+            "check": [-0.5, 1, -0.5, -0.5, -0.5, -0.5],
+            "call": [-0.5, -0.5, 1, -0.5, -0.5, -0.5],
+            "raise": [-0.5, -0.5, -0.5, 1, -0.5, -0.5],
+            "all-in": [-0.5, -0.5, -0.5, -0.5, 1, -0.5]
         }
 
         # Obtenir la dernière action de chaque joueur, ordonnée relativement au joueur actuel

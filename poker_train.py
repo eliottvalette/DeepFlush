@@ -6,6 +6,7 @@ import random as rd
 import pygame
 import torch
 import time
+from visualization import DataCollector
 from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction, HandRank
 from typing import List, Tuple
@@ -22,87 +23,8 @@ STATE_SIZE = 201
 RENDERING = False
 FPS = 0.5
 
-# Ajout de la classe DataCollector
-class DataCollector:
-    def __init__(self, output_dir="viz_json"):
-        self.output_dir = output_dir
-        self.current_episode_states = []
-        
-        # Créer le répertoire s'il n'existe pas
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-    
-    def add_state(self, state_info):
-        """
-        Ajoute un état à l'épisode courant avec le vecteur d'état subdivisé.
-        """
-        state_vector = state_info["state_vector"]
-        
-        # Subdiviser le vecteur d'état (basé sur la structure dans poker_game.py)
-        subdivided_state = {
-            "player_cards": {
-                "card1": {
-                    "values": state_vector[0:13],
-                    "suits": state_vector[13:17]
-                },
-                "card2": {
-                    "values": state_vector[17:30],
-                    "suits": state_vector[30:34]
-                }
-            },
-            "community_cards": [
-                {
-                    "values": state_vector[34+i*17:47+i*17],
-                    "suits": state_vector[47+i*17:51+i*17]
-                } for i in range(5)
-            ],
-            "hand_rank": state_vector[119],
-            "game_phase": state_vector[120:125],
-            "current_max_bet": state_vector[125],
-            "player_stacks": state_vector[126:132],
-            "current_bets": state_vector[132:138],
-            "player_activity": state_vector[138:144],
-            "fold_status": state_vector[144:150],
-            "relative_positions": state_vector[150:156],
-            "available_actions": state_vector[156:161],
-            "previous_actions": [
-                state_vector[161+i*6:167+i*6] for i in range(6)
-            ],
-            "win_probability": state_vector[197],
-            "pot_odds": state_vector[198],
-            "equity": state_vector[199],
-            "aggression_factor": state_vector[200]
-        }
-
-        # Mettre à jour state_info avec le vecteur d'état subdivisé
-        state_info["state_vector"] = subdivided_state
-        self.current_episode_states.append(state_info)
-    
-    def save_episode(self, episode_num):
-        """
-        Sauvegarde les états de l'épisode courant dans un fichier JSON.
-        
-        Args:
-            episode_num (int): Numéro de l'épisode
-        """
-        filename = os.path.join(self.output_dir, "episodes_states.json")
-        
-        # Charger les données existantes ou créer un nouveau dictionnaire
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                all_episodes = json.load(f)
-        else:
-            all_episodes = {}
-        
-        # Ajouter le nouvel épisode
-        all_episodes[str(episode_num)] = self.current_episode_states
-        
-        # Sauvegarder toutes les données
-        with open(filename, 'w') as f:
-            json.dump(all_episodes, f, indent=2)
-        
-        # Réinitialiser pour le prochain épisode
-        self.current_episode_states = []
+SAVE_INTERVAL = 100
+PLOT_INTERVAL = 200
 
 def set_seed(seed=42):
     """
@@ -294,7 +216,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     # Sauvegarder les données de l'épisode
     data_collector.save_episode(episode)
 
-    return final_rewards, winning_list, actions_taken, hand_strengths, metrics_list
+    return final_rewards, metrics_list
 
 
 def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1000):
@@ -317,7 +239,7 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
     env = PokerGame(list_names)
     
     # Initialiser le collecteur de données et supprimer les JSON existants dans viz_json
-    data_collector = DataCollector()
+    data_collector = DataCollector(save_interval=SAVE_INTERVAL, plot_interval=PLOT_INTERVAL)
     for json_file in glob.glob(os.path.join(data_collector.output_dir, "*.json")):
         os.remove(json_file)
 
@@ -332,7 +254,7 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
             epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.01, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
-            reward_list, winning_list, actions_taken, hand_strengths, metrics_list = run_episode(
+            reward_list, metrics_list = run_episode(
                 env, agent_list, epsilon, rendering, episode, render_every, data_collector
             )
             
