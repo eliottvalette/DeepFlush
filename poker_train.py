@@ -10,9 +10,10 @@ from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction, HandRank
 from typing import List, Tuple
 import json
+import glob
 
 # Hyperparamètres
-EPISODES = 500
+EPISODES = 100
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
@@ -309,13 +310,16 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
     # Initialiser les historiques
     rewards_history = {}
     winning_history = {}
+    metrics_history = {}  # Historique pour les métriques d'entraînement
     
     # Initialiser l'environnement avec la liste des noms des joueurs
     list_names = [agent.name for agent in agent_list]
     env = PokerGame(list_names)
     
-    # Initialiser le collecteur de données
+    # Initialiser le collecteur de données et supprimer les JSON existants dans viz_json
     data_collector = DataCollector()
+    for json_file in glob.glob(os.path.join(data_collector.output_dir, "*.json")):
+        os.remove(json_file)
 
     # Créer l'environnement de jeu
     for i, agent in enumerate(agent_list):
@@ -332,11 +336,22 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
                 env, agent_list, epsilon, rendering, episode, render_every, data_collector
             )
             
+            # Enregistrer les métriques pour cet épisode en associant chaque métrique à une clé "agent"
+            metrics_with_agent = []
+            for i, metric in enumerate(metrics_list):
+                metrics_with_agent.append({"agent": agent_list[i].name, **metric})
+            metrics_history[str(episode)] = metrics_with_agent
+            
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
             print(f"Randomness: {epsilon*100:.3f}%")
             for i, reward in enumerate(reward_list):
                 print(f"Agent {i+1} reward: {reward:.2f}")
+            
+            # Afficher les métriques de chaque agent
+            print("Métriques:")
+            for i, metrics in enumerate(metrics_with_agent):
+                print(f"  Agent {i+1}: {metrics}")
 
         # Sauvegarder les modèles entraînés
         if episode == episodes - 1:
@@ -355,4 +370,8 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
     finally:
         if rendering:
             pygame.quit()
-        print("\nEntraînement terminé")
+        # Sauvegarder l'historique des métriques dans le dossier viz_json
+        metrics_path = os.path.join(data_collector.output_dir, "metrics_history.json")
+        with open(metrics_path, "w") as f:
+            json.dump(metrics_history, f, indent=2)
+        print(f"\nEntraînement terminé et métriques sauvegardées dans '{metrics_path}'")

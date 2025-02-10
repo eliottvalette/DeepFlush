@@ -194,12 +194,7 @@ class PokerAgent:
             action_probs, state_values = self.model(states)
             state_values = state_values.squeeze(-1)  # (batch,)
 
-            # Calcul de la divergence KL
-            approx_kl = 0
-            if self.old_action_probs is not None:
-                approx_kl = torch.mean(
-                    torch.sum(self.old_action_probs * torch.log(self.old_action_probs / (action_probs + 1e-10)), dim=1)
-                ).item()
+            # Mise à jour de l'ancienne probabilité d'action sans calculer approx_kl
             self.old_action_probs = action_probs.detach()
 
             # Calcul des cibles TD et des avantages
@@ -226,7 +221,6 @@ class PokerAgent:
             self.optimizer.step()
 
             metrics = {
-                'approx_kl': approx_kl,
                 'entropy_loss': entropy_loss.item(),
                 'value_loss': value_loss.item(),
                 'std': advantages_std,
@@ -239,7 +233,6 @@ class PokerAgent:
             print(f"Erreur pendant l'entraînement: {str(e)}")
             # Retourner des métriques par défaut en cas d'erreur
             return {
-                'approx_kl': 0,
                 'entropy_loss': 0,
                 'value_loss': 0,
                 'std': 0,
