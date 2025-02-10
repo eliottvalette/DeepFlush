@@ -8,10 +8,8 @@ import torch
 import time
 from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction, HandRank
-import matplotlib
-matplotlib.use('Agg')  # Utiliser le backend Agg qui ne nécessite pas de GUI
-from visualization import TrainingVisualizer, plot_winning_stats, update_rewards_history, update_winning_history
 from typing import List, Tuple
+import json
 
 # Hyperparamètres
 EPISODES = 500
@@ -23,9 +21,87 @@ STATE_SIZE = 201
 RENDERING = False
 FPS = 0.5
 
-WINDOW_SIZE = 50  
-PLOT_UPDATE_INTERVAL = 100  
-SAVE_INTERVAL = 500 # Sauvegarder les graphiques tous les X épisodes
+# Ajout de la classe DataCollector
+class DataCollector:
+    def __init__(self, output_dir="viz_json"):
+        self.output_dir = output_dir
+        self.current_episode_states = []
+        
+        # Créer le répertoire s'il n'existe pas
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+    
+    def add_state(self, state_info):
+        """
+        Ajoute un état à l'épisode courant avec le vecteur d'état subdivisé.
+        """
+        state_vector = state_info["state_vector"]
+        
+        # Subdiviser le vecteur d'état (basé sur la structure dans poker_game.py)
+        subdivided_state = {
+            "player_cards": {
+                "card1": {
+                    "values": state_vector[0:13],
+                    "suits": state_vector[13:17]
+                },
+                "card2": {
+                    "values": state_vector[17:30],
+                    "suits": state_vector[30:34]
+                }
+            },
+            "community_cards": [
+                {
+                    "values": state_vector[34+i*17:47+i*17],
+                    "suits": state_vector[47+i*17:51+i*17]
+                } for i in range(5)
+            ],
+            "hand_rank": state_vector[119],
+            "game_phase": state_vector[120:125],
+            "current_max_bet": state_vector[125],
+            "player_stacks": state_vector[126:132],
+            "current_bets": state_vector[132:138],
+            "player_activity": state_vector[138:144],
+            "fold_status": state_vector[144:150],
+            "relative_positions": state_vector[150:156],
+            "available_actions": state_vector[156:161],
+            "previous_actions": [
+                state_vector[161+i*6:167+i*6] for i in range(6)
+            ],
+            "win_probability": state_vector[197],
+            "pot_odds": state_vector[198],
+            "equity": state_vector[199],
+            "aggression_factor": state_vector[200]
+        }
+
+        # Mettre à jour state_info avec le vecteur d'état subdivisé
+        state_info["state_vector"] = subdivided_state
+        self.current_episode_states.append(state_info)
+    
+    def save_episode(self, episode_num):
+        """
+        Sauvegarde les états de l'épisode courant dans un fichier JSON.
+        
+        Args:
+            episode_num (int): Numéro de l'épisode
+        """
+        filename = os.path.join(self.output_dir, "episodes_states.json")
+        
+        # Charger les données existantes ou créer un nouveau dictionnaire
+        if os.path.exists(filename):
+            with open(filename, 'r') as f:
+                all_episodes = json.load(f)
+        else:
+            all_episodes = {}
+        
+        # Ajouter le nouvel épisode
+        all_episodes[str(episode_num)] = self.current_episode_states
+        
+        # Sauvegarder toutes les données
+        with open(filename, 'w') as f:
+            json.dump(all_episodes, f, indent=2)
+        
+        # Réinitialiser pour le prochain épisode
+        self.current_episode_states = []
 
 def set_seed(seed=42):
     """
@@ -44,7 +120,7 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int, visualizer: TrainingVisualizer):
+def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector):
     """
     Exécute un épisode complet du jeu de poker en utilisant une séquence d'états.
     Chaque agent reçoit en entrée la séquence complète des états depuis le début de l'épisode.
@@ -99,6 +175,8 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
         # --- Utiliser la séquence d'états accumulée comme entrée ---
         player_state_seq = state_seq[env.current_player_seat]
+        # Capture de l'état avant l'action, c'est celui que le modèle reçoit
+        state_for_decision = player_state_seq[-1].copy()
         action_chosen = current_agent.get_action(player_state_seq, epsilon, valid_actions)
         
         # Exécuter l'action dans l'environnement
@@ -111,6 +189,15 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         # Stocker l'expérience : on enregistre une copie de la séquence courante
         current_agent.remember(player_state_seq.copy(), action_chosen, reward, next_state, env.current_phase == GamePhase.SHOWDOWN)
         actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
+        
+        # Stocker l'état utilisé pour prendre l'action avec des informations supplémentaires
+        state_info = {
+            "player": current_player.name,
+            "phase": env.current_phase.value,
+            "action": action_chosen.value if action_chosen else None,
+            "state_vector": state_for_decision.tolist()  # Utilisation de l'état pré-action
+        }
+        data_collector.add_state(state_info)
         
         # Rendu graphique si activé
         if rendering and (episode % render_every == 0):
@@ -203,24 +290,8 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             hand_rank, _ = env.evaluate_final_hand(player)
             final_hand_ranks.append((hand_rank, winning_list[i] == 1))
 
-    # Mettre à jour les statistiques de hand rank à chaque épisode
-    visualizer.update_hand_rank_data(final_hand_ranks)
-
-    # Supposons que, dans PokerGame.handle_showdown, vous avez enregistré les stacks initiales dans env.initial_stacks
-    # et que les stacks finaux sont disponibles dans chaque player.stack.
-    # Calculez la variation de stack pour chaque joueur (en BB).
-    hand_variations = []
-    for player in env.players:
-        initial = env.initial_stacks.get(player.name, 0)
-        final = player.stack
-        hand_variations.append(final - initial)
-
-    # Puis, lorsque vous appelez update_plots, transmettez hand_variations
-    if episode % PLOT_UPDATE_INTERVAL == 0:
-        visualizer.update_plots(
-            episode, final_rewards, winning_list, actions_taken, hand_strengths,
-            metrics_list, epsilon=epsilon, hand_variations=hand_variations
-        )
+    # Sauvegarder les données de l'épisode
+    data_collector.save_episode(episode)
 
     return final_rewards, winning_list, actions_taken, hand_strengths, metrics_list
 
@@ -243,8 +314,8 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
     list_names = [agent.name for agent in agent_list]
     env = PokerGame(list_names)
     
-    # Initialiser le visualiseur
-    visualizer = TrainingVisualizer(save_interval=SAVE_INTERVAL)
+    # Initialiser le collecteur de données
+    data_collector = DataCollector()
 
     # Créer l'environnement de jeu
     for i, agent in enumerate(agent_list):
@@ -258,18 +329,8 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_list, winning_list, actions_taken, hand_strengths, metrics_list = run_episode(
-                env, agent_list, epsilon, rendering, episode, render_every, visualizer
+                env, agent_list, epsilon, rendering, episode, render_every, data_collector
             )
-            
-            # Mettre à jour les historiques
-            rewards_history = update_rewards_history(rewards_history, reward_list, agent_list)
-            winning_history = update_winning_history(winning_history, winning_list, agent_list)
-            
-            # Mettre à jour le visualiseur avec toutes les données incluant les métriques et epsilon
-            if episode % PLOT_UPDATE_INTERVAL == 0:
-                visualizer.update_plots(episode, reward_list, winning_list, 
-                                     actions_taken, hand_strengths, metrics_list,
-                                     epsilon=epsilon)
             
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
@@ -277,24 +338,16 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
             for i, reward in enumerate(reward_list):
                 print(f"Agent {i+1} reward: {reward:.2f}")
 
-        # Sauvegarder les modèles entraînés et les graphiques finaux
+        # Sauvegarder les modèles entraînés
         if episode == episodes - 1:
             print("\nSauvegarde des modèles...")
             for agent in agent_list:
                 torch.save(agent.model.state_dict(), 
                          f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")
             print("Modèles sauvegardés avec succès!")
-            visualizer.save_counter = visualizer.save_interval  # Forcer une mise à jour
-            visualizer.update_plots(episode, reward_list, winning_list, 
-                                 actions_taken, hand_strengths, metrics_list)
-            plot_winning_stats(winning_history, save_path="viz_pdf/poker_wins.jpg")
-            print("Graphiques de visualisation sauvegardés avec succès!")
 
     except KeyboardInterrupt:
         print("\nEntraînement interrompu par l'utilisateur")
-        plot_winning_stats(winning_history, save_path="viz_pdf/poker_wins.jpg")
-        print("Graphiques de visualisation sauvegardés avec succès!")
-
         print("\nSauvegarde des modèles...")
         for agent in agent_list:
             torch.save(agent.model.state_dict(), 
