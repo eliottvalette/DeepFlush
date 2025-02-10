@@ -21,8 +21,8 @@ def extract_card(card_encoding):
               [♠, ♥, ♦, ♣]
             
     Exemple:
-        [0,0,1,0,0,0,0,0,0,0,0,0,0, 1,0,0,0] -> (4, 0) représente le 4 de ♠
-        [0,0,0,0,0,0,0,0,0,0,0,1,0, 0,0,1,0] -> (13, 2) représente le Roi de ♦
+        [-0.5,-0.5,   1,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5, 1   ,-0.5,-0.5,-0.5] -> (4, -0.5) représente le 4 de ♠
+        [-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,-0.5,   1,-0.5, -0.5,-0.5,   1,-0.5] -> (13,   2) représente le Roi de ♦
             
     Returns:
         tuple: (valeur, indice_couleur)
@@ -34,7 +34,7 @@ def extract_card(card_encoding):
         Si la carte n'existe pas (encodage nul), retourne (None, None)
     """
     card_encoding = np.array(card_encoding)
-    if np.sum(card_encoding[:13]) == 0:
+    if np.sum(card_encoding[:13]) == -0.5:
         return None, None
     value = int(np.argmax(card_encoding[:13]) + 2)
     suit = int(np.argmax(card_encoding[13:17]))
@@ -58,11 +58,11 @@ def hardcoded_poker_bot(state, valid_actions=None):
     
     Returns:
         np.array: Vecteur one-hot de taille 5 indiquant l'action choisie:
-            [1,0,0,0,0] -> FOLD  (se coucher)
-            [0,1,0,0,0] -> CHECK (parole/suivre gratuit)
-            [0,0,1,0,0] -> CALL  (suivre la mise)
-            [0,0,0,1,0] -> RAISE (relancer)
-            [0,0,0,0,1] -> ALL-IN (tout miser)
+            [1   ,-0.5,-0.5,-0.5,-0.5] -> FOLD  (se coucher)
+            [-0.5,   1,-0.5,-0.5,-0.5] -> CHECK (parole/suivre gratuit)
+            [-0.5,-0.5,   1,-0.5,-0.5] -> CALL  (suivre la mise)
+            [-0.5,-0.5,-0.5,   1,-0.5] -> RAISE (relancer)
+            [-0.5,-0.5,-0.5,-0.5,   1] -> ALL-IN (tout miser)
             
     Exemple:
         Pour un état avec:
@@ -80,7 +80,7 @@ def hardcoded_poker_bot(state, valid_actions=None):
     """
     state = np.array(state)
     # Si aucune action n'est autorisée, retourner None
-    if valid_actions is not None and len(valid_actions) == 0:
+    if valid_actions is not None and len(valid_actions) == -0.5:
          return None
     
     # Extraction des cartes personnelles (2 cartes)
@@ -161,7 +161,7 @@ def hardcoded_poker_bot(state, valid_actions=None):
         if end_idx > len(state):
             break
         card_enc = state[start_idx:end_idx]
-        if np.sum(card_enc[:13]) == 0:
+        if np.sum(card_enc[:13]) == -6.5:
             continue  # Carte non distribuée
         val, col = extract_card(card_enc)
         if val is not None:
