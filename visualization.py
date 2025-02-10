@@ -23,10 +23,15 @@ class DataCollector:
         self.output_dir = output_dir
         self.current_episode_states = []
         self.batch_episode_states = [] # Contient un liste de current_episode_states qui seront ajouté toutes les save_interval dans le fichier json
+        self.batch_episode_metrics = [] # Contient les métriques d'entraînement pour chaque épisode
         
         # Créer le répertoire s'il n'existe pas
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        # Supprimer les fichiers JSON existants dans le répertoire
+        for file in os.listdir(output_dir):
+            os.remove(os.path.join(output_dir, file))
     
     def add_state(self, state_info):
         """
@@ -74,9 +79,18 @@ class DataCollector:
         state_info["state_vector"] = subdivided_state
         self.current_episode_states.append(state_info)
     
+    def add_metrics(self, episode_metrics):
+        """
+        Ajoute les métriques d'un épisode au batch.
+        
+        Args:
+            episode_metrics (list): Liste des métriques pour chaque agent dans l'épisode
+        """
+        self.batch_episode_metrics.append(episode_metrics)
+    
     def save_episode(self, episode_num):
         """
-        Sauvegarde les états de l'épisode courant dans un fichier JSON.
+        Sauvegarde les états et métriques de l'épisode courant dans des fichiers JSON.
         
         Args:
             episode_num (int): Numéro de l'épisode
@@ -86,26 +100,43 @@ class DataCollector:
         
         # Check if we've reached the save interval
         if len(self.batch_episode_states) >= self.save_interval:
-            filename = os.path.join(self.output_dir, "episodes_states.json")
-            
-            # Charger les données existantes ou créer un nouveau dictionnaire
-            if os.path.exists(filename):
-                with open(filename, 'r') as f:
+            # Sauvegarder les états
+            states_filename = os.path.join(self.output_dir, "episodes_states.json")
+            if os.path.exists(states_filename):
+                with open(states_filename, 'r') as f:
                     all_episodes = json.load(f)
             else:
                 all_episodes = {}
             
             # Ajouter tous les épisodes batchés aux données
             for i, episode_states in enumerate(self.batch_episode_states):
-                episode_idx = str(episode_num - len(self.batch_episode_states) + i + 1)
-                all_episodes[episode_idx] = episode_states
+                episode_idx = episode_num - len(self.batch_episode_states) + i + 1
+                all_episodes[str(episode_idx)] = episode_states  # Convertir l'index en string
             
-            # Sauvegarder toutes les données
-            with open(filename, 'w') as f:
+            # Sauvegarder les états
+            with open(states_filename, 'w') as f:
                 json.dump(all_episodes, f, indent=2)
             
-            # Réinitialiser le batch
+            # Sauvegarder les métriques
+            metrics_filename = os.path.join(self.output_dir, "metrics_history.json")
+            if os.path.exists(metrics_filename):
+                with open(metrics_filename, 'r') as f:
+                    all_metrics = json.load(f)
+            else:
+                all_metrics = {}
+            
+            # Ajouter toutes les métriques batchées aux données
+            for i, episode_metrics in enumerate(self.batch_episode_metrics):
+                episode_idx = episode_num - len(self.batch_episode_metrics) + i + 1
+                all_metrics[str(episode_idx)] = episode_metrics  # Convertir l'index en string
+            
+            # Sauvegarder les métriques
+            with open(metrics_filename, 'w') as f:
+                json.dump(all_metrics, f, indent=2)
+            
+            # Réinitialiser les batchs
             self.batch_episode_states = []
+            self.batch_episode_metrics = []
         
         # Réinitialiser les états de l'épisode courant
         self.current_episode_states = []

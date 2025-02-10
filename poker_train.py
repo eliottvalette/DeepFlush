@@ -14,14 +14,14 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 100
+EPISODES = 1_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
 START_EPS = 0.5
 STATE_SIZE = 201
 RENDERING = False
-FPS = 0.5
+FPS = 1
 
 SAVE_INTERVAL = 100
 PLOT_INTERVAL = 200
@@ -186,6 +186,10 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         metrics = agent.train_model()
         metrics_list.append(metrics)
 
+    # Sauvegarder les données de l'épisode et les métriques
+    data_collector.add_metrics(metrics_list)
+    data_collector.save_episode(episode)
+
     if rendering and (episode % render_every == 0):
         env._draw()
         pygame.display.flip()
@@ -213,9 +217,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             hand_rank, _ = env.evaluate_final_hand(player)
             final_hand_ranks.append((hand_rank, winning_list[i] == 1))
 
-    # Sauvegarder les données de l'épisode
-    data_collector.save_episode(episode)
-
     return final_rewards, metrics_list
 
 
@@ -240,8 +241,6 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
     
     # Initialiser le collecteur de données et supprimer les JSON existants dans viz_json
     data_collector = DataCollector(save_interval=SAVE_INTERVAL, plot_interval=PLOT_INTERVAL)
-    for json_file in glob.glob(os.path.join(data_collector.output_dir, "*.json")):
-        os.remove(json_file)
 
     # Créer l'environnement de jeu
     for i, agent in enumerate(agent_list):
