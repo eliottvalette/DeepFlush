@@ -14,9 +14,9 @@ class DataCollector:
         Initialise le collecteur de données.
         
         Args:
-            save_interval (int): Number of episodes to batch before saving
-            plot_interval (int): Interval for plotting (currently unused)
-            output_dir (str): Directory to save JSON files
+            save_interval (int): Nombre d'épisodes à regrouper avant de sauvegarder
+            plot_interval (int): Intervalle pour le tracé (actuellement non utilisé)
+            output_dir (str): Répertoire pour enregistrer les fichiers JSON
         """
         self.save_interval = save_interval
         self.plot_interval = plot_interval
