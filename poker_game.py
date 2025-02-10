@@ -1490,9 +1490,13 @@ class PokerGame:
 
         return self.get_state(), reward
 
-    # --------------------------------
-    # Methodes de calculs (à exporter dans un autre fichier)
-    # --------------------------------
+
+
+# ======================================================================
+# Methodes de calculs (à exporter dans un autre fichier)
+# ======================================================================
+
+
     def evaluate_current_hand(self, player) -> Tuple[HandRank, List[int]]:
         """
         Évalue la main actuelle d'un joueur avec les cartes communes disponibles meme si il y en a moins de 5.
@@ -1729,9 +1733,16 @@ class PokerGame:
         # Clip to [0, 1]
         return np.clip(equity, 0.0, 1.0)
     
-    # --------------------------------
-    # Interface graphique et affichage
-    # --------------------------------
+
+
+
+
+
+# ======================================================================
+# Interface graphique et affichage
+# ======================================================================
+
+
     def _draw_card(self, card: Card, x: int, y: int):
         """
         Dessine une carte sur l'écran avec sa valeur et sa couleur.
