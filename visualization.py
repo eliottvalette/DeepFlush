@@ -693,11 +693,11 @@ class Visualizer:
                         first_card = card_labels[y]
                         second_card = card_labels[x]
                         if x == y:  # Pairs
-                            hand_text = f"{first_card}{second_card}"
+                            hand_text = f"{second_card}{first_card}"
                         elif x > y:  # Suited
-                            hand_text = f"{second_card}{first_card}s"
+                            hand_text = f"{first_card}{second_card}s"
                         else:  # Offsuit
-                            hand_text = f"{first_card}{second_card}o"
+                            hand_text = f"{second_card}{first_card}o"
                             
                         ax.text(x + 0.5, y + 0.2, hand_text,
                               ha='center', va='center', 
