@@ -148,10 +148,13 @@ class DataCollector:
         self.current_episode_states = []
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
-            self.visualizer.plot_progress()
+            self.visualizer.plot_progress(dpi = 250)
     
-    def plot_progress(self):
+    def force_visualization(self):
         self.visualizer.plot_progress()
+        self.visualizer.plot_metrics()
+        self.visualizer.plot_analytics()
+        self.visualizer.plot_heatmaps()
 
 class Visualizer:
     """
@@ -171,7 +174,7 @@ class Visualizer:
             'all-in': '#003049'    # Bleu Nuit
         }
 
-    def plot_progress(self):
+    def plot_progress(self, dpi=750):
         """
         Génère les visualisations à partir des données JSON enregistrées
         """
@@ -184,14 +187,14 @@ class Visualizer:
         with open(metrics_path, 'r') as f:
             metrics_data = json.load(f)
 
-        # Créer une figure avec 4 sous-graphiques
-        fig = plt.figure(figsize=(20, 15))
+        # Créer une figure avec 6 sous-graphiques (2x3)
+        fig = plt.figure(figsize=(25, 20))
         
         # Définir une palette de couleurs pastel
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
         # 1. Average mbb/hand par agent
-        ax1 = plt.subplot(2, 2, 1)
+        ax1 = plt.subplot(2, 3, 1)
         window = 50
         agents = set()
         for episode in states_data.values():
@@ -227,7 +230,7 @@ class Visualizer:
         ax1.grid(True, alpha=0.3)
         
         # 2. Fréquence des actions par agent
-        ax3 = plt.subplot(2, 2, 2)
+        ax3 = plt.subplot(2, 3, 2)
         action_freq = {agent: {
             'fold': 0, 
             'check': 0, 
@@ -272,7 +275,7 @@ class Visualizer:
         ax3.grid(True, alpha=0.3)
 
         # 3. Fréquence des actions par agent et par phase de jeu
-        ax2 = plt.subplot(2, 2, 3)
+        ax2 = plt.subplot(2, 3, 3)
         phase_action_freq = {agent: {
             phase: {
                 'fold': 0, 
@@ -337,7 +340,7 @@ class Visualizer:
         ax2.grid(True, alpha=0.3)
 
         # 4. Evolution de epsilon avec nouvelle couleur
-        ax4 = plt.subplot(2, 2, 4)
+        ax4 = plt.subplot(2, 3, 4)
         episodes = sorted([int(k) for k in metrics_data.keys()])
         epsilon_values = [self.start_epsilon * (self.epsilon_decay ** episode) for episode in episodes]
         ax4.plot(episodes, epsilon_values, color='#2E86AB', linewidth=2)  # Bleu foncé pour epsilon
@@ -348,7 +351,35 @@ class Visualizer:
         
         ax4.set_facecolor('#F0F0F0')
         ax4.grid(True, alpha=0.3)
+
+        # 6. Rewards par agent
+        ax6 = plt.subplot(2, 3, 5)  # Position in bottom right
         
+        # Tracer les récompenses pour chaque agent
+        window = 50  # Window size for rolling average
+        for i, agent in enumerate(agents):
+            episodes = []
+            rewards = []
+            
+            for episode_num, episode_metrics in metrics_data.items():
+                if 'reward' in episode_metrics[i]:
+                    episodes.append(int(episode_num))
+                    rewards.append(float(episode_metrics[i]['reward']))
+            
+            if rewards:
+                rolling_avg = pd.Series(rewards).rolling(window=window, min_periods=1).mean()
+                ax6.plot(episodes, rolling_avg, 
+                        label=f"{agent} Reward", 
+                        color=pastel_colors[i],
+                        linewidth=2)
+        
+        ax6.set_title('Evolution des Récompenses par Agent')
+        ax6.set_xlabel('Episode')
+        ax6.set_ylabel('Reward')
+        ax6.legend()
+        ax6.grid(True, alpha=0.3)
+        ax6.set_facecolor('#F0F0F0')
+
         # Style global mis à jour
         plt.rcParams.update({
             'figure.facecolor': '#FFFFFF',
@@ -366,7 +397,7 @@ class Visualizer:
         })
         
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_progress.jpg', dpi=750, bbox_inches='tight')
+        plt.savefig('viz_json/Poker_progress.jpg', dpi=dpi, bbox_inches='tight')
         plt.close()
     
     def plot_metrics(self):
@@ -384,12 +415,9 @@ class Visualizer:
         # Définir une palette de couleurs pastel
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
-        # Extraire les agents uniques
-        agents = set()
-        for episode in metrics_data.values():
-            for metric in episode:
-                agents.add(metric["agent"])
-        agents = sorted(list(agents))
+        # Extraire les agents uniques (maintenant basé sur l'index dans la liste des métriques)
+        num_agents = len(next(iter(metrics_data.values())))  # Nombre d'agents basé sur le premier épisode
+        agents = [f"Player_{i+1}" for i in range(num_agents)]
 
         # Métriques spécifiques à tracer
         metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']
@@ -404,10 +432,9 @@ class Visualizer:
                 values = []
                 
                 for episode_num, episode_metrics in metrics_data.items():
-                    for metric in episode_metrics:
-                        if metric["agent"] == agent and metric_name in metric:
-                            episodes.append(int(episode_num))
-                            values.append(float(metric[metric_name]))
+                    if metric_name in episode_metrics[agent_idx]:  # Utiliser l'index de l'agent
+                        episodes.append(int(episode_num))
+                        values.append(float(episode_metrics[agent_idx][metric_name]))
                 
                 # Calculer la moyenne mobile
                 window = 50
@@ -457,7 +484,200 @@ class Visualizer:
         plt.savefig('viz_json/Poker_metrics.jpg', dpi=750, bbox_inches='tight')
         plt.close()
 
+    def plot_analytics(self):
+        """
+        Génère des visualisations analytiques avancées du jeu de poker
+        """
+        # Charger les données
+        states_path = os.path.join(self.output_dir, "episodes_states.json")
+        with open(states_path, 'r') as f:
+            states_data = json.load(f)
+
+        # Créer une figure avec 8 sous-graphiques (2x4)
+        fig = plt.figure(figsize=(25, 20))
+        
+        # Définir une palette de couleurs pastel cohérente
+        pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
+
+        # 1. Win Rate par position et par agent (Bar Plot)
+        ax1 = plt.subplot(1, 2, 1)
+        position_wins = defaultdict(lambda: defaultdict(int))
+        position_games = defaultdict(lambda: defaultdict(int))
+        
+        for episode in states_data.values():
+            # Identifier le gagnant de l'épisode
+            winner = None
+            final_state = episode[-1]
+            for i, stack in enumerate(final_state["state_vector"]["player_stacks"]):
+                if stack > 1.0:  # Le joueur a gagné des jetons
+                    winner = f"Player_{i+1}"
+            
+            # Compter les positions pour chaque agent
+            for state in episode:
+                player = state["player"]
+                positions = state["state_vector"]["relative_positions"]
+                position_idx = positions.index(1.0)
+                position_name = ["BB", "SB", "BTN", "CO", "MP", "EP"][position_idx]
+                
+                position_games[player][position_name] += 1
+                if player == winner:
+                    position_wins[player][position_name] += 1
+
+        # Préparer les données pour le bar plot
+        positions = ["BB", "SB", "BTN", "CO", "MP", "EP"]
+        players = [f"Player_{i+1}" for i in range(6)]
+        bar_width = 0.15
+        index = np.arange(len(positions))
+
+        for i, player in enumerate(players):
+            win_rates = []
+            for pos in positions:
+                games = position_games[player][pos]
+                wins = position_wins[player][pos]
+                win_rates.append(wins / games if games > 0 else 0)
+            
+            ax1.bar(index + i * bar_width, win_rates, bar_width, 
+                   label=player, alpha=0.8, color=pastel_colors[i])
+
+        ax1.set_xlabel('Position')
+        ax1.set_ylabel('Win Rate')
+        ax1.set_title('Win Rate par Position et par Agent')
+        ax1.set_xticks(index + bar_width * 2.5)
+        ax1.set_xticklabels(positions)
+        ax1.legend()
+
+        # 2. Win Rate par phase et par agent (Bar Plot)
+        ax2 = plt.subplot(1, 2, 2)
+        phase_wins = defaultdict(lambda: defaultdict(int))
+        phase_games = defaultdict(lambda: defaultdict(int))
+        
+        for episode in states_data.values():
+            winner = None
+            final_state = episode[-1]
+            for i, stack in enumerate(final_state["state_vector"]["player_stacks"]):
+                if stack > 1.0:
+                    winner = f"Player_{i+1}"
+            
+            # Compter les phases pour chaque agent
+            phases_seen = set()
+            for state in episode:
+                player = state["player"]
+                phase = state["phase"]
+                if (player, phase) not in phases_seen:
+                    phase_games[player][phase] += 1
+                    if player == winner:
+                        phase_wins[player][phase] += 1
+                    phases_seen.add((player, phase))
+
+        # Préparer les données pour le bar plot
+        phases = ["preflop", "flop", "turn", "river", "showdown"]
+        bar_width = 0.15
+        index = np.arange(len(phases))
+
+        for i, player in enumerate(players):
+            win_rates = []
+            for phase in phases:
+                games = phase_games[player][phase]
+                wins = phase_wins[player][phase]
+                win_rates.append(wins / games if games > 0 else 0)
+            
+            ax2.bar(index + i * bar_width, win_rates, bar_width, 
+                   label=player, alpha=0.8, color=pastel_colors[i])
+
+        ax2.set_xlabel('Phase')
+        ax2.set_ylabel('Win Rate')
+        ax2.set_title('Win Rate par Phase et par Agent')
+        ax2.set_xticks(index + bar_width * 2.5)
+        ax2.set_xticklabels(phases)
+        ax2.legend()
+
+        plt.tight_layout()
+        plt.savefig('viz_json/Poker_analytics.jpg', dpi=750, bbox_inches='tight')
+        plt.close()
+
+    def plot_heatmaps(self,):
+        # Charger les données
+        states_path = os.path.join(self.output_dir, "episodes_states.json")
+        with open(states_path, 'r') as f:
+            states_data = json.load(f)
+
+        # Créer une figure plus grande avec plus d'espace entre les subplots
+        fig = plt.figure(figsize=(30, 20))  # Increased figure size
+        plt.subplots_adjust(hspace=0.3, wspace=0.3)  # Add more space between subplots
+        
+        players = [f"Player_{i+1}" for i in range(6)]
+        pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
+
+        # 1-6. Range win rate heat maps pour chaque agent
+        for i, player in enumerate(players):
+            ax = plt.subplot(2, 3, i + 1)
+            
+            # Initialiser la matrice 13x13 pour les combinaisons de cartes
+            hand_matrix = np.zeros((13, 13))
+            hand_counts = np.zeros((13, 13))
+            
+            # Analyser les mains gagnantes
+            for episode in states_data.values():
+                player_states = [s for s in episode if s["player"] == player]
+                if not player_states:
+                    continue
+                    
+                # Obtenir les cartes du joueur
+                first_state = player_states[0]
+                card1_values = first_state["state_vector"]["player_cards"]["card1"]["values"]
+                card2_values = first_state["state_vector"]["player_cards"]["card2"]["values"]
+                
+                # Trouver les indices des cartes
+                try:
+                    card1_idx = card1_values.index(1.0) if 1.0 in card1_values else -1
+                    card2_idx = card2_values.index(1.0) if 1.0 in card2_values else -1
+                    
+                    if card1_idx != -1 and card2_idx != -1:
+                        # Déterminer si la main a gagné
+                        final_state = episode[-1]
+                        won = final_state["state_vector"]["player_stacks"][i] > 1.0
+                        
+                        # Mettre à jour la matrice
+                        row = min(card1_idx, card2_idx)
+                        col = max(card1_idx, card2_idx)
+                        hand_matrix[row][col] += 1 if won else 0
+                        hand_counts[row][col] += 1
+                except (ValueError, IndexError):
+                    continue
+
+            # Calculer les win rates en évitant la division par zéro
+            win_rates = np.zeros((13, 13))
+            mask = hand_counts > 0
+            win_rates[mask] = hand_matrix[mask] / hand_counts[mask]
+            
+            # Créer le heatmap sans annotations et avec une palette cohérente
+            card_labels = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
+            sns.heatmap(win_rates, 
+                       annot=False,
+                       cmap='RdYlBu_r',
+                       xticklabels=card_labels, 
+                       yticklabels=card_labels, 
+                       ax=ax,
+                       cbar_kws={'label': 'Win Rate'})
+
+            # Adjust font sizes and rotation
+            ax.set_xticklabels(card_labels, fontsize=10, rotation=0)
+            ax.set_yticklabels(card_labels, fontsize=10, rotation=0)
+            
+            # Add more space for the title
+            ax.set_title(f'Win Rate Matrix - {player}', 
+                        color=pastel_colors[i],
+                        pad=20,  # Add padding above the title
+                        fontsize=12)  # Increase title font size
+
+        plt.suptitle('Hand Win Rates by Player', fontsize=16, y=1.02)  # Add main title
+        plt.tight_layout()
+        plt.savefig('viz_json/Poker_heatmaps.jpg', dpi=750, bbox_inches='tight')
+        plt.close()
+
 if __name__ == "__main__":
     visualizer = Visualizer(start_epsilon=1, epsilon_decay=0.999)
     visualizer.plot_progress()
     visualizer.plot_metrics()
+    visualizer.plot_analytics()
+    visualizer.plot_heatmaps()

@@ -1165,9 +1165,7 @@ class PokerGame:
             variation = player.stack - initial
             signe = "+" if variation >= 0 else ""
             print(f"- {player.name}: {signe}{variation:.2f}BB")
-        
-        print("=== FIN SHOWDOWN ===")
-        
+                
         # Reset pots
         self.phase_pot = 0
         self.side_pots = self._create_side_pots() 

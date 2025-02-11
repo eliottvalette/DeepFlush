@@ -14,11 +14,11 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 300
+EPISODES = 300 #10_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
-START_EPS = 0.5
+START_EPS = 0.8
 STATE_SIZE = 201
 RENDERING = False
 FPS = 1
@@ -170,20 +170,22 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         if is_winner:
             if stack_changes[i] < 0:
                 raise Exception(f"Agent {i+1} a gagné avec un stack change négatif, ce stack change est de {stack_changes[i]}")
-            final_reward = (stack_changes[i] ** 0.5) * (1.1 - hand_strengths[i]) * 5
+            final_reward = (stack_changes[i] ** 0.5) * (1.1 - hand_strengths[i]) * 5 + 0.5
         else:
-            final_reward = -(abs(stack_changes[i]) ** 0.5) * hand_strengths[i] * 5
+            final_reward = -(abs(stack_changes[i]) ** 0.5) * hand_strengths[i] * 5 - 0.5
         agent.remember(terminal_state, None, final_reward, None, True)
 
     print("Récompenses finales:")
     for i, reward in enumerate(final_rewards):
         print(f"  Joueur {i+1}: {reward:.3f}")
     print(f"\nFin de l'épisode {episode}")
+    print(f"Randomness: {epsilon*100:.3f}% ")
     
     # Entraîner les agents et récupérer les métriques
     metrics_list = []
     for agent in agent_list:
         metrics = agent.train_model()
+        metrics['reward'] = final_rewards[agent_list.index(agent)]
         metrics_list.append(metrics)
 
     # Sauvegarder les données de l'épisode et les métriques
@@ -287,6 +289,9 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
                 torch.save(agent.model.state_dict(), 
                          f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")
             print("Modèles sauvegardés avec succès!")
+
+            print("Génération de la vizualiation...")
+            data_collector.force_visualization()
 
     except KeyboardInterrupt:
         print("\nEntraînement interrompu par l'utilisateur")
