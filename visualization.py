@@ -174,7 +174,7 @@ class Visualizer:
             'all-in': '#003049'    # Bleu Nuit
         }
 
-    def plot_progress(self, dpi=750):
+    def plot_progress(self, dpi=500):
         """
         Génère les visualisations à partir des données JSON enregistrées
         """
@@ -342,7 +342,7 @@ class Visualizer:
         # 4. Evolution de epsilon avec nouvelle couleur
         ax4 = plt.subplot(2, 3, 4)
         episodes = sorted([int(k) for k in metrics_data.keys()])
-        epsilon_values = [self.start_epsilon * (self.epsilon_decay ** episode) for episode in episodes]
+        epsilon_values = [np.clip(self.start_epsilon * self.epsilon_decay ** episode, 0.01, self.start_epsilon) for episode in episodes]
         ax4.plot(episodes, epsilon_values, color='#2E86AB', linewidth=2)  # Bleu foncé pour epsilon
         ax4.set_title('Evolution de Epsilon')
         ax4.set_xlabel('Episode')
@@ -356,7 +356,7 @@ class Visualizer:
         ax6 = plt.subplot(2, 3, 5)  # Position in bottom right
         
         # Tracer les récompenses pour chaque agent
-        window = 150  # Window size for rolling average
+        rewards_window = 250  # Window size for rolling average
         for i, agent in enumerate(agents):
             episodes = []
             rewards = []
@@ -367,7 +367,7 @@ class Visualizer:
                     rewards.append(float(episode_metrics[i]['reward']))
             
             if rewards:
-                rolling_avg = pd.Series(rewards).rolling(window=window, min_periods=1).mean()
+                rolling_avg = pd.Series(rewards).rolling(window=rewards_window, min_periods=1).mean()
                 ax6.plot(episodes, rolling_avg, 
                         label=f"{agent} Reward", 
                         color=pastel_colors[i],
@@ -481,7 +481,7 @@ class Visualizer:
         })
 
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_metrics.jpg', dpi=750, bbox_inches='tight')
+        plt.savefig('viz_json/Poker_metrics.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_analytics(self):
@@ -592,10 +592,10 @@ class Visualizer:
         ax2.legend()
 
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_analytics.jpg', dpi=750, bbox_inches='tight')
+        plt.savefig('viz_json/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
-    def plot_heatmaps(self,):
+    def plot_heatmaps(self):
         # Charger les données
         states_path = os.path.join(self.output_dir, "episodes_states.json")
         with open(states_path, 'r') as f:
@@ -626,8 +626,9 @@ class Visualizer:
                 first_state = player_states[0]
                 card1_values = first_state["state_vector"]["player_cards"]["card1"]["values"]
                 card2_values = first_state["state_vector"]["player_cards"]["card2"]["values"]
+                card1_suits = first_state["state_vector"]["player_cards"]["card1"]["suits"]
+                card2_suits = first_state["state_vector"]["player_cards"]["card2"]["suits"]
                 
-                # Trouver les indices des cartes
                 try:
                     card1_idx = card1_values.index(1.0) if 1.0 in card1_values else -1
                     card2_idx = card2_values.index(1.0) if 1.0 in card2_values else -1
@@ -637,9 +638,22 @@ class Visualizer:
                         final_state = episode[-1]
                         won = final_state["state_vector"]["player_stacks"][i] > 1.0
                         
-                        # Mettre à jour la matrice
-                        row = min(card1_idx, card2_idx)
-                        col = max(card1_idx, card2_idx)
+                        # Check if suited
+                        is_suited = any(s1 == s2 == 1.0 for s1, s2 in zip(card1_suits, card2_suits))
+                        
+                        # For suited hands, put in upper triangle
+                        # For offsuit hands, put in lower triangle
+                        if card1_idx != card2_idx:  # Different ranks
+                            if is_suited:
+                                row = min(card1_idx, card2_idx)
+                                col = max(card1_idx, card2_idx)
+                            else:
+                                row = max(card1_idx, card2_idx)
+                                col = min(card1_idx, card2_idx)
+                        else:  # Pairs go on diagonal
+                            row = card1_idx
+                            col = card2_idx
+                        
                         hand_matrix[row][col] += 1 if won else 0
                         hand_counts[row][col] += 1
                 except (ValueError, IndexError):
@@ -650,33 +664,62 @@ class Visualizer:
             mask = hand_counts > 0
             win_rates[mask] = hand_matrix[mask] / hand_counts[mask]
             
-            # Créer le heatmap sans annotations et avec une palette cohérente
-            card_labels = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
-            sns.heatmap(win_rates, 
-                       annot=False,
+            # Create a mask for the empty cells
+            empty_mask = hand_counts == 0
+            
+            # Créer le heatmap avec masque pour les cellules vides
+            card_labels = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']  # Reversed order
+            
+            # Flip the matrices to match the new order
+            win_rates = np.flip(win_rates, axis=(0, 1))
+            empty_mask = np.flip(empty_mask, axis=(0, 1))
+            
+            sns.heatmap(win_rates,
+                       mask=empty_mask,  # Mask empty cells
+                       annot=True,  # Show values
+                       fmt='.2f',  # Format to 2 decimal places
                        cmap='RdYlBu_r',
-                       xticklabels=card_labels, 
-                       yticklabels=card_labels, 
+                       xticklabels=card_labels,
+                       yticklabels=card_labels,
                        ax=ax,
-                       cbar_kws={'label': 'Win Rate'})
+                       cbar_kws={'label': 'Win Rate'},
+                       vmin=0,  # Set minimum value
+                       vmax=1)  # Set maximum value
+
+            # Add text annotations for poker hands
+            for y in range(13):
+                for x in range(13):
+                    if not empty_mask[y, x]:  # Only annotate non-empty cells
+                        first_card = card_labels[y]
+                        second_card = card_labels[x]
+                        if x == y:  # Pairs
+                            hand_text = f"{first_card}{second_card}"
+                        elif x > y:  # Suited
+                            hand_text = f"{second_card}{first_card}s"
+                        else:  # Offsuit
+                            hand_text = f"{first_card}{second_card}o"
+                            
+                        ax.text(x + 0.5, y + 0.2, hand_text,
+                              ha='center', va='center', 
+                              color='white', alpha=0.7, 
+                              fontsize=8, fontweight='bold')
 
             # Adjust font sizes and rotation
             ax.set_xticklabels(card_labels, fontsize=10, rotation=0)
             ax.set_yticklabels(card_labels, fontsize=10, rotation=0)
             
-            # Add more space for the title
-            ax.set_title(f'Win Rate Matrix - {player}', 
+            ax.set_title(f'Win Rate Matrix - {player}',
                         color=pastel_colors[i],
-                        pad=20,  # Add padding above the title
-                        fontsize=12)  # Increase title font size
+                        pad=20,
+                        fontsize=12)
 
-        plt.suptitle('Hand Win Rates by Player', fontsize=16, y=1.02)  # Add main title
+        plt.suptitle('Hand Win Rates by Player\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_heatmaps.jpg', dpi=750, bbox_inches='tight')
+        plt.savefig('viz_json/Poker_heatmaps.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
 if __name__ == "__main__":
-    visualizer = Visualizer(start_epsilon=1, epsilon_decay=0.999)
+    visualizer = Visualizer(start_epsilon=0.8, epsilon_decay=0.9999)
     visualizer.plot_progress()
     visualizer.plot_metrics()
     visualizer.plot_analytics()
