@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 1_000
+EPISODES = 300
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
@@ -231,8 +231,6 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
         render_every (int): Fréquence de mise à jour du rendu graphique
     """
     # Initialiser les historiques
-    rewards_history = {}
-    winning_history = {}
     metrics_history = {}  # Historique pour les métriques d'entraînement
     
     # Initialiser l'environnement avec la liste des noms des joueurs
@@ -240,7 +238,7 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
     env = PokerGame(list_names)
     
     # Initialiser le collecteur de données et supprimer les JSON existants dans viz_json
-    data_collector = DataCollector(save_interval=SAVE_INTERVAL, plot_interval=PLOT_INTERVAL)
+    data_collector = DataCollector(save_interval=SAVE_INTERVAL, plot_interval=PLOT_INTERVAL, start_epsilon=START_EPS, epsilon_decay=EPS_DECAY)
 
     # Créer l'environnement de jeu
     for i, agent in enumerate(agent_list):
@@ -272,7 +270,15 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
             # Afficher les métriques de chaque agent
             print("Métriques:")
             for i, metrics in enumerate(metrics_with_agent):
-                print(f"  Agent {i+1}: {metrics}")
+                metric_str = f"  Agent {i+1}:"
+                # Print all available metrics
+                for key, value in metrics.items():
+                    if key != 'agent':  # Skip the agent name
+                        try:
+                            metric_str += f" {key} = {float(value):.6f},"
+                        except (ValueError, TypeError):
+                            metric_str += f" {key} = {value},"
+                print(metric_str.rstrip(','))  # Remove trailing comma
 
         # Sauvegarder les modèles entraînés
         if episode == episodes - 1:

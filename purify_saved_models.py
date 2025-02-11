@@ -3,7 +3,7 @@
 import os
 import re
 
-def purify_saved_models():
+def updated_saved_models():
     # Path to saved_models directory
     saved_models_dir = "saved_models"
     print("Purifying saved models...")
@@ -51,5 +51,32 @@ def purify_saved_models():
             except Exception as e:
                 print(f"Error renaming {file}: {e}")
 
+def purify_saved_models():
+    # Path to saved_models directory
+    saved_models_dir = "saved_models"
+    print("Deleting models containing 'epoch'...")
+
+    # Check if directory exists
+    if not os.path.exists(saved_models_dir):
+        print(f"Directory '{saved_models_dir}' does not exist.")
+        return
+
+    # Delete all models containing epoch
+    for file in os.listdir(saved_models_dir):
+        if "epoch" in file.lower():
+            file_path = os.path.join(saved_models_dir, file)
+            try:
+                os.remove(file_path)
+                print(f"Deleted: {file}")
+            except Exception as e:
+                print(f"Error deleting {file}: {e}")
+
 if __name__ == "__main__":
-    purify_saved_models() 
+    input_value = input("Choose action:\n(p) Delete all models containing 'epoch'\n(u) Update model names (keep only latest epoch)\n> ")
+    if input_value.lower() == "p":
+        purify_saved_models()
+    elif input_value.lower() == "u":
+        updated_saved_models()
+    else:
+        print("Invalid option. Please use 'p' or 'u'")
+    
