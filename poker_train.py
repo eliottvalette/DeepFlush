@@ -17,13 +17,13 @@ import glob
 EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9999
-START_EPS = 0.8
+EPS_DECAY = 0.9994
+START_EPS = 0.5
 STATE_SIZE = 201
 RENDERING = False
 FPS = 1
 
-SAVE_INTERVAL = 100
+SAVE_INTERVAL = 250
 PLOT_INTERVAL = 500
 
 def set_seed(seed=42):
@@ -298,7 +298,10 @@ def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, rende
         print("\nSauvegarde des modèles...")
         for agent in agent_list:
             torch.save(agent.model.state_dict(), 
-                     f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")
+                     f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")    
+        print("Génération de la vizualiation...")
+        data_collector.force_visualization()
+        
     finally:
         if rendering:
             pygame.quit()
