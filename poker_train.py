@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 300 #10_000
+EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9999
@@ -24,7 +24,7 @@ RENDERING = False
 FPS = 1
 
 SAVE_INTERVAL = 100
-PLOT_INTERVAL = 200
+PLOT_INTERVAL = 500
 
 def set_seed(seed=42):
     """

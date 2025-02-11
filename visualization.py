@@ -195,7 +195,7 @@ class Visualizer:
         
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
-        window = 50
+        window = 150
         agents = set()
         for episode in states_data.values():
             for state in episode:
@@ -356,7 +356,7 @@ class Visualizer:
         ax6 = plt.subplot(2, 3, 5)  # Position in bottom right
         
         # Tracer les récompenses pour chaque agent
-        window = 50  # Window size for rolling average
+        window = 150  # Window size for rolling average
         for i, agent in enumerate(agents):
             episodes = []
             rewards = []
@@ -437,7 +437,7 @@ class Visualizer:
                         values.append(float(episode_metrics[agent_idx][metric_name]))
                 
                 # Calculer la moyenne mobile
-                window = 50
+                window = 150
                 if len(values) > 0:
                     rolling_avg = pd.Series(values).rolling(window=window, min_periods=1).mean()
                     ax.plot(episodes, rolling_avg, 
