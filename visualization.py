@@ -148,10 +148,10 @@ class DataCollector:
         self.current_episode_states = []
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
-            self.visualizer.plot_metrics()
+            self.visualizer.plot_progress()
     
-    def plot_metrics(self):
-        self.visualizer.plot_metrics()
+    def plot_progress(self):
+        self.visualizer.plot_progress()
 
 class Visualizer:
     """
@@ -171,7 +171,7 @@ class Visualizer:
             'all-in': '#003049'    # Bleu Nuit
         }
 
-    def plot_metrics(self):
+    def plot_progress(self):
         """
         Génère les visualisations à partir des données JSON enregistrées
         """
@@ -188,7 +188,7 @@ class Visualizer:
         fig = plt.figure(figsize=(20, 15))
         
         # Définir une palette de couleurs pastel
-        pastel_colors = ['#FFB3BA', '#BAFFC9', '#BAE1FF', '#FFFFBA', '#FFB3F7']
+        pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 2, 1)
@@ -199,20 +199,24 @@ class Visualizer:
                 agents.add(state["player"])
         
         mbb_data = {agent: [] for agent in agents}
+        final_stack = 0
         for episode_num, episode in states_data.items():
             episode_results = {agent: 0 for agent in agents}
+            previous_stack = final_stack
             for state in episode:
                 player = state["player"]
                 if state["phase"] == "showdown":
-                    stack_change = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
+                    final_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
+                    stack_change = final_stack - previous_stack
                     episode_results[player] = stack_change * 1000  # Conversion en mbb
+                    previous_stack = final_stack
             
             for agent in agents:
                 mbb_data[agent].append(episode_results[agent])
         
         for i, (agent, data) in enumerate(mbb_data.items()):
             rolling_avg = pd.Series(data).rolling(window=window).mean()
-            ax1.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=2)
+            ax1.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=3)
         
         ax1.set_title('Average mbb/hand par agent')
         ax1.set_xlabel('Episode')
@@ -365,6 +369,95 @@ class Visualizer:
         plt.savefig('viz_json/Poker_progress.jpg', dpi=750, bbox_inches='tight')
         plt.close()
     
+    def plot_metrics(self):
+        """
+        Génère des visualisations des métriques d'entraînement à partir du fichier metrics_history.json
+        """
+        # Charger les données
+        metrics_path = os.path.join(self.output_dir, "metrics_history.json")
+        with open(metrics_path, 'r') as f:
+            metrics_data = json.load(f)
+
+        # Créer une figure avec 4 sous-graphiques
+        fig = plt.figure(figsize=(20, 15))
+        
+        # Définir une palette de couleurs pastel
+        pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
+        
+        # Extraire les agents uniques
+        agents = set()
+        for episode in metrics_data.values():
+            for metric in episode:
+                agents.add(metric["agent"])
+        agents = sorted(list(agents))
+
+        # Métriques spécifiques à tracer
+        metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']
+
+        # Créer un subplot pour chaque métrique
+        for idx, metric_name in enumerate(metrics_to_plot):
+            ax = plt.subplot(2, 2, idx + 1)
+            
+            # Préparer les données pour chaque agent
+            for agent_idx, agent in enumerate(agents):
+                episodes = []
+                values = []
+                
+                for episode_num, episode_metrics in metrics_data.items():
+                    for metric in episode_metrics:
+                        if metric["agent"] == agent and metric_name in metric:
+                            episodes.append(int(episode_num))
+                            values.append(float(metric[metric_name]))
+                
+                # Calculer la moyenne mobile
+                window = 50
+                if len(values) > 0:
+                    rolling_avg = pd.Series(values).rolling(window=window, min_periods=1).mean()
+                    ax.plot(episodes, rolling_avg, 
+                           label=agent, 
+                           color=pastel_colors[agent_idx % len(pastel_colors)],
+                           linewidth=2)
+
+            # Personnaliser les titres selon la métrique
+            title_mapping = {
+                'entropy_loss': 'Perte d\'entropie',
+                'value_loss': 'Perte de valeur',
+                'loss': 'Perte totale',
+                'std': 'Écart-type'
+            }
+            
+            ax.set_title(f'Evolution de {title_mapping.get(metric_name, metric_name)}')
+            ax.set_xlabel('Episode')
+            ax.set_ylabel(metric_name)
+            ax.legend()
+            
+            # Style du subplot
+            ax.set_facecolor('#F0F0F0')
+            ax.grid(True, alpha=0.3)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+        # Style global
+        plt.rcParams.update({
+            'figure.facecolor': '#FFFFFF',
+            'axes.facecolor': '#F8F9FA',
+            'axes.grid': True,
+            'grid.alpha': 0.3,
+            'axes.labelsize': 10,
+            'axes.titlesize': 12,
+            'xtick.labelsize': 10,
+            'ytick.labelsize': 10,
+            'lines.linewidth': 2,
+            'font.family': 'sans-serif',
+            'axes.spines.top': False,
+            'axes.spines.right': False
+        })
+
+        plt.tight_layout()
+        plt.savefig('viz_json/Poker_metrics.jpg', dpi=750, bbox_inches='tight')
+        plt.close()
+
 if __name__ == "__main__":
     visualizer = Visualizer(start_epsilon=1, epsilon_decay=0.999)
+    visualizer.plot_progress()
     visualizer.plot_metrics()
