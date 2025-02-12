@@ -50,7 +50,7 @@ class DataCollector:
         hand_rank = hand_rank_vector.index(1) if 1 in hand_rank_vector else 0
         
         # Subdiviser le vecteur d'état (basé sur la nouvelle structure)
-        subdivided_state = {
+        subdivided_full_state = {
             "player_cards": [
                 {
                     "value": state_vector[0],  # Valeur normalisée
@@ -88,8 +88,23 @@ class DataCollector:
             }
         }
 
+        subdivided_simple_state = {
+            "player_cards": [
+                {
+                    "value": state_vector[0],  # Valeur normalisée
+                    "suit": state_vector[1:5]  # One-hot encoding de la couleur
+                },
+                {
+                    "value": state_vector[5],  # Valeur normalisée
+                    "suit": state_vector[6:10]  # One-hot encoding de la couleur
+                }
+            ],
+            "player_stacks": state_vector[53:59],  # Stacks normalisés
+            "relative_positions": state_vector[71:77]  # Position relative one-hot
+        }
+
         # Mettre à jour state_info avec le vecteur d'état subdivisé
-        state_info["state_vector"] = subdivided_state
+        state_info["state_vector"] = subdivided_simple_state
         self.current_episode_states.append(state_info)
     
     def add_metrics(self, episode_metrics):
