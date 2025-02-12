@@ -131,14 +131,10 @@ class PokerAgent:
         :param next_state: État suivant
         :param done: True si l'épisode est terminé
         """
-        if not isinstance(state, (list, np.ndarray)):
-            raise TypeError(f"state doit être une liste ou un numpy array (reçu: {type(state)})")
         if action is not None and not isinstance(action, PlayerAction):
             raise TypeError(f"action doit être None ou de type PlayerAction (reçu: {type(action)})")
         if not isinstance(reward, (int, float)):
             raise TypeError(f"reward doit être un nombre (reçu: {type(reward)})")
-        if next_state is not None and not isinstance(next_state, (list, np.ndarray)):
-            raise TypeError(f"next_state doit être None ou un numpy array (reçu: {type(next_state)})")
         if not isinstance(done, bool):
             raise TypeError(f"done doit être un booléen (reçu: {type(done)})")
 

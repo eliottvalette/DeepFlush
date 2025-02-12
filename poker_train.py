@@ -19,7 +19,7 @@ GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9994
 START_EPS = 0.5
-STATE_SIZE = 201
+STATE_SIZE = 114
 RENDERING = False
 FPS = 1
 
@@ -53,11 +53,12 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                 force des mains, métriques d'entraînement)
     """
 
-    active_players = [p for p in env.players if p.stack > 0]
-    if len(active_players) < 2:
+    players_that_can_play = [p for p in env.players if p.stack > 0]
+    if len(players_that_can_play) < 2:
         env.reset()
     else:
         env.start_new_hand()
+    current_in_game_players = [p for p in env.players if p.is_active]
     
     # Synchroniser les noms et statuts humains entre l'environnement et les agents
     for i, agent in enumerate(agent_list):
@@ -91,10 +92,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
         if len(valid_actions) == 0:
             raise Exception(f"Agent {env.current_player_seat + 1} n'a plus d'actions valides et il lui a pourtant été demandé de jouer")
-        
-        # Calculer et stocker la force de la main pour le joueur courant
-        strength = env._evaluate_hand_strength(current_player)
-        hand_strengths[env.current_player_seat] = strength
 
         # --- Utiliser la séquence d'états accumulée comme entrée ---
         player_state_seq = state_seq[env.current_player_seat]
@@ -140,43 +137,46 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                     current_time = pygame.time.get_ticks()
 
     # Calcul des récompenses finales basées sur les changements de stack
+    current_in_game_players_mask = [p.is_active for p in env.players] 
     final_stacks = [player.stack for player in env.players]
     stack_changes = [np.clip((final - initial) / env.starting_stack, -1.0, 1.0)
                      for final, initial in zip(final_stacks, initial_stacks)]
     
-    in_game_players = [p for p in env.players if p.is_active and not p.has_folded]
-    if len(in_game_players) == 1:
+    remaining_players = [p for p in env.players if p.is_active and not p.has_folded]
+    if len(remaining_players) == 1:
         winning_list = [1 if (p.is_active and not p.has_folded) else 0 for p in env.players]
     else:
-        # Determine winners based on who gained chips this hand
-        winning_list = [1 if change > 0 else 0 for change in stack_changes]
+        # Determine les gagnants en fonction des changements de stack 1 si gagant, 0 si perdu, -1 si pas de changement
+        winning_list = [1 if change > 0 else 0 for change in stack_changes] # TODO: Arréter de dire que les inactifs (dès le debut de la main) sont des perdants (affecte uniquement les plots et non l'entrainement des modèles)
         
         # Sanity check - at least one winner should exist if there are active players
-        if sum(winning_list) == 0 and len(in_game_players) > 0:
+        if sum(winning_list) == 0 and len(remaining_players) > 0:
             print("Warning: No winners detected despite active players")
             # Fall back to original logic
-            max_stack = max(p.stack for p in in_game_players)
+            max_stack = max(p.stack for p in remaining_players)
             winning_list = [1 if (p.is_active and not p.has_folded and p.stack == max_stack) else 0 for p in env.players]
 
-    final_rewards = [r + s for r, s in zip(cumulative_rewards, stack_changes)]
-
-    # Calcul de la récompense finale en fonction de la force de la main pour chaque agent
     for i, agent in enumerate(agent_list):
         env.current_player_seat = i
-        # Utiliser la séquence finale comme terminal_state
+        # Si le joueur n'est pas dans la partie, on ne lui donne pas de récompense
+        if not current_in_game_players_mask[i]:
+            continue
         player_state_seq = state_seq[i]
         terminal_state = player_state_seq.copy()
         is_winner = winning_list[i]
         if is_winner:
             if stack_changes[i] < 0:
                 raise Exception(f"Agent {i+1} a gagné avec un stack change négatif, ce stack change est de {stack_changes[i]}")
-            final_reward = (stack_changes[i] ** 0.5) * (1.1 - hand_strengths[i]) * 5 + 0.5
+            final_reward = (stack_changes[i] ** 0.5) * 5
         else:
-            final_reward = -(abs(stack_changes[i]) ** 0.5) * hand_strengths[i] * 5 - 0.5
+            if stack_changes[i] > 0:
+                raise Exception(f"Agent {i+1} a perdu avec un stack change positif, ce stack change est de {stack_changes[i]}")
+            final_reward = -(abs(stack_changes[i]) ** 0.5) * 5
         agent.remember(terminal_state, None, final_reward, None, True)
+        cumulative_rewards[i] += final_reward
 
     print("Récompenses finales:")
-    for i, reward in enumerate(final_rewards):
+    for i, reward in enumerate(cumulative_rewards):
         print(f"  Joueur {i+1}: {reward:.3f}")
     print(f"\nFin de l'épisode {episode}")
     print(f"Randomness: {epsilon*100:.3f}% ")
@@ -185,7 +185,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     metrics_list = []
     for agent in agent_list:
         metrics = agent.train_model()
-        metrics['reward'] = final_rewards[agent_list.index(agent)]
+        metrics['reward'] = cumulative_rewards[agent_list.index(agent)]
         metrics_list.append(metrics)
 
     # Sauvegarder les données de l'épisode et les métriques
@@ -219,7 +219,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             hand_rank, _ = env.evaluate_final_hand(player)
             final_hand_ranks.append((hand_rank, winning_list[i] == 1))
 
-    return final_rewards, metrics_list
+    return cumulative_rewards, metrics_list
 
 
 def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1000):

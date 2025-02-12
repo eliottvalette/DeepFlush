@@ -45,6 +45,10 @@ class DataCollector:
         """
         state_vector = state_info["state_vector"]
         
+        # Extraire le hand rank du vecteur d'état (indice 36-45 pour le one-hot encoding du rang)
+        hand_rank_vector = state_vector[36:46]
+        hand_rank = hand_rank_vector.index(1) if 1 in hand_rank_vector else 0
+        
         # Subdiviser le vecteur d'état (basé sur la structure dans poker_game.py)
         subdivided_state = {
             "player_cards": {
@@ -63,22 +67,20 @@ class DataCollector:
                     "suits": state_vector[47+i*17:51+i*17]
                 } for i in range(5)
             ],
-            "hand_rank": state_vector[119],
-            "game_phase": state_vector[120:125],
-            "current_max_bet": state_vector[125],
-            "player_stacks": state_vector[126:132],
-            "current_bets": state_vector[132:138],
-            "player_activity": state_vector[138:144],
-            "fold_status": state_vector[144:150],
-            "relative_positions": state_vector[150:156],
-            "available_actions": state_vector[156:161],
+            "hand_rank": hand_rank,
+            "game_phase": state_vector[47:52],
+            "current_max_bet": state_vector[52],
+            "player_stacks": state_vector[53:59],
+            "current_bets": state_vector[59:65],
+            "player_activity": state_vector[65:71],
+            "fold_status": state_vector[71:77],
+            "relative_positions": state_vector[77:82],
+            "available_actions": state_vector[82:87],
             "previous_actions": [
-                state_vector[161+i*6:167+i*6] for i in range(6)
+                state_vector[87+i*6:93+i*6] for i in range(6)
             ],
-            "win_probability": state_vector[197],
-            "pot_odds": state_vector[198],
-            "equity": state_vector[199],
-            "aggression_factor": state_vector[200]
+            "win_probability": state_vector[112],
+            "pot_odds": state_vector[113]
         }
 
         # Mettre à jour state_info avec le vecteur d'état subdivisé

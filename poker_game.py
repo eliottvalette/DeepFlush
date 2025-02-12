@@ -1249,12 +1249,12 @@ class PokerGame:
         
         Le vecteur d'état est composé des sous-vecteurs suivants :
 
-        1. Cartes du joueur (2 cartes × 17 = 34 dimensions) :
+        1. Cartes du joueur (2 cartes × (4 + 1) + 1 = 11 dimensions) :
             - Pour chaque carte :
                 - Valeur normalisée (1 dimension)
                 - Couleur one-hot (4 dimensions)
         
-        2. Cartes communes (5 cartes × 17 = 85 dimensions) :
+        2. Cartes communes (5 cartes × (4 + 1) + 1 = 26 dimensions) :
             - Pour chaque carte :
                 - Valeur normalisée (1 dimension)
                 - Couleur one-hot (4 dimensions)
@@ -1290,14 +1290,12 @@ class PokerGame:
             - Pour chaque joueur (6) :
                 - One-hot encoding de la dernière action (5 dimensions)
         
-        12. Informations stratégiques (4 dimensions) :
+        12. Informations stratégiques (2 dimensions) :
             - Probabilité de victoire préflop
             - Cotes du pot
-            - Équité estimée
-            - Facteur d'agressivité
         
         Returns:
-            torch.Tensor: Vecteur d'état de dimension 200, normalisé entre -1 et 1
+            torch.Tensor: Vecteur d'état de dimension 106, normalisé entre -1 et 1
         """
         current_player = self.players[self.current_player_seat]
         state = []
@@ -1338,12 +1336,25 @@ class PokerGame:
             state.extend([-1] * 4)   # couleur manquante
         
         # 2. Rang de la main actuelle (si assez de cartes sont visibles)
+        kicker_idx_map = {
+            HandRank.HIGH_CARD: 0,
+            HandRank.PAIR: 1,
+            HandRank.TWO_PAIR: 2,
+            HandRank.THREE_OF_A_KIND: 1,
+            HandRank.STRAIGHT: 0,
+            HandRank.FLUSH: 0,
+            HandRank.FULL_HOUSE: 0,
+            HandRank.FOUR_OF_A_KIND: 1,
+            HandRank.STRAIGHT_FLUSH: 0
+        }
         if len(current_player.cards) + len(self.community_cards) >= 5:
             hand_rank, kickers = self.evaluate_final_hand(current_player)
+            print('===kickers===', kickers)
             hand_rank_range = [-1] * len(HandRank)
             hand_rank_range[hand_rank.value] = 1
+            kicker_idx = kicker_idx_map[hand_rank]
             state.extend(hand_rank_range)                  # Tokénisation du rang
-            state.append((kickers[0]- 2) / 13)             # Normalisation de la valeur du kicker (taille = 1)    
+            state.append((kickers[kicker_idx]- 2) / 13)     # Normalisation de la valeur du kicker (taille = 1)    
             state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
         else:
             hand_rank, kickers = self.evaluate_current_hand(current_player)
@@ -1425,43 +1436,7 @@ class PokerGame:
         state.extend([val for sublist in last_actions for val in sublist])
 
         # 13 Probabilité de victoire de la main au préflop
-        hard_code_win_prob = [
-            [0.493, 0.311, 0.295, 0.279, 0.268, 0.240, 0.232, 0.224, 0.216, 0.221, 0.217, 0.212, 0.206],
-            [0.279, 0.432, 0.283, 0.269, 0.257, 0.234, 0.214, 0.205, 0.199, 0.197, 0.190, 0.184, 0.183],
-            [0.258, 0.250, 0.378, 0.263, 0.251, 0.226, 0.208, 0.192, 0.186, 0.181, 0.175, 0.171, 0.167],
-            [0.244, 0.235, 0.229, 0.334, 0.248, 0.225, 0.206, 0.187, 0.172, 0.169, 0.163, 0.160, 0.157],
-            [0.231, 0.223, 0.217, 0.215, 0.299, 0.224, 0.205, 0.189, 0.174, 0.161, 0.157, 0.152, 0.148],
-            [0.202, 0.194, 0.189, 0.187, 0.189, 0.266, 0.203, 0.189, 0.173, 0.158, 0.145, 0.143, 0.140],
-            [0.192, 0.174, 0.168, 0.166, 0.169, 0.167, 0.241, 0.191, 0.177, 0.162, 0.148, 0.135, 0.134],
-            [0.183, 0.167, 0.150, 0.149, 0.151, 0.150, 0.153, 0.217, 0.178, 0.166, 0.153, 0.140, 0.128],
-            [0.174, 0.158, 0.144, 0.131, 0.133, 0.134, 0.138, 0.142, 0.200, 0.171, 0.158, 0.145, 0.132],
-            [0.180, 0.152, 0.139, 0.127, 0.119, 0.119, 0.124, 0.129, 0.132, 0.186, 0.165, 0.154, 0.141],
-            [0.175, 0.149, 0.133, 0.123, 0.115, 0.105, 0.109, 0.114, 0.120, 0.127, 0.172, 0.147, 0.135],
-            [0.169, 0.143, 0.129, 0.119, 0.111, 0.101, 0.096, 0.099, 0.105, 0.114, 0.108, 0.163, 0.132],
-            [0.163, 0.138, 0.124, 0.113, 0.106, 0.097, 0.092, 0.086, 0.091, 0.100, 0.095, 0.089, 0.155]
-        ]
-
-        first_card, second_card = current_player.cards
-
-        # Conversion des valeurs en indices (pour obtenir des indices de 0 à 12)
-        # Ici, l'As (14) devien 0, donc on fait: index = 14 - valeur
-        i1 = 14 - first_card.value
-        i2 = 14 - second_card.value
-
-        if first_card.suit == second_card.suit:
-            # Pour les mains suited, la matrice attend que la carte de valeur la plus haute (donc ici l'indice le plus petit)
-            # soit en ligne (premier indice) et la plus faible en colonne (deuxième indice).
-            if i1 > i2:
-                i1, i2 = i2, i1  # on échange pour que i1 soit toujours le plus petit
-            hand_win_prob = hard_code_win_prob[i1][i2]
-        else:
-            # Pour offsuit, la convention est d'utiliser l'élément situé en dessous de la diagonale :
-            # donc on range les indices de manière décroissante.
-            if i1 < i2:
-                hand_win_prob = hard_code_win_prob[i2][i1]
-            else:
-                hand_win_prob = hard_code_win_prob[i1][i2]
-
+        hand_win_prob = self._evaluate_preflop_strength(current_player.cards)
         state.append(hand_win_prob)
 
         # 14. Cotes du pot
@@ -1470,7 +1445,7 @@ class PokerGame:
         state.append(pot_odds) # (taille = 1)
 
         # Avant de retourner, conversion en tableau tensor
-        state = torch.tensor(state, dtype=torch.float32)
+        state = np.array(state, dtype=np.float32)
         return state
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
@@ -1488,62 +1463,70 @@ class PokerGame:
         reward = 0.0
 
         # Capturer l'état du jeu avant de traiter l'action pour le calcul des cotes du pot
-        call_amount_before = self.current_maximum_bet - current_player.current_player_bet
-        pot_before = self.phase_pot
+        amount_to_call = self.current_maximum_bet - current_player.current_player_bet
 
         # --- Récompenses stratégiques des actions ---
         # Récompense basée sur l'action par rapport à la force de la main
-        hand_strength = self._evaluate_hand_strength(current_player)
-        pot_potential = self.phase_pot / (self.big_blind * 100)
-    
-        if action == PlayerAction.RAISE:
-            reward += 0.2 * hand_strength  # Ajuster la récompense selon la force de la main
-            if hand_strength > 0.7:
-                reward += 0.5 * pot_potential  # Bonus pour jeu agressif avec main forte
-            bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
-                
-        elif action == PlayerAction.ALL_IN:
-            reward += 0.3 * hand_strength
-            if hand_strength > 0.8:
-                reward += 1.0 * pot_potential
-            bet_amount = current_player.stack
-                
-        elif action == PlayerAction.CALL:
-            reward += 0.1 * min(hand_strength, 0.6)  # Rendements décroissants pour jeu passif
+        if self.current_phase == GamePhase.PREFLOP:
+            hand_strength = self._evaluate_preflop_strength(current_player.cards)
         
-        elif action == PlayerAction.CHECK: # Pénaliser le check si la main est forte
-            if hand_strength > 0.5:
-                reward -= 0.5 * pot_potential
-            else:
-                reward += 0.3
-
-        elif action == PlayerAction.FOLD:
-            if hand_strength < 0.2:
-                reward += 0.3  # Récompenser les bons folds
-            else:
-                reward -= 0.5  # Pénaliser les folds avec bonnes mains
+            if action == PlayerAction.RAISE:
+                if hand_strength < 0.138 : # On compare à 0.138 (1 quartile des probas préflop) pour pénaliser une raise a main faible
+                    reward -= 0.5
+                bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
             
-        # --- Bonus de position ---
-        # Bonus pour actions agressives en dernière position (bouton)
-        if current_player.seat_position == self.button_seat_position:
-            if action in [PlayerAction.RAISE, PlayerAction.ALL_IN]:
-                reward += 0.2
-        
+            if action == PlayerAction.ALL_IN:
+                if hand_strength < 0.277 : # Ce qui revient a garder uniquement QQ+ AJs+ et AKo
+                    reward -= 0.5
+                bet_amount = current_player.stack
+            
+            if action == PlayerAction.CALL:
+                if amount_to_call > self.big_blind * 3 and hand_strength < 0.210:
+                    reward -= 0.2
+            
+            if action == PlayerAction.CHECK:
+                pass # Un check n'ai theoriquement jamais mauvais
+
+            if action == PlayerAction.FOLD:
+                if hand_strength > 0.260:
+                    reward -= 0.5
+
+            # --- Malus de late position ---
+            if current_player.seat_position == self.button_seat_position:
+                if action in [PlayerAction.FOLD] and hand_strength > 0.16:
+                    reward -= 0.4
+
+        if self.current_phase not in [GamePhase.PREFLOP, GamePhase.SHOWDOWN]:
+            # Évaluer la force de la main actuelle
+            hand_rank, kickers = self.evaluate_current_hand(current_player)
+            
+            # --- Pénalités pour les actions inappropriées post-flop ---
+            
+            # Pénalité pour fold avec une main forte
+            if action == PlayerAction.FOLD:
+                if hand_rank.value >= HandRank.TWO_PAIR.value:
+                    reward -= 0.6  # Pénalité sévère pour fold avec une bonne main
+                elif hand_rank == HandRank.PAIR and kickers[0] >= 12:  # Grosse paire (Dames ou mieux)
+                    reward -= 0.4
+            
+            # Pénalité pour call/raise avec une main très faible face à beaucoup de raise
+            if (action in [PlayerAction.CALL, PlayerAction.RAISE]) and amount_to_call > self.big_blind * 3: # TODO: A Modifier avec les outs (à ajouter dans le state également)
+                if hand_rank == HandRank.HIGH_CARD:
+                    reward -= 0.5
+                elif hand_rank == HandRank.PAIR and kickers[0] < 10:  # Petite paire, inférieure à 9 (kicker 0 est égal à la hauteur de la paire)
+                    reward -= 0.3
+            
+            # Pénalité pour all-in avec une main faible
+            if action == PlayerAction.ALL_IN:
+                if hand_rank == HandRank.HIGH_CARD:
+                    reward -= 1
+                elif hand_rank == HandRank.PAIR and kickers[0] < 10:  # Petite paire, inférieure à 9 (kicker 0 est égal à la hauteur de la paire)
+                    reward -= 0.8
+
         # Traiter l'action (met à jour l'état du jeu)
         self.process_action(current_player, action, bet_amount)
 
-        # --- Évaluation des cotes du pot ---
-        if action == PlayerAction.CALL and call_amount_before > 0:
-            total_pot_after_call = pot_before + call_amount_before
-            pot_odds = call_amount_before / total_pot_after_call if total_pot_after_call > 0 else 0
-            if hand_strength > pot_odds:
-                reward += 0.3  # Call mathématiquement justifié
-            else:
-                reward -= 0.3  # Mauvais call considérant les cotes
-
         return self.get_state(), reward
-
-
 
 # ======================================================================
 # Methodes de calculs (à exporter dans un autre fichier)
@@ -1584,7 +1567,9 @@ class PokerGame:
         if pairs:
             if len(pairs) >= 2:  # Double paire
                 pairs.sort(reverse=True)
-                kicker = max(v for v in values if v not in pairs[:2])
+                # Modification ici : gérer le cas où il n'y a pas de kicker disponible
+                remaining_values = [v for v in values if v not in pairs[:2]]
+                kicker = max(remaining_values) if remaining_values else 0
                 return (HandRank.TWO_PAIR, pairs[:2] + [kicker])
             # Simple paire
             kickers = sorted([v for v in values if v != pairs[0]], reverse=True)[:3]
@@ -1612,117 +1597,51 @@ class PokerGame:
         # Si aucune combinaison, retourner la plus haute carte
         return (HandRank.HIGH_CARD, sorted(values, reverse=True)[:5])
     
-    def _evaluate_preflop_strength(self, cards) -> float:
+    def _evaluate_preflop_strength(self, cards : Tuple[Card, Card]) -> float:
         """
-        Évalue la force d'une main preflop selon des heuristiques.
-        
-        Args:
-            cards (List[Card]): Les deux cartes à évaluer
-            
-        Returns:
-            float: Force de la main entre 0 et 1
-        """
-        # Vérification de sécurité pour mains vides ou incomplètes
-        if not cards or len(cards) < 2:
-            return 0.0
-        
-        card1, card2 = cards
-        # Paires
-        if card1.value == card2.value:
-            return 0.5 + (card1.value / 28)  # Plus haute est la paire, plus fort est le score
-        
-        # Cartes assorties
-        suited = card1.suit == card2.suit
-        # Connecteurs
-        connected = abs(card1.value - card2.value) == 1
-        
-        # Score de base basé sur les valeurs des cartes
-        base_score = (card1.value + card2.value) / 28  # Normaliser par le max possible
-        
-        # Bonus pour suited et connected
-        if suited:
-            base_score += 0.1
-        if connected:
-            base_score += 0.05
-        
-        return min(base_score, 1.0)  # Garantir que le score est entre 0 et 1
+        Évalue la force d'une main preflop selon les calculs de l'algo de Monte Carlo.
 
-    def _evaluate_hand_strength(self, player) -> float:
+        quartiles : [0, 0.25, 0.5, 0.75, 1] => [0.086 0.138 0.167 0.206 0.493]
         """
-        Évalue la force relative d'une main (0 à 1) similaire à _evaluate_preflop_strength 
-        mais avec les cartes communes
+        hard_code_win_prob = [
+            [0.493, 0.311, 0.295, 0.279, 0.268, 0.240, 0.232, 0.224, 0.216, 0.221, 0.217, 0.212, 0.206],
+            [0.279, 0.432, 0.283, 0.269, 0.257, 0.234, 0.214, 0.205, 0.199, 0.197, 0.190, 0.184, 0.183],
+            [0.258, 0.250, 0.378, 0.263, 0.251, 0.226, 0.208, 0.192, 0.186, 0.181, 0.175, 0.171, 0.167],
+            [0.244, 0.235, 0.229, 0.334, 0.248, 0.225, 0.206, 0.187, 0.172, 0.169, 0.163, 0.160, 0.157],
+            [0.231, 0.223, 0.217, 0.215, 0.299, 0.224, 0.205, 0.189, 0.174, 0.161, 0.157, 0.152, 0.148],
+            [0.202, 0.194, 0.189, 0.187, 0.189, 0.266, 0.203, 0.189, 0.173, 0.158, 0.145, 0.143, 0.140],
+            [0.192, 0.174, 0.168, 0.166, 0.169, 0.167, 0.241, 0.191, 0.177, 0.162, 0.148, 0.135, 0.134],
+            [0.183, 0.167, 0.150, 0.149, 0.151, 0.150, 0.153, 0.217, 0.178, 0.166, 0.153, 0.140, 0.128],
+            [0.174, 0.158, 0.144, 0.131, 0.133, 0.134, 0.138, 0.142, 0.200, 0.171, 0.158, 0.145, 0.132],
+            [0.180, 0.152, 0.139, 0.127, 0.119, 0.119, 0.124, 0.129, 0.132, 0.186, 0.165, 0.154, 0.141],
+            [0.175, 0.149, 0.133, 0.123, 0.115, 0.105, 0.109, 0.114, 0.120, 0.127, 0.172, 0.147, 0.135],
+            [0.169, 0.143, 0.129, 0.119, 0.111, 0.101, 0.096, 0.099, 0.105, 0.114, 0.108, 0.163, 0.132],
+            [0.163, 0.138, 0.124, 0.113, 0.106, 0.097, 0.092, 0.086, 0.091, 0.100, 0.095, 0.089, 0.155]
+        ]
+
+        first_card, second_card = cards
+
+        # Conversion des valeurs en indices (pour obtenir des indices de 0 à 12)
+        # Ici, l'As (14) devien 0, donc on fait: index = 14 - valeur
+        i1 = 14 - first_card.value
+        i2 = 14 - second_card.value
+
+        if first_card.suit == second_card.suit:
+            # Pour les mains suited, la matrice attend que la carte de valeur la plus haute (donc ici l'indice le plus petit)
+            # soit en ligne (premier indice) et la plus faible en colonne (deuxième indice).
+            if i1 > i2:
+                i1, i2 = i2, i1  # on échange pour que i1 soit toujours le plus petit
+            hand_win_prob = hard_code_win_prob[i1][i2]
+        else:
+            # Pour offsuit, la convention est d'utiliser l'élément situé en dessous de la diagonale :
+            # donc on range les indices de manière décroissante.
+            if i1 < i2:
+                hand_win_prob = hard_code_win_prob[i2][i1]
+            else:
+                hand_win_prob = hard_code_win_prob[i1][i2]
+
+        return hand_win_prob
         
-        Args:
-            player (Player): Le joueur dont on évalue la main
-            
-        Returns:
-            float: Force de la main entre 0 (très faible) et 1 (très forte)
-        """
-        # Retourner 0 si le joueur a foldé ou n'a pas de cartes
-        if not player.is_active or not player.cards:
-            return 0.0
-        
-        # Au pré-flop, utiliser l'évaluation spécifique pré-flop
-        if self.current_phase == GamePhase.PREFLOP:
-            return self._evaluate_preflop_strength(player.cards)
-        
-        # Obtenir toutes les cartes disponibles (main + cartes communes)
-        all_cards = player.cards + self.community_cards
-        
-        # Évaluer la main actuelle
-        hand_rank, kickers = self.evaluate_final_hand(player)
-        base_score = hand_rank.value / len(HandRank)  # Score de base normalisé
-        
-        # Bonus/malus selon la phase de jeu et les kickers
-        phase_multiplier = {
-            GamePhase.FLOP: 0.8,   # Moins certain au flop
-            GamePhase.TURN: 0.9,   # Plus certain au turn
-            GamePhase.RIVER: 1.0,  # Certitude maximale à la river
-        }.get(self.current_phase, 1.0)
-        
-        # Calculer le score des kickers (normalisé)
-        kicker_score = sum(k / 14 for k in kickers) / len(kickers) if kickers else 0
-        
-        # Vérifier les tirages possibles
-        draw_potential = 0.0
-        
-        # Compter les cartes de chaque couleur
-        suits = [card.suit for card in all_cards]
-        suit_counts = Counter(suits)
-        
-        # Compter les cartes consécutives
-        values = sorted(set(card.value for card in all_cards))
-        
-        # Tirage couleur
-        flush_draw = any(count == 4 for count in suit_counts.values())
-        if flush_draw:
-            draw_potential += 0.15
-        
-        # Tirage quinte
-        for i in range(len(values) - 3):
-            if values[i+3] - values[i] == 3:  # 4 cartes consécutives
-                draw_potential += 0.15
-                break
-        
-        # Tirage quinte flush
-        if flush_draw and any(values[i+3] - values[i] == 3 for i in range(len(values) - 3)):
-            draw_potential += 0.1
-        
-        # Le potentiel de tirage diminue à mesure qu'on avance dans les phases
-        draw_potential *= {
-            GamePhase.FLOP: 1.0,
-            GamePhase.TURN: 0.5,
-            GamePhase.RIVER: 0.0,
-        }.get(self.current_phase, 0.0)
-        
-        # Calculer le score final
-        final_score = (
-            base_score * 0.7 +      # Score de base (70% du score)
-            kicker_score * 0.2 +    # Score des kickers (20% du score)
-            draw_potential          # Potentiel de tirage (jusqu'à 10% supplémentaires)
-        ) * phase_multiplier
-        
-        return min(1.0, max(0.0, final_score))  # Garantir un score entre 0 et 1
     
     def _evaluate_equity(self, player) -> float:
         """
@@ -1785,10 +1704,6 @@ class PokerGame:
         
         # Clip to [0, 1]
         return np.clip(equity, 0.0, 1.0)
-    
-
-
-
 
 
 # ======================================================================
@@ -1938,7 +1853,7 @@ class PokerGame:
         
         # Add main pot if it exists
         if self.phase_pot > 0:
-            total_pots.append(("Main Pot", self.phase_pot))
+            total_pots.append(("Phase Pot", self.phase_pot))
         
         # Add side pots if they exist
         for i, pot in enumerate(self.side_pots):
@@ -2124,14 +2039,30 @@ class PokerGame:
                         state = self.get_state()
                         print('\n=== État actuel du jeu ===')
                         
+                        # Affichage complet du state pour vérifier toutes les informations (par ex. si les cartes sont suited ou non)
+                        print("\n[DEBUG] Contenu complet du state:")
+                        print(state.tolist())
+                        
                         # 1. Cartes du joueur
                         print("\n1. Cartes du joueur:")
+                        cards_suits = []
                         for i in range(2):
                             base_idx = i * 5
                             valeur = state[base_idx] * 14 + 2
-                            couleur_idx = state[base_idx+1:base_idx+5].tolist().index(1) if 1 in state[base_idx+1:base_idx+5] else -1
+                            suit_vector = state[base_idx+1:base_idx+5].tolist()
+                            couleur_idx = suit_vector.index(1) if 1 in suit_vector else -1
                             couleur = ["♠", "♥", "♦", "♣"][couleur_idx] if couleur_idx != -1 else "?"
+                            cards_suits.append(couleur)
                             print(f"Carte {i+1}: {int(valeur)}{couleur}")
+                        
+                        # Vérification de si les cartes sont suited
+                        if len(cards_suits) == 2:
+                            if cards_suits[0] == cards_suits[1]:
+                                print("=> Les cartes du joueur sont SUITED.")
+                            else:
+                                print("=> Les cartes du joueur ne sont PAS suited.")
+                        else:
+                            print("=> Informations insuffisantes pour déterminer le suited.")
                         
                         # 2. Cartes communes
                         print("\n2. Cartes communes:")
@@ -2139,23 +2070,24 @@ class PokerGame:
                             base_idx = 10 + (i * 5)
                             if state[base_idx] != -1:
                                 valeur = state[base_idx] * 14 + 2
-                                couleur_idx = state[base_idx+1:base_idx+5].tolist().index(1) if 1 in state[base_idx+1:base_idx+5] else -1
+                                suit_vector = state[base_idx+1:base_idx+5].tolist()
+                                couleur_idx = suit_vector.index(1) if 1 in suit_vector else -1
                                 couleur = ["♠", "♥", "♦", "♣"][couleur_idx] if couleur_idx != -1 else "?"
                                 print(f"Carte {i+1}: {int(valeur)}{couleur}")
                         
                         # 3. Information sur la main
                         print("\n3. Information sur la main:")
-                        hand_rank_idx = state[35:45].tolist().index(1) if 1 in state[35:45] else -1
+                        hand_rank_idx = state[35:45].tolist().index(1) if 1 in state[35:45].tolist() else -1
                         print(f"Rang de la main: {HandRank(hand_rank_idx).name if hand_rank_idx != -1 else 'Inconnu'}")
                         print(f"Kicker: {int(state[45] * 13 + 2)}")
                         print(f"Rang normalisé: {state[46]:.2f}")
-
+                        
                         # 4. Phase de jeu
                         print("\n4. Phase de jeu:")
-                        phase_idx = state[47:52].tolist().index(1) if 1 in state[47:52] else -1
+                        phase_idx = state[47:52].tolist().index(1) if 1 in state[47:52].tolist() else -1
                         phases = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"]
                         print(f"Phase actuelle: {phases[phase_idx] if phase_idx != -1 else 'Inconnu'}")
-
+                        
                         # 5-8. Informations sur les joueurs
                         print("\n5-8. Informations sur les joueurs:")
                         for i in range(6):
@@ -2163,35 +2095,35 @@ class PokerGame:
                             print(f"Stack: {state[53+i]:.2f}")
                             print(f"Mise actuelle: {state[59+i]:.2f}")
                             print(f"État: {'Actif' if state[65+i] == 1 else 'Inactif/Fold'}")
-
+                        
                         # 9. Position relative
                         print("\n9. Position relative:")
-                        pos_idx = state[71:77].tolist().index(1) if 1 in state[71:77] else -1
+                        pos_idx = state[71:77].tolist().index(1) if 1 in state[71:77].tolist() else -1
                         positions = ["SB", "BB", "UTG", "HJ", "CO", "BTN"]
                         print(f"Position: {positions[pos_idx] if pos_idx != -1 else 'Inconnu'}")
-
+                        
                         # 10. Actions disponibles
                         print("\n10. Actions disponibles:")
                         actions = ["FOLD", "CHECK", "CALL", "RAISE", "ALL_IN"]
                         for i, action in enumerate(actions):
                             print(f"{action}: {'Disponible' if state[77+i] == 1 else 'Indisponible'}")
-
+                        
                         # 11. Historique des actions
                         print("\n11. Historique des dernières actions:")
                         for i in range(6):
                             base_idx = 82 + (i * 5)
                             action_vector = state[base_idx:base_idx+5]
-                            action_idx = action_vector.tolist().index(1) if 1 in action_vector else -1
+                            action_idx = action_vector.tolist().index(1) if 1 in action_vector.tolist() else -1
                             if action_idx != -1:
                                 print(f"Joueur {i+1}: {actions[action_idx]}")
                             else:
                                 print(f"Joueur {i+1}: Aucune action")
-
+                        
                         # 12. Informations stratégiques
                         print("\n12. Informations stratégiques:")
                         print(f"Probabilité de victoire préflop: {state[112]:.3f}")
                         print(f"Cotes du pot: {state[113]:.3f}")
-
+                        
                         print('\n=== Fin de l\'état ===\n')
                 
                 self.handle_input(event)
