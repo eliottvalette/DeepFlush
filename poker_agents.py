@@ -122,22 +122,15 @@ class PokerAgent:
             reverse_action_map = {v: k for k, v in action_map.items()}
             return reverse_action_map[chosen_index]
 
-    def remember(self, state, action, reward, next_state, done):
+    def remember(self, state_seq, action, reward, next_state, done):
         """
         Stocke une transition dans la mémoire de replay
-        :param state: État actuel
+        :param state_seq: Séquence d'états
         :param action: Action effectuée
         :param reward: Récompense reçue
         :param next_state: État suivant
         :param done: True si l'épisode est terminé
         """
-        if action is not None and not isinstance(action, PlayerAction):
-            raise TypeError(f"action doit être None ou de type PlayerAction (reçu: {type(action)})")
-        if not isinstance(reward, (int, float)):
-            raise TypeError(f"reward doit être un nombre (reçu: {type(reward)})")
-        if not isinstance(done, bool):
-            raise TypeError(f"done doit être un booléen (reçu: {type(done)})")
-
         action_map = {
             PlayerAction.FOLD: 0,
             PlayerAction.CHECK: 1,
@@ -147,18 +140,20 @@ class PokerAgent:
             None: 0
         }
         numerical_action = action_map[action] if action is not None else action_map[None]
-        self.memory.append((state, numerical_action, reward, next_state, done))
+        self.memory.append((state_seq, numerical_action, reward, next_state, done))
 
     def train_model(self):
         """
         Entraîne le modèle sur un batch de transitions.
         Les états sont des séquences (shape: [n, 201]).
         """
-        if len(self.memory) < 128:
+        if len(self.memory) < 32:
+            print('Not enough data to train :', len(self.memory))
+            print('self.memory', self.memory)
             return {'loss': 0, 'entropy': 0, 'value_loss': 0, 'std': 0, 'learning_rate': self.learning_rate}
 
         try:
-            batch = random.sample(self.memory, 128)
+            batch = random.sample(self.memory, 32)
             states, actions, rewards, next_states, dones = zip(*batch)
 
             # Trouver la longueur maximale des séquences dans le batch

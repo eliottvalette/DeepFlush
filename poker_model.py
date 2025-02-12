@@ -1,4 +1,4 @@
-# poker_model_new.py
+# poker_model.py
 
 import torch
 import torch.nn as nn
@@ -23,11 +23,11 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:seq_len]
 
 class PokerTransformerModel(nn.Module):
-    def __init__(self, input_dim=201, output_dim=5, nhead=4, num_layers=2, dim_feedforward=512):
+    def __init__(self, input_dim=116, output_dim=5, nhead=4, num_layers=2, dim_feedforward=512):
         super().__init__()
         
         # Embedding dimension must be divisible by number of heads
-        d_model = nhead * 32  # 128 if nhead=4
+        d_model = nhead * 8  # 32 if nhead=4
         
         self.input_projection = nn.Linear(input_dim, d_model)
         
@@ -63,6 +63,7 @@ class PokerTransformerModel(nn.Module):
 
     def forward(self, x):
         # x shape: (batch_size, seq_len, input_dim)
+        print('Shape de l input', x.shape)
         
         # Project input to transformer dimension
         x = self.input_projection(x)

@@ -24,7 +24,7 @@ for i in range(6):
         action_size=5,  # [fold, check, call, raise, all-in]
         gamma=GAMMA,
         learning_rate=ALPHA,
-        load_model=True,
+        load_model=False,
         load_path=f"saved_models/poker_agent_{list_names[i]}.pth"
     )
     agent.name = list_names[i]
@@ -32,4 +32,4 @@ for i in range(6):
     agent_list.append(agent)
 
 # Démarrer l'entraînement
-main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1000)
+main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1)

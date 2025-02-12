@@ -20,11 +20,14 @@ ALPHA = 0.001
 EPS_DECAY = 0.9995
 START_EPS = 0.999
 STATE_SIZE = 116
-RENDERING = False
-FPS = 1
 
-SAVE_INTERVAL = 250
-PLOT_INTERVAL = 500
+# Paramètres de visualisation
+RENDERING = True      # Active/désactive l'affichage graphique
+FPS = 3                # Images par seconde pour le rendu
+
+# Intervalles de sauvegarde
+SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
+PLOT_INTERVAL = 500    # Fréquence de mise à jour des graphiques
 
 def set_seed(seed=42):
     """
@@ -35,26 +38,33 @@ def set_seed(seed=42):
     """
     rd.seed(seed)
     np.random.seed(seed)
-    
     torch.manual_seed(seed)
+    
     if torch.backends.mps.is_available():
         torch.mps.manual_seed(seed)
     
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector):
+def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector) -> Tuple[List[float], List[dict]]:
     """
-    Exécute un épisode complet du jeu de poker en utilisant une séquence d'états.
-    Chaque agent reçoit en entrée la séquence complète des états depuis le début de l'épisode.
+    Exécute un épisode complet du jeu de poker.
     
-    Returns:
-        tuple: (récompenses finales, liste des gagnants, actions prises,
-                force des mains, métriques d'entraînement)
-    """
+    Args:
+        env (PokerGame): L'environnement de jeu
+        agent_list (List[PokerAgent]): Liste des agents participants
+        epsilon (float): Paramètre d'exploration
+        rendering (bool): Active/désactive le rendu graphique
+        episode (int): Numéro de l'épisode en cours
+        render_every (int): Fréquence de mise à jour du rendu
+        data_collector (DataCollector): Collecteur de données pour la visualisation
 
+    Returns:
+        Tuple[List[float], List[dict]]: Récompenses finales et métriques d'entraînement
+    """
+    # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 3: # Evite pour le moment les Heads-up interminables
+    if len(players_that_can_play) < 3:  # Évite les heads-up
         env.reset()
     else:
         env.start_new_hand()
@@ -69,20 +79,19 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Stockage des actions par agent
     actions_taken = {f"Agent {i+1}": [] for i in range(len(agent_list))}
-    hand_strengths = [0] * len(agent_list)
 
     # --- IMPORTANT : INITIALISER LA SÉQUENCE D'ÉTATS ---
     # Au lieu d'un simple vecteur, on construit ici une séquence d'états, chaque séquence est spécifique à un agent
     state_seq = [[] for _ in range(len(agent_list))]
-    initial_state = env.get_state()  # état initial (vecteur de dimension 201)
+    initial_state = env.get_state()  # état initial (vecteur de dimension 116)
     for i, agent in enumerate(agent_list):
         state_seq[i].append(initial_state)
     
     # Boucle principale du jeu
     while env.current_phase != GamePhase.SHOWDOWN:
         # Pour éviter les boucles infinies
-        if len(actions_taken[f"Agent {env.current_player_seat + 1}"]) > 100:
-            raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 100 actions")
+        if len(actions_taken[f"Agent {env.current_player_seat + 1}"]) > 25:
+            raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 25 actions")
         
         current_player = env.players[env.current_player_seat]
         current_agent = agent_list[env.current_player_seat]
@@ -94,9 +103,11 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
         # --- Utiliser la séquence d'états accumulée comme entrée ---
         player_state_seq = state_seq[env.current_player_seat]
-        # Capture de l'état avant l'action, c'est celui que le modèle reçoit
-        state_for_decision = player_state_seq[-1].copy()
+        
+        # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         action_chosen = current_agent.get_action(player_state_seq, epsilon, valid_actions)
+        print('Nombre d\'états dans la séquence:', len(player_state_seq))
+        print('Forme de chaque état:', np.array(player_state_seq[0]).shape)
         
         # Exécuter l'action dans l'environnement
         next_state, reward = env.step(action_chosen)
@@ -105,16 +116,17 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         state_seq[env.current_player_seat].append(next_state)
         
-        # Stocker l'expérience : on enregistre une copie de la séquence courante
+        # Stocker l'expérience : on enregistre une copie de la séquence couranteii
         current_agent.remember(player_state_seq.copy(), action_chosen, reward, next_state, env.current_phase == GamePhase.SHOWDOWN)
         actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
         
-        # Stocker l'état utilisé pour prendre l'action avec des informations supplémentaires
+        # Stocker l'état actuel pour la collecte des métriques
+        current_state = player_state_seq[-1].copy()
         state_info = {
             "player": current_player.name,
             "phase": env.current_phase.value,
             "action": action_chosen.value if action_chosen else None,
-            "state_vector": state_for_decision.tolist()  # Utilisation de l'état pré-action
+            "state_vector": current_state.tolist()  # Utilisation de l'état pré-action
         }
         data_collector.add_state(state_info)
         
@@ -135,116 +147,133 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                     env.clock.tick(FPS)
                     current_time = pygame.time.get_ticks()
 
-    # Calcul des récompenses finales basées sur les changements de stack
+    # Calcul des récompenses finales
+    print("\n=== Résultats de l'épisode ===")
+    
+    # Calculer les changements de stack pour chaque joueur
     current_in_game_players_mask = [p.is_active for p in env.players] 
     final_stacks = [player.stack for player in env.players]
-    stack_changes = [np.clip((final - initial) / env.starting_stack, -1.0, 1.0)
-                     for final, initial in zip(final_stacks, initial_stacks)]
+    stack_changes = [
+        np.clip((final - initial) / env.starting_stack, -1.0, 1.0)
+        for final, initial in zip(final_stacks, initial_stacks)
+    ]
     
+    # Déterminer les gagnants
     remaining_players = [p for p in env.players if p.is_active and not p.has_folded]
+    
     if len(remaining_players) == 1:
+        # Cas où un seul joueur reste (les autres ont fold)
         winning_list = [1 if (p.is_active and not p.has_folded) else 0 for p in env.players]
     else:
-        # Determine les gagnants en fonction des changements de stack 1 si gagant, 0 si perdu, -1 si pas de changement
+        # Cas normal - déterminer les gagnants par les changements de stack
         winning_list = [1 if change > 0 else 0 for change in stack_changes] # TODO: Arréter de dire que les inactifs (dès le debut de la main) sont des perdants (affecte uniquement les plots et non l'entrainement des modèles)
         
-        # Sanity check - at least one winner should exist if there are active players
-        if sum(winning_list) == 0 and len(remaining_players) > 0:
-            print("Warning: No winners detected despite active players")
-            # Fall back to original logic
+        # Vérification de cohérence - au moins un gagnant doit exister
+        if sum(winning_list) == 0 and remaining_players:
+            print("Warning: Aucun gagnant détecté malgré des joueurs actifs")
             max_stack = max(p.stack for p in remaining_players)
-            winning_list = [1 if (p.is_active and not p.has_folded and p.stack == max_stack) else 0 for p in env.players]
+            winning_list = [
+                1 if (p.is_active and not p.has_folded and p.stack == max_stack) else 0 
+                for p in env.players
+            ]
 
-    # Calculate and store final rewards
+    # Attribution des récompenses finales
     for i, agent in enumerate(agent_list):
-        env.current_player_seat = i
-        # Si le joueur n'est pas dans la partie, on ne lui donne pas de récompense
         if not current_in_game_players_mask[i]:
-            continue
+            continue  # Ignorer les joueurs inactifs
+            
+        env.current_player_seat = i
         player_state_seq = state_seq[i]
         terminal_state = player_state_seq.copy()
         is_winner = winning_list[i]
+
+        # Calcul de la récompense finale
         if is_winner:
             if stack_changes[i] < 0:
-                raise Exception(f"Agent {i+1} a gagné avec un stack change négatif, ce stack change est de {stack_changes[i]}")
+                raise Exception(f"Agent {i+1} a gagné avec un stack change négatif: {stack_changes[i]}")
             final_reward = (stack_changes[i] ** 0.5) * 5
         else:
             if stack_changes[i] > 0:
-                raise Exception(f"Agent {i+1} a perdu avec un stack change positif, ce stack change est de {stack_changes[i]}")
+                raise Exception(f"Agent {i+1} a perdu avec un stack change positif: {stack_changes[i]}")
             final_reward = -(abs(stack_changes[i]) ** 0.5) * 5
-
-            # Augmentation de la pénalité lourdement si le joueur est ruiné
-            if current_player.stack <= 10:
+            
+            # Pénalité supplémentaire si le joueur est presque ruiné
+            if env.players[i].stack <= 10:
                 final_reward -= 2
+                
+        # Enregistrer l'expérience finale
         agent.remember(terminal_state, None, final_reward, None, True)
         cumulative_rewards[i] += final_reward
 
-    print("Récompenses finales:")
+    # Affichage des résultats
+    print("\nRécompenses finales:")
     for i, reward in enumerate(cumulative_rewards):
         print(f"  Joueur {i+1}: {reward:.3f}")
     print(f"\nFin de l'épisode {episode}")
-    print(f"Randomness: {epsilon*100:.3f}% ")
+    print(f"Randomness: {epsilon*100:.3f}%")
     
-    # Entraîner les agents et récupérer les métriques
+    # Entraînement et collecte des métriques
     metrics_list = []
     for agent in agent_list:
         metrics = agent.train_model()
         metrics['reward'] = cumulative_rewards[agent_list.index(agent)]
         metrics_list.append(metrics)
 
-    # Sauvegarder les données de l'épisode et les métriques
+    # Sauvegarde des données
     data_collector.add_metrics(metrics_list)
     data_collector.save_episode(episode)
 
+    # Gestion du rendu graphique final
     if rendering and (episode % render_every == 0):
-        env._draw()
-        pygame.display.flip()
-        if env.pygame_winner_info:
-            current_time = pygame.time.get_ticks()
-            while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit()
-                        return
-                env._draw()
-                pygame.display.flip()
-                env.clock.tick(FPS)
-                current_time = pygame.time.get_ticks()
-
-    # Collecter les hand ranks finaux et les résultats
-    final_hand_ranks = []
-    for i, player in enumerate(env.players):
-        if not player.cards:  # Si le joueur n'a pas de cartes
-            final_hand_ranks.append((HandRank.HIGH_CARD, False))
-        elif player.has_folded:
-            hand_rank, _ = env.evaluate_current_hand(player)
-            final_hand_ranks.append((hand_rank, False))
-        else:
-            hand_rank, _ = env.evaluate_final_hand(player)
-            final_hand_ranks.append((hand_rank, winning_list[i] == 1))
+        _handle_final_rendering(env)
 
     return cumulative_rewards, metrics_list
 
+def _handle_final_rendering(env):
+    """
+    Gère l'affichage final de l'épisode, incluant l'information du gagnant.
+    
+    Args:
+        env (PokerGame): L'environnement de jeu
+    """
+    env._draw()
+    pygame.display.flip()
+    
+    if env.pygame_winner_info:
+        current_time = pygame.time.get_ticks()
+        while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
+            env._draw()
+            pygame.display.flip()
+            env.clock.tick(FPS)
+            current_time = pygame.time.get_ticks()
 
-def main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1000):
+def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES, 
+                      rendering: bool = RENDERING, render_every: int = 1000):
     """
     Boucle principale d'entraînement des agents.
     
     Args:
         agent_list (List[PokerAgent]): Liste des agents à entraîner
         episodes (int): Nombre total d'épisodes d'entraînement
-        rendering (bool): Active ou désactive le rendu graphique
+        rendering (bool): Active/désactive le rendu graphique
         render_every (int): Fréquence de mise à jour du rendu graphique
     """
-    # Initialiser les historiques
-    metrics_history = {}  # Historique pour les métriques d'entraînement
-    
-    # Initialiser l'environnement avec la liste des noms des joueurs
+    # Initialisation des historiques et de l'environnement
+    metrics_history = {}
     list_names = [agent.name for agent in agent_list]
     env = PokerGame(list_names)
     
-    # Initialiser le collecteur de données et supprimer les JSON existants dans viz_json
-    data_collector = DataCollector(save_interval=SAVE_INTERVAL, plot_interval=PLOT_INTERVAL, start_epsilon=START_EPS, epsilon_decay=EPS_DECAY)
+    # Configuration du collecteur de données
+    data_collector = DataCollector(
+        save_interval=SAVE_INTERVAL,
+        plot_interval=PLOT_INTERVAL,
+        start_epsilon=START_EPS,
+        epsilon_decay=EPS_DECAY
+    )
 
     # Créer l'environnement de jeu
     for i, agent in enumerate(agent_list):
