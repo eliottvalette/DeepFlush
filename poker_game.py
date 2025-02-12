@@ -1345,11 +1345,11 @@ class PokerGame:
             HandRank.FLUSH: 0,
             HandRank.FULL_HOUSE: 0,
             HandRank.FOUR_OF_A_KIND: 1,
-            HandRank.STRAIGHT_FLUSH: 0
+            HandRank.STRAIGHT_FLUSH: 0,
+            HandRank.ROYAL_FLUSH: 0
         }
         if len(current_player.cards) + len(self.community_cards) >= 5:
             hand_rank, kickers = self.evaluate_final_hand(current_player)
-            print('===kickers===', kickers)
             hand_rank_range = [-1] * len(HandRank)
             hand_rank_range[hand_rank.value] = 1
             kicker_idx = kicker_idx_map[hand_rank]

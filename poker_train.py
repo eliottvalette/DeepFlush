@@ -18,7 +18,7 @@ EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9994
-START_EPS = 0.5
+START_EPS = 1.0
 STATE_SIZE = 114
 RENDERING = False
 FPS = 1
@@ -54,11 +54,10 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     """
 
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 2:
+    if len(players_that_can_play) < 3: # Evite pour le moment les Heads-up interminables
         env.reset()
     else:
         env.start_new_hand()
-    current_in_game_players = [p for p in env.players if p.is_active]
     
     # Synchroniser les noms et statuts humains entre l'environnement et les agents
     for i, agent in enumerate(agent_list):
@@ -172,6 +171,10 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             if stack_changes[i] > 0:
                 raise Exception(f"Agent {i+1} a perdu avec un stack change positif, ce stack change est de {stack_changes[i]}")
             final_reward = -(abs(stack_changes[i]) ** 0.5) * 5
+
+            # Augmentation de la pénalité lourdement si le joueur est ruiné
+            if current_player.stack <= 10:
+                final_reward -= 2
         agent.remember(terminal_state, None, final_reward, None, True)
         cumulative_rewards[i] += final_reward
 

@@ -45,42 +45,47 @@ class DataCollector:
         """
         state_vector = state_info["state_vector"]
         
-        # Extraire le hand rank du vecteur d'état (indice 36-45 pour le one-hot encoding du rang)
-        hand_rank_vector = state_vector[36:46]
+        # Extraire le hand rank du vecteur d'état (indice 35-44 pour le one-hot encoding du rang)
+        hand_rank_vector = state_vector[35:45]
         hand_rank = hand_rank_vector.index(1) if 1 in hand_rank_vector else 0
         
-        # Subdiviser le vecteur d'état (basé sur la structure dans poker_game.py)
+        # Subdiviser le vecteur d'état (basé sur la nouvelle structure)
         subdivided_state = {
-            "player_cards": {
-                "card1": {
-                    "values": state_vector[0:13],
-                    "suits": state_vector[13:17]
+            "player_cards": [
+                {
+                    "value": state_vector[0],  # Valeur normalisée
+                    "suit": state_vector[1:5]  # One-hot encoding de la couleur
                 },
-                "card2": {
-                    "values": state_vector[17:30],
-                    "suits": state_vector[30:34]
+                {
+                    "value": state_vector[5],  # Valeur normalisée
+                    "suit": state_vector[6:10]  # One-hot encoding de la couleur
                 }
-            },
+            ],
             "community_cards": [
                 {
-                    "values": state_vector[34+i*17:47+i*17],
-                    "suits": state_vector[47+i*17:51+i*17]
+                    "value": state_vector[10 + i*5],  # Valeur normalisée
+                    "suit": state_vector[11 + i*5:15 + i*5]  # One-hot encoding de la couleur
                 } for i in range(5)
             ],
-            "hand_rank": hand_rank,
-            "game_phase": state_vector[47:52],
-            "current_max_bet": state_vector[52],
-            "player_stacks": state_vector[53:59],
-            "current_bets": state_vector[59:65],
-            "player_activity": state_vector[65:71],
-            "fold_status": state_vector[71:77],
-            "relative_positions": state_vector[77:82],
-            "available_actions": state_vector[82:87],
+            "hand_info": {
+                "rank": hand_rank,
+                "kicker": state_vector[45],  # Valeur du kicker normalisée
+                "normalized_rank": state_vector[46]  # Rang normalisé
+            },
+            "game_phase": state_vector[47:52],  # One-hot encoding de la phase
+            "current_max_bet": state_vector[52],  # Mise maximale normalisée
+            "player_stacks": state_vector[53:59],  # Stacks normalisés
+            "current_bets": state_vector[59:65],  # Mises actuelles normalisées
+            "player_activity": state_vector[65:71],  # État des joueurs (actif/inactif)
+            "relative_positions": state_vector[71:77],  # Position relative one-hot
+            "available_actions": state_vector[77:82],  # Actions disponibles
             "previous_actions": [
-                state_vector[87+i*6:93+i*6] for i in range(6)
+                state_vector[82+i*5:87+i*5] for i in range(6)  # One-hot encoding des actions précédentes
             ],
-            "win_probability": state_vector[112],
-            "pot_odds": state_vector[113]
+            "strategic_info": {
+                "preflop_win_prob": state_vector[112],  # Probabilité de victoire préflop
+                "pot_odds": state_vector[113]  # Cotes du pot
+            }
         }
 
         # Mettre à jour state_info avec le vecteur d'état subdivisé
@@ -626,22 +631,37 @@ class Visualizer:
                     
                 # Obtenir les cartes du joueur
                 first_state = player_states[0]
-                card1_values = first_state["state_vector"]["player_cards"]["card1"]["values"]
-                card2_values = first_state["state_vector"]["player_cards"]["card2"]["values"]
-                card1_suits = first_state["state_vector"]["player_cards"]["card1"]["suits"]
-                card2_suits = first_state["state_vector"]["player_cards"]["card2"]["suits"]
+                state_vector = first_state["state_vector"]
                 
+                # Get player cards info
+                player_cards = state_vector["player_cards"]
+                
+                # Get first card value and suit
+                card1 = player_cards[0]
+                card1_value = int(card1["value"] * 14 + 2)  # Denormalize value
+                card1_suit = card1["suit"].index(1) if 1 in card1["suit"] else -1
+                
+                # Get second card value and suit
+                card2 = player_cards[1]  
+                card2_value = int(card2["value"] * 14 + 2)  # Denormalize value
+                card2_suit = card2["suit"].index(1) if 1 in card2["suit"] else -1
+                
+                if card1_value < 2 or card2_value < 2:
+                    continue
+                    
                 try:
-                    card1_idx = card1_values.index(1.0) if 1.0 in card1_values else -1
-                    card2_idx = card2_values.index(1.0) if 1.0 in card2_values else -1
+                    # Convert to 0-12 index (2->0, A->12)
+                    card1_idx = card1_value - 2
+                    card2_idx = card2_value - 2
                     
                     if card1_idx != -1 and card2_idx != -1:
                         # Déterminer si la main a gagné
                         final_state = episode[-1]
-                        won = final_state["state_vector"]["player_stacks"][i] > 1.0
+                        final_stacks = final_state["state_vector"]["player_stacks"]
+                        won = final_stacks[i] > 1.0  # Check if stack increased
                         
                         # Check if suited
-                        is_suited = any(s1 == s2 == 1.0 for s1, s2 in zip(card1_suits, card2_suits))
+                        is_suited = card1_suit == card2_suit
                         
                         # For suited hands, put in upper triangle
                         # For offsuit hands, put in lower triangle
