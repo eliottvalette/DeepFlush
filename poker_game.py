@@ -1293,6 +1293,10 @@ class PokerGame:
         12. Informations stratégiques (2 dimensions) :
             - Probabilité de victoire préflop
             - Cotes du pot
+
+        13. Potentiel de quinte et de couleur (2 dimensions) :
+            - Potentiel de quinte
+            - Potentiel de couleur
         
         Returns:
             torch.Tensor: Vecteur d'état de dimension 106, normalisé entre -1 et 1
@@ -1354,7 +1358,7 @@ class PokerGame:
             hand_rank_range[hand_rank.value] = 1
             kicker_idx = kicker_idx_map[hand_rank]
             state.extend(hand_rank_range)                  # Tokénisation du rang
-            state.append((kickers[kicker_idx]- 2) / 13)     # Normalisation de la valeur du kicker (taille = 1)    
+            state.append((kickers[kicker_idx]- 2) / 13)    # Normalisation de la valeur du kicker (taille = 1)    
             state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
         else:
             hand_rank, kickers = self.evaluate_current_hand(current_player)
@@ -1443,6 +1447,11 @@ class PokerGame:
         call_amount = self.current_maximum_bet - current_player.current_player_bet
         pot_odds = call_amount / (self.phase_pot + call_amount) if (self.phase_pot + call_amount) > 0 else 0
         state.append(pot_odds) # (taille = 1)
+
+        # 15. Potentiel de quinte et de couleur
+        straight_draw, flush_draw = self.compute_hand_draw_potential(current_player)
+        state.append(straight_draw)
+        state.append(flush_draw)
 
         # Avant de retourner, conversion en tableau tensor
         state = np.array(state, dtype=np.float32)
@@ -1716,73 +1725,73 @@ class PokerGame:
         return hand_win_prob
         
     
-    def _evaluate_equity(self, player) -> float:
+    def compute_hand_draw_potential(self, player) -> float:
         """
-        Calcule l'équité au pot pour la main d'un joueur.
-        Prend en compte la position, les cotes et la phase de jeu.
+        Calcule un heuristique simple du potentiel d’amélioration (draw potential)
+        à partir des cartes du joueur et les community cards.
         
-        Args:
-            player (Player): Le joueur dont on évalue l'équité
-            
-        Returns:
-            float: Équité entre 0 et 1
+        Pour un tirage quinte :
+          - Si vous avez 4 cartes consécutives, on donne par exemple 0.8 (très fort draw)
+          - 3 cartes consécutives donnent 0.4, 2 cartes seulement 0.1
+          
+        Pour un tirage couleur :
+          - Si vous avez 4 cartes d'une même couleur, cela vaut 0.8, 3 cartes 0.4, 2 cartes 0.1.
+        
+        On retourne ici la valeur maximale (parmi les deux) comme indicateur.
+        Vous pouvez bien sûr ajuster ou combiner différemment ces deux critères.
         """
-        # Return 0 equity if player has folded or has no cards
-        if not player.is_active or not player.cards:
-            return 0.0
-        
-        # Get base equity from hand strength
-        hand_strength = self._evaluate_hand_strength(player)
-        
-        # Count active players
-        active_players = [p for p in self.players if p.is_active]
-        num_active = len(active_players)
-        if num_active <= 1:
-            return 1.0  # Only player left
-        
-        # Position multiplier (better position = higher equity)
-        # Calculate relative position from button (0 = button, 1 = SB, 2 = BB)
-        relative_pos = (player.seat_position - self.button_seat_position) % self.num_players
-        position_multiplier = 1.0 + (0.1 * (self.num_players - relative_pos) / self.num_players)
-        
-        # Pot odds consideration
-        total_pot = self.phase_pot + sum(p.current_player_bet for p in self.players)
-        call_amount = self.current_maximum_bet - player.current_player_bet
-        if call_amount > 0 and total_pot > 0:
-            pot_odds = call_amount / (total_pot + call_amount)
-            # Adjust equity based on pot odds
-            if hand_strength > pot_odds:
-                equity_multiplier = 1.2  # Good pot odds
+        # Combine les cartes du joueur et les community cards
+        cards = player.cards + self.community_cards
+
+        # Si on est au pré-flop, renvoyer 0.0 car on ne peut pas les informations de force de main preflop sont données dans d'autres states
+        if len(cards) <= 2:
+            return 0.0, 0.0
+
+        # --- Potentiel pour la quinte (straight draw) ---
+        # Récupérer l'ensemble des valeurs uniques et les trier
+        values = sorted(set(card.value for card in cards))
+        max_run = 1
+        current_run = 1
+        for i in range(1, len(values)):
+            if values[i] == values[i-1] + 1: # Si la valeur actuelle est égale à la valeur précédente + 1, on incrémente le compteur
+                current_run += 1
             else:
-                equity_multiplier = 0.8  # Poor pot odds
+                if current_run > max_run:
+                    max_run = current_run # On met à jour la longueur de la quinte la plus longue
+                current_run = 1
+        max_run = max(max_run, current_run) # On a donc la longueur de la quinte la plus longue
+        
+        if max_run >= 5:
+            straight_draw = 1.0 
+        elif max_run == 4:
+            straight_draw = 0.8
+        elif max_run == 3:
+            straight_draw = 0.4
+        elif max_run == 2:
+            straight_draw = 0.1
         else:
-            equity_multiplier = 1.0
-        
-        # Phase multiplier (later streets = more accurate equity)
-        phase_multipliers = {
-            GamePhase.PREFLOP: 0.7,  # Less certain
-            GamePhase.FLOP: 0.8,
-            GamePhase.TURN: 0.9,
-            GamePhase.RIVER: 1.0     # Most certain
-        }
-        phase_multiplier = phase_multipliers.get(self.current_phase, 1.0)
-        
-        # Calculate final equity
-        equity = (
-            hand_strength 
-            * position_multiplier 
-            * equity_multiplier 
-            * phase_multiplier
-        )
-        
-        # Clip to [0, 1]
-        return np.clip(equity, 0.0, 1.0)
+            straight_draw = 0.0
+
+        # --- Potentiel pour la couleur (flush draw) ---
+        # Récupérer l'ensemble des couleurs uniques et les trier
+        suit_counts = Counter(card.suit for card in cards)
+        flush_draw = 0.0
+        for count in suit_counts.values():
+            if count >= 5:
+                flush_draw = 1.0  # Couleur faite
+            elif count == 4:
+                flush_draw = max(flush_draw, 0.8)
+            elif count == 3:
+                flush_draw = max(flush_draw, 0.4)
+            elif count == 2:
+                flush_draw = max(flush_draw, 0.1)
+
+        return straight_draw, flush_draw
 
 
 # ======================================================================
 # Interface graphique et affichage
 # ======================================================================
-
 
     def _draw_card(self, card: Card, x: int, y: int):
         """

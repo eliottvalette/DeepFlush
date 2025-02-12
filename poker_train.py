@@ -17,9 +17,9 @@ import glob
 EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9994
-START_EPS = 1.0
-STATE_SIZE = 114
+EPS_DECAY = 0.9995
+START_EPS = 0.999
+STATE_SIZE = 116
 RENDERING = False
 FPS = 1
 
@@ -155,6 +155,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             max_stack = max(p.stack for p in remaining_players)
             winning_list = [1 if (p.is_active and not p.has_folded and p.stack == max_stack) else 0 for p in env.players]
 
+    # Calculate and store final rewards
     for i, agent in enumerate(agent_list):
         env.current_player_seat = i
         # Si le joueur n'est pas dans la partie, on ne lui donne pas de récompense

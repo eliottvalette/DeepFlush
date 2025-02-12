@@ -85,6 +85,10 @@ class DataCollector:
             "strategic_info": {
                 "preflop_win_prob": state_vector[112],  # Probabilité de victoire préflop
                 "pot_odds": state_vector[113]  # Cotes du pot
+            },
+            "hand_draw_potential": {
+                "straight_draw": state_vector[114],  # Potentiel de quinte
+                "flush_draw": state_vector[115]  # Potentiel de couleur
             }
         }
 
@@ -648,17 +652,17 @@ class Visualizer:
                 first_state = player_states[0]
                 state_vector = first_state["state_vector"]
                 
-                # Get player cards info
+                # Obtenir les cartes du joueur
                 player_cards = state_vector["player_cards"]
                 
-                # Get first card value and suit
+                # Obtenir la valeur et la couleur de la première carte
                 card1 = player_cards[0]
-                card1_value = int(card1["value"] * 14 + 2)  # Denormalize value
+                card1_value = int(round(card1["value"] * 14 + 2))  # Denormalise la valeur de la première carte
                 card1_suit = card1["suit"].index(1) if 1 in card1["suit"] else -1
                 
-                # Get second card value and suit
-                card2 = player_cards[1]  
-                card2_value = int(card2["value"] * 14 + 2)  # Denormalize value
+                # Obtenir la valeur et la couleur de la deuxième carte
+                card2 = player_cards[1]
+                card2_value = int(round(card2["value"] * 14 + 2))  # Denormalise la valeur de la deuxième carte
                 card2_suit = card2["suit"].index(1) if 1 in card2["suit"] else -1
                 
                 if card1_value < 2 or card2_value < 2:
