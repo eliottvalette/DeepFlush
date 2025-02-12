@@ -1464,64 +1464,137 @@ class PokerGame:
 
         # Capturer l'état du jeu avant de traiter l'action pour le calcul des cotes du pot
         amount_to_call = self.current_maximum_bet - current_player.current_player_bet
+        pot_odds = amount_to_call / (self.phase_pot + amount_to_call) if (self.phase_pot + amount_to_call) > 0 else 0
+
 
         # --- Récompenses stratégiques des actions ---
-        # Récompense basée sur l'action par rapport à la force de la main
         if self.current_phase == GamePhase.PREFLOP:
             hand_strength = self._evaluate_preflop_strength(current_player.cards)
-        
+            position = (current_player.seat_position - self.button_seat_position) % self.num_players
+
+            # Récompenses pour les positions tardives (late position : CO, BTN)
+            if position in [4, 5]:
+                if action == PlayerAction.RAISE:
+
+                    # On récompense la relance avec une main prenium dans une situation où les mises sont faibles par rapport à notre main + position
+                    if hand_strength > 0.27 and amount_to_call < self.big_blind * 8:
+                        reward += 0.30
+                    
+                    # On récompense la relance avec une main moyenne en late position dans une situation où les mises sont faibles car on a la position strategique
+                    elif 0.2 <= hand_strength <= 0.3 and amount_to_call < self.big_blind * 3:
+                        reward += 0.20
+
+                    # On récompense faiblement la relance avec une main acceptable pour voler les blinds
+                    elif 0.138 <= hand_strength < 0.2 and amount_to_call < self.big_blind * 3:
+                        reward += 0.10
+                    
+                elif action == PlayerAction.CALL:
+                    # Petit bonus pour un call stratégique quand on une bonne main et que 
+                    if 0.2 <= hand_strength <= 0.3 and amount_to_call < self.big_blind * 3:
+                        reward += 0.05
+
+                elif action == PlayerAction.FOLD:
+                    # On pénalise fortement un fold avec une main jouable en late position
+                    if hand_strength > 0.16:
+                        reward -= 0.5
+            
+            elif position in [2, 3]:  # Middle position (UTG, HJ)
+                # Pénaliser les raises légères
+                if action == PlayerAction.RAISE and hand_strength < 0.18:
+                    reward -= 0.3
+            
+            elif position in [0, 1]:  # Early position (SB, BB)
+                # Encourager la défense des blindes avec de bonnes mains
+                if action == PlayerAction.RAISE and hand_strength > 0.22:
+                    reward += 0.2
+                # Pénaliser l'abandon des blindes avec des mains correctes
+                if action == PlayerAction.FOLD and hand_strength > 0.19:
+                    reward -= 0.3
+
+            # Récompenses générales préflop
             if action == PlayerAction.RAISE:
                 if hand_strength < 0.138 : # On compare à 0.138 (1 quartile des probas préflop) pour pénaliser une raise a main faible
                     reward -= 0.5
+                elif hand_strength > 0.3:  # Premium hands
+                    reward += 0.3
                 bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
             
             if action == PlayerAction.ALL_IN:
                 if hand_strength < 0.277 : # Ce qui revient a garder uniquement QQ+ AJs+ et AKo
                     reward -= 0.5
+                elif hand_strength > 0.35:  # Super premium hands
+                    reward += 0.4
                 bet_amount = current_player.stack
             
             if action == PlayerAction.CALL:
-                if amount_to_call > self.big_blind * 3 and hand_strength < 0.210:
-                    reward -= 0.2
+                # Pénaliser le call avec des mains faibles face à une grosse mise
+                if amount_to_call > self.big_blind * 3:
+                    if hand_strength < 0.21:
+                        reward -= 0.2
+                    elif hand_strength > 0.28:  # Encourager le raise avec des mains fortes
+                        reward -= 0.3  # Pénalité pour ne pas avoir raise
             
             if action == PlayerAction.CHECK:
-                pass # Un check n'ai theoriquement jamais mauvais
+                # Pénaliser le check avec des mains très fortes en position
+                if position > 3 and hand_strength > 0.3:
+                    reward -= 0.2
 
-            if action == PlayerAction.FOLD:
-                if hand_strength > 0.260:
-                    reward -= 0.5
+        # ===============
+        # Récompenses post-flop
+        # ===============
 
-            # --- Malus de late position ---
-            if current_player.seat_position == self.button_seat_position:
-                if action in [PlayerAction.FOLD] and hand_strength > 0.16:
-                    reward -= 0.4
-
-        if self.current_phase not in [GamePhase.PREFLOP, GamePhase.SHOWDOWN]:
-            # Évaluer la force de la main actuelle
-            hand_rank, kickers = self.evaluate_current_hand(current_player)
+        else:
+            hand_rank, kickers = self.evaluate_current_hand(current_player)            
+            # Calculer le nombre de joueurs actifs
+            active_players = sum(1 for p in self.players if p.is_active and not p.has_folded)
             
-            # --- Pénalités pour les actions inappropriées post-flop ---
-            
-            # Pénalité pour fold avec une main forte
+            # Récompenses basées sur la force de la main et le nombre de joueurs
             if action == PlayerAction.FOLD:
                 if hand_rank.value >= HandRank.TWO_PAIR.value:
                     reward -= 0.6  # Pénalité sévère pour fold avec une bonne main
                 elif hand_rank == HandRank.PAIR and kickers[0] >= 12:  # Grosse paire (Dames ou mieux)
                     reward -= 0.4
+                # Ajout: Pénalité réduite si beaucoup de joueurs actifs
+                elif active_players > 3:
+                    reward += 0.1
             
-            # Pénalité pour call/raise avec une main très faible face à beaucoup de raise
-            if (action in [PlayerAction.CALL, PlayerAction.RAISE]) and amount_to_call > self.big_blind * 3: # TODO: A Modifier avec les outs (à ajouter dans le state également)
-                if hand_rank == HandRank.HIGH_CARD:
-                    reward -= 0.5
-                elif hand_rank == HandRank.PAIR and kickers[0] < 10:  # Petite paire, inférieure à 9 (kicker 0 est égal à la hauteur de la paire)
-                    reward -= 0.3
+            elif action in [PlayerAction.CALL, PlayerAction.RAISE]:
+                # Récompenses basées sur les cotes du pot
+                if pot_odds > 0:
+                    if hand_rank.value >= HandRank.THREE_OF_A_KIND.value:
+                        if action == PlayerAction.CALL:  # Pénalité pour ne pas avoir raise
+                            reward -= 0.3
+                        else:
+                            reward += 0.4
+                    elif hand_rank == HandRank.TWO_PAIR:
+                        if active_players <= 2:  # Heads-up ou 3-way
+                            reward += 0.2
+                    elif hand_rank == HandRank.PAIR:
+                        if kickers[0] >= 12:  # Grosse paire
+                            if pot_odds < 0.2:  # Bonnes cotes
+                                reward += 0.1
+                        elif kickers[0] < 10 and amount_to_call > self.big_blind * 3:
+                            reward -= 0.3
             
-            # Pénalité pour all-in avec une main faible
-            if action == PlayerAction.ALL_IN:
-                if hand_rank == HandRank.HIGH_CARD:
+            elif action == PlayerAction.ALL_IN:
+                if hand_rank.value >= HandRank.STRAIGHT.value:
+                    reward += 0.5
+                elif hand_rank == HandRank.HIGH_CARD:
                     reward -= 1
-                elif hand_rank == HandRank.PAIR and kickers[0] < 10:  # Petite paire, inférieure à 9 (kicker 0 est égal à la hauteur de la paire)
+                elif hand_rank == HandRank.PAIR and kickers[0] < 10:
                     reward -= 0.8
+                # Ajout: Bonus pour all-in en heads-up
+                if active_players == 2:
+                    reward += 0.2
+
+            # Récompenses spécifiques à la position
+            if current_player.seat_position == self.button_seat_position:
+                if action == PlayerAction.RAISE:
+                    # Encourager les raises en position
+                    reward += 0.1
+                elif action == PlayerAction.FOLD and hand_rank.value >= HandRank.PAIR.value:
+                    # Pénaliser les folds avec des mains jouables en position
+                    reward -= 0.2
 
         # Traiter l'action (met à jour l'état du jeu)
         self.process_action(current_player, action, bet_amount)
