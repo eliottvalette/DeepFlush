@@ -1489,6 +1489,36 @@ class PokerGame:
         if self.current_phase == GamePhase.PREFLOP:
             hand_strength = self._evaluate_preflop_strength(current_player.cards)
 
+            # ===== EV PRE-FLOP =====
+            # EV_call = (P_win * (pot total après le call)) - ((1 - P_win) * coût du call)
+            # Ici, P_win est approximé par hand_strength.
+            ev_call = hand_strength * (self.phase_pot + amount_to_call) - (1 - hand_strength) * amount_to_call
+            # Normalisation par le stack initial pour obtenir une valeur à l'échelle
+            ev_call_normalized = ev_call / self.starting_stack
+            # Bonus (si EV_call positif) ou malus (si EV_call négatif) appliqué à la récompense
+            reward += ev_call_normalized
+            # Pour debugger, vous pouvez décommenter la ligne suivante :
+            # print(f"EV_call: {ev_call:.2f}, EV_call_normalized: {ev_call_normalized:.2f}")
+
+            # Calcul de l'EV pour une relance (raise) ou un all‑in :
+            # On estime le coût minimum de la relance comme : raise_cost = (current_maximum_bet - current bet)*2.
+            raise_cost = (self.current_maximum_bet - current_player.current_player_bet) * 2
+            ev_raise = hand_strength * (self.phase_pot + raise_cost) - (1 - hand_strength) * raise_cost
+            ev_raise_normalized = ev_raise / self.starting_stack
+            if action in [PlayerAction.RAISE, PlayerAction.ALL_IN]:
+                reward += ev_raise_normalized
+            # Debug : print(f"EV_raise: {ev_raise:.2f}, EV_raise_normalized: {ev_raise_normalized:.2f}")
+
+            # Calcul simplifié de l'équité de bluff (fold equity)
+            # Ici, on suppose qu'en préflop, l'adversaire a environ 30% de chance de folder
+            fold_equity = 0.30
+            ev_bluff = fold_equity * self.phase_pot
+            ev_bluff_normalized = ev_bluff / self.starting_stack
+            # Si le joueur raise avec une main très faible (hand_strength < 0.15), on encourage le bluff avec ce bonus
+            if action == PlayerAction.RAISE and hand_strength < 0.15:
+                reward += ev_bluff_normalized
+            # ===== Fin de l'ajout EV PRE-FLOP =====
+
             # ------ Récompenses pour les positions tardives ---------
             if position_of_the_player in late_position:
 
@@ -1497,7 +1527,7 @@ class PokerGame:
                         if amount_to_call < self.big_blind * 10:
                             reward -= 0.15 # Pas super de faire tapis direct alors qu'il n'y a pas eu beaucoup d'activité (relance, call)
                         elif amount_to_call > self.big_blind * 15:
-                            reward += 0.8 # Bien de faire tapis avec une bonne main, en position quand il y a eu de l'activité
+                            reward += 0.8   # Bien de faire tapis avec une bonne main en position
                     bet_amount = current_player.stack
 
                 if action == PlayerAction.RAISE:
@@ -1542,16 +1572,16 @@ class PokerGame:
             elif position_of_the_player in middle_position:
                 # Pénaliser les raises légères
                 if action == PlayerAction.RAISE:
-                    if  hand_strength < 0.17:
+                    if hand_strength < 0.17:
                         reward -= 0.3
                     elif 0.18 <= hand_strength <= 0.20:
-                        reward += 0.1 # Même reward qu'un check dans cette situation car les deux sont ok
+                        reward += 0.1
                     bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
 
                 if action == PlayerAction.CALL:
                     if hand_strength < 0.17:
                         if amount_to_call <= 5 * self.big_blind:
-                            reward +=0.1
+                            reward += 0.1
                         elif amount_to_call > 5 * self.big_blind:
                             reward -= 0.3 # C'est pas un bon call car on n'est pas en position + main faible
                     if 0.17 <= hand_strength <= 0.25:
@@ -1584,7 +1614,6 @@ class PokerGame:
                         reward += 0.1
                     bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
 
-                # Pénaliser l'abandon des blindes avec des mains correctes
                 if action == PlayerAction.FOLD:
                     if hand_strength > 0.18:
                         if is_big_blind and amount_to_call < 5 * self.big_blind:
@@ -1609,7 +1638,7 @@ class PokerGame:
                 elif hand_strength > 0.35 and amount_to_call > 20 * self.big_blind:  # Super premium hands
                     reward += 0.5
                 bet_amount = current_player.stack
-            
+
             if action == PlayerAction.CALL:
                 # Pénaliser le call avec des mains faibles face à une grosse mise
                 if amount_to_call > self.big_blind * 3:
@@ -1629,7 +1658,7 @@ class PokerGame:
             # Récompenses basées sur la force de la main et le nombre de joueurs
             if action == PlayerAction.FOLD:
                 if hand_rank.value >= HandRank.TWO_PAIR.value:
-                    reward -= 0.6  # Pénalité sévère pour fold avec une bonne main
+                    reward -= 0.4  # Pénalité sévère pour fold avec une bonne main
                 elif hand_rank == HandRank.PAIR and kickers[0] >= 12:  # Grosse paire (Dames ou mieux)
                     reward -= 0.4
                 # Ajout: Pénalité réduite si beaucoup de joueurs actifs
