@@ -221,7 +221,7 @@ class Visualizer:
         
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
-        window = 250
+        window = 1500
         agents = set()
         for episode in states_data.values():
             for state in episode:
