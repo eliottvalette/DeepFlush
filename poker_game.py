@@ -1599,13 +1599,15 @@ class PokerGame:
                     reward -= 0.5
                 elif hand_strength > 0.25:  # Premium hands : TT+, QTs+, KQo+
                     reward += 0.4
+                elif hand_strength > 0.35:  # Super premium hands
+                    reward += 0.6
                 bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
             
             if action == PlayerAction.ALL_IN:
-                if hand_strength < 0.277 : # Ce qui revient a garder uniquement QQ+ AJs+ et AKo
-                    reward -= 0.5
-                elif hand_strength > 0.35:  # Super premium hands
-                    reward += 0.4
+                if hand_strength < 0.277 and amount_to_call > 20 * self.big_blind: # Ce qui revient a garder uniquement QQ+ AJs+ et AKo
+                    reward -= 0.4
+                elif hand_strength > 0.35 and amount_to_call > 20 * self.big_blind:  # Super premium hands
+                    reward += 0.5
                 bet_amount = current_player.stack
             
             if action == PlayerAction.CALL:
@@ -1615,15 +1617,6 @@ class PokerGame:
                         reward -= 0.2
                     elif hand_strength > 0.28:  # Encourager le raise avec des mains fortes
                         reward -= 0.3  # Pénalité pour ne pas avoir raise
-
-            if action == PlayerAction.CHECK:
-                # Pénaliser le check avec des mains très fortes en position
-                if position_of_the_player > 3 and hand_strength > 0.3:
-                    reward -= 0.2
-
-            if action == PlayerAction.FOLD:
-                if hand_strength > 0.16:
-                    reward -= 0.5
 
         # =========================================================
         # Récompenses post-flop
