@@ -148,7 +148,7 @@ class Player:
         self.name = name
         self.stack = stack
         self.seat_position = seat_position # 0-5
-        self.role_position = None # 0-5 (0 = SB, 1 = BB, 2 = UTG, 3 = HJ, 4 = CO, 5 = BU)
+        self.role_position = None # 0-5 (0 = SB, 1 = BB, 2 = UTG, 3 = HJ, 4 = CO, 5 = BTN)
         self.cards: List[Card] = []
         self.is_active = True # True si le joueur a assez de fonds pour jouer (stack > big_blind)
         self.has_folded = False
@@ -362,22 +362,22 @@ class PokerGame:
             ordered_players[1].role_position = 5  # Big Blind
         elif n == 3:
             # Dans le 3-handed, le joueur en bouton est SB.
-            ordered_players[0].role_position = 5  # Button (et Small Blind)
-            ordered_players[1].role_position = 0  # Small Blind (si nécessaire)
-            ordered_players[2].role_position = 1  # Big Blind
+            ordered_players[0].role_position = 5  # Button (BTN)
+            ordered_players[1].role_position = 0  # Small Blind (SB)
+            ordered_players[2].role_position = 1  # Big Blind (BB)
         elif n == 4:
-            ordered_players[0].role_position = 5  # Button
+            ordered_players[0].role_position = 5  # Button (BTN)
             ordered_players[1].role_position = 0  # Small Blind (SB)
             ordered_players[2].role_position = 1  # Big Blind (BB)
             ordered_players[3].role_position = 2  # UTG
         elif n == 5:
-            ordered_players[0].role_position = 5  # Button
+            ordered_players[0].role_position = 5  # Button (BTN)
             ordered_players[1].role_position = 0  # Small Blind (SB)
-            ordered_players[2].role_position = 1  # Big Blind (BB)
+            ordered_players[2].role_position = 1  # Big Blind (BB) 
             ordered_players[3].role_position = 2  # UTG
-            ordered_players[4].role_position = 3  # Cutoff (CO)
+            ordered_players[4].role_position = 3  # Hijack (HJ)
         elif n == 6:
-            ordered_players[0].role_position = 5  # Button
+            ordered_players[0].role_position = 5  # Button (BTN)
             ordered_players[1].role_position = 0  # Small Blind (SB)
             ordered_players[2].role_position = 1  # Big Blind (BB)
             ordered_players[3].role_position = 2  # UTG
@@ -1474,20 +1474,39 @@ class PokerGame:
         # Capturer l'état du jeu avant de traiter l'action pour le calcul des cotes du pot
         amount_to_call = self.current_maximum_bet - current_player.current_player_bet
         pot_odds = amount_to_call / (self.phase_pot + amount_to_call) if (self.phase_pot + amount_to_call) > 0 else 0
+        active_players = sum(1 for p in self.players if p.is_active and not p.has_folded)
 
+        equity = 'à faire'
+
+        # --- Définition des positions early, middle, late selon les configurations de jeu ---
+
+        position_of_the_player = current_player.role_position # On recupère la position du joueur 0-5 (0 = SB, 1 = BB, 2 = UTG, 3 = HJ, 4 = CO, 5 = BTN)
+        late_position = [np.max(active_players - 2, 0), 5] if active_players >= 5 else [5] # Si il y a 5 joueurs actifs ou plus, on définit la position late comme [CO, BTN]. Pour 6/5 joueurs, on inclut CO dans late position
+        middle_position = [2, 3 if active_players == 6 else 1] if active_players >= 4 else [1]  # Pour 6 joueurs, middle position = [2,3], Pour 5 joueurs, middle position = [1,2], Pour 4 joueurs, middle position = [1,2], Pour 3 joueurs, middle position = [1]
+        early_position = [0,1] if active_players >= 5 else [0] # SB et BB toujours en early position sauf : Pour 2/3/4 joueurs, early position = SB
 
         # --- Récompenses stratégiques des actions ---
         if self.current_phase == GamePhase.PREFLOP:
             hand_strength = self._evaluate_preflop_strength(current_player.cards)
-            position = (current_player.seat_position - self.button_seat_position) % self.num_players
 
-            # Récompenses pour les positions tardives (late position : CO, BTN)
-            if position in [4, 5]:
+            # ------ Récompenses pour les positions tardives ---------
+            if position_of_the_player in late_position:
+
+                if action == PlayerAction.ALL_IN:
+                    if hand_strength > 0.27:
+                        if amount_to_call < self.big_blind * 10:
+                            reward -= 0.15 # Pas super de faire tapis direct alors qu'il n'y a pas eu beaucoup d'activité (relance, call)
+                        elif amount_to_call > self.big_blind * 15:
+                            reward += 0.8 # Bien de faire tapis avec une bonne main, en position quand il y a eu de l'activité
+                    bet_amount = current_player.stack
+
                 if action == PlayerAction.RAISE:
-
                     # On récompense la relance avec une main prenium dans une situation où les mises sont faibles par rapport à notre main + position
-                    if hand_strength > 0.27 and amount_to_call < self.big_blind * 8:
-                        reward += 0.30
+                    if hand_strength > 0.27:
+                        if amount_to_call < self.big_blind * 6:
+                            reward += 0.30
+                        elif amount_to_call < self.big_blind * 15:
+                            reward += 0.8 # On recompense fortement la surrelance dans une bonne position avec une très bonne mains
                     
                     # On récompense la relance avec une main moyenne en late position dans une situation où les mises sont faibles car on a la position strategique
                     elif 0.2 <= hand_strength <= 0.3 and amount_to_call < self.big_blind * 3:
@@ -1497,35 +1516,89 @@ class PokerGame:
                     elif 0.138 <= hand_strength < 0.2 and amount_to_call < self.big_blind * 3:
                         reward += 0.10
                     
+                    bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
+
                 elif action == PlayerAction.CALL:
-                    # Petit bonus pour un call stratégique quand on une bonne main et que 
-                    if 0.2 <= hand_strength <= 0.3 and amount_to_call < self.big_blind * 3:
-                        reward += 0.05
+                    # Petit bonus pour un call stratégique quand on une bonne main (Bluff)
+                    if hand_strength >= 0.2 and amount_to_call < self.big_blind * 3:
+                        reward += 0.1
+                    if hand_strength >= 0.25 and amount_to_call < self.big_blind * 6:
+                        reward += 0.15
 
                 elif action == PlayerAction.FOLD:
                     # On pénalise fortement un fold avec une main jouable en late position
-                    if hand_strength > 0.16:
+                    if 0.16 < hand_strength < 0.25 and amount_to_call < 5 * self.big_blind:
+                        reward -= 0.5
+                    if hand_strength >= 0.25 and amount_to_call < 20 * self.big_blind:
                         reward -= 0.5
 
-            elif position in [2, 3]:  # Middle position (UTG, HJ)
+                elif action == PlayerAction.CHECK:
+                    raise ValueError(
+                        "Erreur de position, Il est impossible de check en late position au preflop"
+                        "Une erreur doit être présente soit dans la définition de 'position_of_the_player' ou dans la récupération de l'action du joueur"
+                    )
+
+            # ------ Récompenses pour les middle positions ---------
+            elif position_of_the_player in middle_position:
                 # Pénaliser les raises légères
-                if action == PlayerAction.RAISE and hand_strength < 0.18:
-                    reward -= 0.3
-            
-            elif position in [0, 1]:  # Early position (SB, BB)
+                if action == PlayerAction.RAISE:
+                    if  hand_strength < 0.17:
+                        reward -= 0.3
+                    elif 0.18 <= hand_strength <= 0.20:
+                        reward += 0.1 # Même reward qu'un check dans cette situation car les deux sont ok
+                    bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
+
+                if action == PlayerAction.CALL:
+                    if hand_strength < 0.17:
+                        if amount_to_call <= 5 * self.big_blind:
+                            reward +=0.1
+                        elif amount_to_call > 5 * self.big_blind:
+                            reward -= 0.3 # C'est pas un bon call car on n'est pas en position + main faible
+                    if 0.17 <= hand_strength <= 0.25:
+                        if amount_to_call <= 5 * self.big_blind:
+                            reward +=0.3 # Peut être un bon call
+                        elif amount_to_call > 30 * self.big_blind:
+                            reward -= 0.4 # Face à des grosses relances preflop, vaut mieux être solide au niveau de la main pour call or ce n'est pas le cas ici. 
+                        else:
+                            reward -= 0.1 # Peut-être pas assez solide preflop pour continuer
+                    
+                if action == PlayerAction.ALL_IN:
+                    if hand_strength > 0.27:
+                        if amount_to_call < self.big_blind * 10:
+                            reward -= 0.15 # Pas super de faire tapis direct alors qu'il n'y a pas eu beaucoup d'activité (relance, call)
+                        elif amount_to_call > self.big_blind * 15:
+                            reward += 0.8 # Bien de faire tapis avec une bonne main, en position quand il y a eu de l'activité
+                        elif hand_strength < 0.25:
+                            reward -= 0.2 # All-in moyen car main un peu faible par rapport à la position
+                        bet_amount = current_player.stack
+
+            # ------ Récompenses pour les early positions ---------
+            elif position_of_the_player in early_position:
+
+                is_big_blind = position_of_the_player == 1
                 # Encourager la défense des blindes avec de bonnes mains
                 if action == PlayerAction.RAISE and hand_strength > 0.22:
-                    reward += 0.2
-                # Pénaliser l'abandon des blindes avec des mains correctes
-                if action == PlayerAction.FOLD and hand_strength > 0.19:
-                    reward -= 0.3
+                    if is_big_blind:
+                        reward += 0.3
+                    else:
+                        reward += 0.1
+                    bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
 
-            # Récompenses générales préflop
+                # Pénaliser l'abandon des blindes avec des mains correctes
+                if action == PlayerAction.FOLD:
+                    if hand_strength > 0.18:
+                        if is_big_blind and amount_to_call < 5 * self.big_blind:
+                            reward -= 0.3 # La BB était défendable
+                    else:
+                        reward += 0.2 # Bon fold car pas en position
+
+
+            #  ------ Récompenses générales pre-flop ---------
             if action == PlayerAction.RAISE:
                 if hand_strength < 0.138 : # On compare à 0.138 (1 quartile des probas préflop) pour pénaliser une raise a main faible
                     reward -= 0.5
-                elif hand_strength > 0.3:  # Premium hands
-                    reward += 0.3
+                elif hand_strength > 0.25:  # Premium hands : TT+, QTs+, KQo+
+                    reward += 0.4
                 bet_amount = (self.current_maximum_bet - current_player.current_player_bet) * 2
             
             if action == PlayerAction.ALL_IN:
@@ -1542,24 +1615,23 @@ class PokerGame:
                         reward -= 0.2
                     elif hand_strength > 0.28:  # Encourager le raise avec des mains fortes
                         reward -= 0.3  # Pénalité pour ne pas avoir raise
-            
+
             if action == PlayerAction.CHECK:
                 # Pénaliser le check avec des mains très fortes en position
-                if position > 3 and hand_strength > 0.3:
+                if position_of_the_player > 3 and hand_strength > 0.3:
                     reward -= 0.2
 
             if action == PlayerAction.FOLD:
                 if hand_strength > 0.16:
                     reward -= 0.5
 
-        # ===============
+        # =========================================================
         # Récompenses post-flop
-        # ===============
+        # =========================================================
 
         else:
             hand_rank, kickers = self.evaluate_current_hand(current_player)            
             # Calculer le nombre de joueurs actifs
-            active_players = sum(1 for p in self.players if p.is_active and not p.has_folded)
             
             # Récompenses basées sur la force de la main et le nombre de joueurs
             if action == PlayerAction.FOLD:
