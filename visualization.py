@@ -221,7 +221,7 @@ class Visualizer:
         
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
-        window = 150
+        window = 250
         agents = set()
         for episode in states_data.values():
             for state in episode:
@@ -254,6 +254,9 @@ class Visualizer:
         
         ax1.set_facecolor('#F0F0F0')  # Fond légèrement gris
         ax1.grid(True, alpha=0.3)
+        
+        # Trier les agents par ordre croissant
+        agents = sorted(agents)
         
         # 2. Fréquence des actions par agent
         ax3 = plt.subplot(2, 3, 2)
@@ -406,6 +409,39 @@ class Visualizer:
         ax6.grid(True, alpha=0.3)
         ax6.set_facecolor('#F0F0F0')
 
+        # Ajouter un nouveau subplot pour le winrate
+        ax5 = plt.subplot(2, 3, 6)
+        window = 1000  # Fenêtre glissante de 1000 parties
+        
+        # Calculer le winrate pour chaque agent
+        winrates = {agent: [] for agent in agents}
+        for episode_num in sorted([int(k) for k in states_data.keys()]):
+            episode = states_data[str(episode_num)]
+            # Identifier le gagnant de l'épisode
+            winner = None
+            final_state = episode[-1]
+            for i, stack in enumerate(final_state["state_vector"]["player_stacks"]):
+                if stack > 1.0:  # Le joueur a gagné des jetons
+                    winner = f"Player_{i+1}"
+            
+            # Mettre à jour les winrates
+            for agent in agents:
+                winrates[agent].append(1 if agent == winner else 0)
+        
+        # Tracer la moyenne mobile du winrate pour chaque agent
+        for i, (agent, data) in enumerate(winrates.items()):
+            rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
+            ax5.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=2)
+        
+        ax5.set_title('Winrate par agent (moyenne mobile 100)')
+        ax5.set_xlabel('Episode')
+        ax5.set_ylabel('Winrate')
+        ax5.legend()
+        ax5.set_ylim(0, 1)
+        
+        ax5.set_facecolor('#F0F0F0')
+        ax5.grid(True, alpha=0.3)
+
         # Style global mis à jour
         plt.rcParams.update({
             'figure.facecolor': '#FFFFFF',
@@ -443,7 +479,7 @@ class Visualizer:
         
         # Extraire les agents uniques (maintenant basé sur l'index dans la liste des métriques)
         num_agents = len(next(iter(metrics_data.values())))  # Nombre d'agents basé sur le premier épisode
-        agents = [f"Player_{i+1}" for i in range(num_agents)]
+        agents = sorted([f"Player_{i+1}" for i in range(num_agents)])
 
         # Métriques spécifiques à tracer
         metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']
@@ -523,10 +559,17 @@ class Visualizer:
         fig = plt.figure(figsize=(25, 20))
         
         # Définir une palette de couleurs pastel cohérente
-        pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
+        position_colors = {
+            "SB": '#003049',
+            "BB": '#006DAA',
+            "UTG": '#D62828',
+            "MP": '#F77F00',
+            "CO": '#FCBF49',
+            "BTN": '#EAE2B7'
+        }
 
         # 1. Win Rate par position et par agent (Bar Plot)
-        ax1 = plt.subplot(1, 2, 1)
+        ax1 = plt.subplot(1, 1, 1)
         position_wins = defaultdict(lambda: defaultdict(int))
         position_games = defaultdict(lambda: defaultdict(int))
         
@@ -543,79 +586,47 @@ class Visualizer:
                 player = state["player"]
                 positions = state["state_vector"]["relative_positions"]
                 position_idx = positions.index(1.0)
-                position_name = ["BB", "SB", "BTN", "CO", "MP", "EP"][position_idx]
+                position_name = ["BB", "SB", "UTG", "MP", "CO", "BTN"][position_idx]
                 
                 position_games[player][position_name] += 1
                 if player == winner:
                     position_wins[player][position_name] += 1
 
         # Préparer les données pour le bar plot
-        positions = ["BB", "SB", "BTN", "CO", "MP", "EP"]
-        players = [f"Player_{i+1}" for i in range(6)]
+        positions = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
+        players = sorted([f"Player_{i+1}" for i in range(6)])  # Trier les joueurs
         bar_width = 0.15
-        index = np.arange(len(positions))
+        index = np.arange(len(players))
 
-        for i, player in enumerate(players):
+        # Tracer un groupe de barres pour chaque position
+        for i, position in enumerate(positions):
             win_rates = []
-            for pos in positions:
-                games = position_games[player][pos]
-                wins = position_wins[player][pos]
+            for player in players:
+                games = position_games[player][position]
+                wins = position_wins[player][position]
                 win_rates.append(wins / games if games > 0 else 0)
             
-            ax1.bar(index + i * bar_width, win_rates, bar_width, 
-                   label=player, alpha=0.8, color=pastel_colors[i])
+            bars = ax1.bar(index + i * bar_width, win_rates, bar_width, 
+                         label=position, alpha=0.8, color=position_colors[position])
+            
+            # Ajouter les pourcentages au-dessus des barres
+            for j, v in enumerate(win_rates):
+                ax1.text(index[j] + i * bar_width, v + 0.01, 
+                        f'{v:.0%}', ha='center', va='bottom', 
+                        fontsize=8, rotation=90)
 
-        ax1.set_xlabel('Position')
+        ax1.set_xlabel('Agent')
         ax1.set_ylabel('Win Rate')
-        ax1.set_title('Win Rate par Position et par Agent')
+        ax1.set_title('Win Rate par Agent et par Position')
         ax1.set_xticks(index + bar_width * 2.5)
-        ax1.set_xticklabels(positions)
-        ax1.legend()
-
-        # 2. Win Rate par phase et par agent (Bar Plot)
-        ax2 = plt.subplot(1, 2, 2)
-        phase_wins = defaultdict(lambda: defaultdict(int))
-        phase_games = defaultdict(lambda: defaultdict(int))
-        
-        for episode in states_data.values():
-            winner = None
-            final_state = episode[-1]
-            for i, stack in enumerate(final_state["state_vector"]["player_stacks"]):
-                if stack > 1.0:
-                    winner = f"Player_{i+1}"
-            
-            # Compter les phases pour chaque agent
-            phases_seen = set()
-            for state in episode:
-                player = state["player"]
-                phase = state["phase"]
-                if (player, phase) not in phases_seen:
-                    phase_games[player][phase] += 1
-                    if player == winner:
-                        phase_wins[player][phase] += 1
-                    phases_seen.add((player, phase))
-
-        # Préparer les données pour le bar plot
-        phases = ["preflop", "flop", "turn", "river", "showdown"]
-        bar_width = 0.15
-        index = np.arange(len(phases))
-
-        for i, player in enumerate(players):
-            win_rates = []
-            for phase in phases:
-                games = phase_games[player][phase]
-                wins = phase_wins[player][phase]
-                win_rates.append(wins / games if games > 0 else 0)
-            
-            ax2.bar(index + i * bar_width, win_rates, bar_width, 
-                   label=player, alpha=0.8, color=pastel_colors[i])
-
-        ax2.set_xlabel('Phase')
-        ax2.set_ylabel('Win Rate')
-        ax2.set_title('Win Rate par Phase et par Agent')
-        ax2.set_xticks(index + bar_width * 2.5)
-        ax2.set_xticklabels(phases)
-        ax2.legend()
+        ax1.set_xticklabels(players)
+        ax1.legend(title='Position')
+        ax1.set_ylim(0, max(max(win_rates) for win_rates in [
+            [position_wins[player][pos] / position_games[player][pos] 
+             if position_games[player][pos] > 0 else 0 
+             for player in players] 
+            for pos in positions
+        ]) * 1.2)  # Ajouter 20% d'espace pour les étiquettes
 
         plt.tight_layout()
         plt.savefig('viz_json/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
@@ -631,7 +642,7 @@ class Visualizer:
         fig = plt.figure(figsize=(30, 20))  # Increased figure size
         plt.subplots_adjust(hspace=0.3, wspace=0.3)  # Add more space between subplots
         
-        players = [f"Player_{i+1}" for i in range(6)]
+        players = sorted([f"Player_{i+1}" for i in range(6)])
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
 
         # 1-6. Range win rate heat maps pour chaque agent

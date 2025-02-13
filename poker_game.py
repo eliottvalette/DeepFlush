@@ -844,7 +844,7 @@ class PokerGame:
                 min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
 
             # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
-            if bet_amount is None or bet_amount < min_raise:
+            if bet_amount is None or (bet_amount < min_raise and action != PlayerAction.ALL_IN):
                 bet_amount = min_raise
 
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.

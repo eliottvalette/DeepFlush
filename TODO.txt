@@ -1,4 +1,4 @@
-Eliot : 
+Eliott : 
 - Pour poker_analytics, mettre dans l'ordre SB, BB ... BTN (comme ça on doit voir quelque chose de légèrement croissant)
 
 Mathias
