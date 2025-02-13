@@ -298,7 +298,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon
-            epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.01, START_EPS)
+            epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_list, metrics_list = run_episode(

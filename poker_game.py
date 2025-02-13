@@ -1506,7 +1506,7 @@ class PokerGame:
                     # On pénalise fortement un fold avec une main jouable en late position
                     if hand_strength > 0.16:
                         reward -= 0.5
-            
+
             elif position in [2, 3]:  # Middle position (UTG, HJ)
                 # Pénaliser les raises légères
                 if action == PlayerAction.RAISE and hand_strength < 0.18:
@@ -1547,6 +1547,10 @@ class PokerGame:
                 # Pénaliser le check avec des mains très fortes en position
                 if position > 3 and hand_strength > 0.3:
                     reward -= 0.2
+
+            if action == PlayerAction.FOLD:
+                if hand_strength > 0.16:
+                    reward -= 0.5
 
         # ===============
         # Récompenses post-flop

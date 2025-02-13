@@ -368,7 +368,7 @@ class Visualizer:
         # 4. Evolution de epsilon avec nouvelle couleur
         ax4 = plt.subplot(2, 3, 4)
         episodes = sorted([int(k) for k in metrics_data.keys()])
-        epsilon_values = [np.clip(self.start_epsilon * self.epsilon_decay ** episode, 0.01, self.start_epsilon) for episode in episodes]
+        epsilon_values = [np.clip(self.start_epsilon * self.epsilon_decay ** episode, 0.05, self.start_epsilon) for episode in episodes]
         ax4.plot(episodes, epsilon_values, color='#2E86AB', linewidth=2)  # Bleu foncé pour epsilon
         ax4.set_title('Evolution de Epsilon')
         ax4.set_xlabel('Episode')
