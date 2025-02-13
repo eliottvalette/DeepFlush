@@ -22,8 +22,8 @@ START_EPS = 0.999
 STATE_SIZE = 116
 
 # Paramètres de visualisation
-RENDERING = True      # Active/désactive l'affichage graphique
-FPS = 3                # Images par seconde pour le rendu
+RENDERING = False      # Active/désactive l'affichage graphique
+FPS = 30                # Images par seconde pour le rendu
 
 # Intervalles de sauvegarde
 SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
@@ -105,9 +105,11 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         player_state_seq = state_seq[env.current_player_seat]
         
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
+        print('Number of states in sequence:', len(player_state_seq))
+        print('Shape of each state:', player_state_seq[0].shape)
+        
+        # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         action_chosen = current_agent.get_action(player_state_seq, epsilon, valid_actions)
-        print('Nombre d\'états dans la séquence:', len(player_state_seq))
-        print('Forme de chaque état:', np.array(player_state_seq[0]).shape)
         
         # Exécuter l'action dans l'environnement
         next_state, reward = env.step(action_chosen)
@@ -116,12 +118,18 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         state_seq[env.current_player_seat].append(next_state)
         
-        # Stocker l'expérience : on enregistre une copie de la séquence couranteii
-        current_agent.remember(player_state_seq.copy(), action_chosen, reward, next_state, env.current_phase == GamePhase.SHOWDOWN)
+        # Stocker l'expérience : on enregistre une copie de la séquence courante
+        current_agent.remember(
+            player_state_seq.copy(), 
+            action_chosen, 
+            reward, 
+            [next_state],
+            env.current_phase == GamePhase.SHOWDOWN
+        )
         actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
         
         # Stocker l'état actuel pour la collecte des métriques
-        current_state = player_state_seq[-1].copy()
+        current_state = player_state_seq[-1].clone()
         state_info = {
             "player": current_player.name,
             "phase": env.current_phase.value,

@@ -1454,7 +1454,7 @@ class PokerGame:
         state.append(flush_draw)
 
         # Avant de retourner, conversion en tableau tensor
-        state = np.array(state, dtype=np.float32)
+        state = torch.tensor(state, dtype=torch.float32)
         return state
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
@@ -1727,7 +1727,7 @@ class PokerGame:
     
     def compute_hand_draw_potential(self, player) -> float:
         """
-        Calcule un heuristique simple du potentiel d’amélioration (draw potential)
+        Calcule un heuristique simple du potentiel d'amélioration (draw potential)
         à partir des cartes du joueur et les community cards.
         
         Pour un tirage quinte :

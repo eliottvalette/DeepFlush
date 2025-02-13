@@ -71,7 +71,7 @@ class PokerAgent:
     def get_action(self, state, epsilon, valid_actions):
         """
         Sélectionne une action selon la politique epsilon-greedy.
-        Ici, 'state' est une séquence de vecteurs (shape: [n, 201]).
+        Ici, 'state' est une séquence de vecteurs (shape: [n, 116]).
         """
         if not isinstance(state, (list, np.ndarray)):
             raise TypeError(f"state doit être une liste ou un numpy array (reçu: {type(state)})")
@@ -105,8 +105,8 @@ class PokerAgent:
             reverse_action_map = {v: k for k, v in action_map.items()}
             return reverse_action_map[chosen_index]
         else:
-            # Ajout d'une dimension batch : state est de forme (n, 201) → (1, n, 201)
-            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            # Ajout d'une dimension batch : state est une liste de tensors, on utilise torch.stack pour obtenir la séquence sous forme d'un tensor 
+            state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
             self.model.eval()
             with torch.no_grad():
                 # Le modèle retourne (action_probs, state_value)
@@ -145,64 +145,84 @@ class PokerAgent:
     def train_model(self):
         """
         Entraîne le modèle sur un batch de transitions.
-        Les états sont des séquences (shape: [n, 201]).
+        Les états sont des séquences (shape: [n, 116]).
         """
         if len(self.memory) < 32:
             print('Not enough data to train :', len(self.memory))
-            print('self.memory', self.memory)
             return {'loss': 0, 'entropy': 0, 'value_loss': 0, 'std': 0, 'learning_rate': self.learning_rate}
 
         try:
             batch = random.sample(self.memory, 32)
             states, actions, rewards, next_states, dones = zip(*batch)
 
-            # Trouver la longueur maximale des séquences dans le batch
-            max_seq_len = max(len(state) for state in states)
-            
-            # Créer un tensor padded pour les états
-            padded_states = np.zeros((len(states), max_seq_len, self.state_size))
-            for i, state in enumerate(states):
-                state_array = np.array(state)
-                padded_states[i, :len(state)] = state_array
+            # Fixer la longueur de séquence à 10 (padding/tronquage)
+            max_seq_len = 10
 
-            # Conversion en tenseurs
-            states = torch.FloatTensor(padded_states).to(self.device)
-            actions = torch.LongTensor(actions).to(self.device)
-            rewards = torch.FloatTensor(rewards).to(self.device)
-            dones = torch.FloatTensor(dones).to(self.device)
+            # Création du tenseur pour les états
+            padded_states = torch.zeros((len(states), max_seq_len, self.state_size), device=self.device)
+            for i, state_sequence in enumerate(states):
+                # Si la séquence est trop longue, on ne garde que les max_seq_len derniers états
+                if len(state_sequence) > max_seq_len:
+                    seq = state_sequence[-max_seq_len:]
+                else:
+                    seq = state_sequence
+                
+                # Convertir directement en tensor PyTorch
+                seq_tensor = torch.stack(seq).to(self.device)
+                
+                # Vérifier la forme de la séquence
+                if len(seq_tensor.shape) == 1:
+                    # Si c'est un vecteur 1D, on le reshape pour avoir la bonne forme
+                    seq_tensor = seq_tensor.reshape(1, -1)
+                
+                # Remplir le tenseur padded_states avec la séquence
+                padded_states[i, :len(seq_tensor)] = seq_tensor
 
-            # Faire la même chose pour next_states
-            padded_next_states = np.zeros((len(next_states), max_seq_len, self.state_size))
-            for i, ns in enumerate(next_states):
-                if ns is not None:
-                    ns_array = np.array(ns)
-                    padded_next_states[i, :len(ns)] = ns_array
+            # Même chose pour les next_states
+            padded_next_states = torch.zeros((len(next_states), max_seq_len, self.state_size), device=self.device)
+            for i, ns_sequence in enumerate(next_states):
+                if ns_sequence is not None:
+                    if len(ns_sequence) > max_seq_len:
+                        ns_seq = ns_sequence[-max_seq_len:]
+                    else:
+                        ns_seq = ns_sequence
+                    
+                    # Convertir directement en tensor PyTorch
+                    ns_seq_tensor = torch.stack(ns_seq).to(self.device)
+                    
+                    # Vérifier la forme de la séquence
+                    if len(ns_seq_tensor.shape) == 1:
+                        ns_seq_tensor = ns_seq_tensor.reshape(1, -1)
+                    
+                    # Remplir le tenseur padded_next_states
+                    padded_next_states[i, :len(ns_seq_tensor)] = ns_seq_tensor
 
-            next_states_tensor = torch.FloatTensor(padded_next_states).to(self.device)
+            # Conversion des autres données en tensors PyTorch
+            actions_tensor = torch.LongTensor(actions).to(self.device)
+            rewards_tensor = torch.FloatTensor(rewards).to(self.device)
+            dones_tensor = torch.FloatTensor(dones).to(self.device)
 
-            # Calculer les probabilités d'action et les valeurs d'état pour les états actuels
-            action_probs, state_values = self.model(states)
-            state_values = state_values.squeeze(-1)  # (batch,)
+            # Calculer les probabilités d'action et les valeurs d'état
+            action_probs, state_values = self.model(padded_states)
+            state_values = state_values.squeeze(-1)
 
-            # Mise à jour de l'ancienne probabilité d'action sans calculer approx_kl
+            # Sauvegarder les anciennes probabilités d'action
             self.old_action_probs = action_probs.detach()
 
             # Calcul des cibles TD et des avantages
             with torch.no_grad():
-                _, next_state_values = self.model(next_states_tensor)
+                _, next_state_values = self.model(padded_next_states)
                 next_state_values = next_state_values.squeeze(-1)
-
-            td_targets = rewards + self.gamma * next_state_values * (1 - dones)
+            td_targets = rewards_tensor + self.gamma * next_state_values * (1 - dones_tensor)
             advantages = td_targets - state_values
 
             # Calcul des pertes
-            selected_action_probs = action_probs[torch.arange(len(actions)), actions]
+            selected_action_probs = action_probs[torch.arange(len(actions_tensor)), actions_tensor]
             policy_loss = -torch.mean(torch.log(selected_action_probs + 1e-10) * advantages.detach())
             value_loss = torch.mean((state_values - td_targets.detach()) ** 2)
             entropy_loss = -torch.mean(torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1))
 
             total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss
-
             advantages_std = advantages.std().item()
 
             self.optimizer.zero_grad()
@@ -221,12 +241,4 @@ class PokerAgent:
 
         except Exception as e:
             print(f"Erreur pendant l'entraînement: {str(e)}")
-            # Retourner des métriques par défaut en cas d'erreur
-            return {
-                'entropy_loss': 0,
-                'value_loss': 0,
-                'std': 0,
-                'learning_rate': self.learning_rate,
-                'loss': 0,
-                'error': str(e)
-            }
+            raise e
