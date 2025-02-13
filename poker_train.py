@@ -17,7 +17,7 @@ import glob
 EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9995
+EPS_DECAY = 0.9994
 START_EPS = 0.999
 STATE_SIZE = 116
 
@@ -28,6 +28,9 @@ FPS = 30                # Images par seconde pour le rendu
 # Intervalles de sauvegarde
 SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
 PLOT_INTERVAL = 500    # Fréquence de mise à jour des graphiques
+
+# Compteurs
+number_of_hand_per_game = 0
 
 def set_seed(seed=42):
     """
@@ -62,12 +65,16 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     Returns:
         Tuple[List[float], List[dict]]: Récompenses finales et métriques d'entraînement
     """
+    global number_of_hand_per_game  # Added this to reference and update the global variable
+
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 3:  # Évite les heads-up
+    if len(players_that_can_play) < 3 or number_of_hand_per_game > 100:  # Évite les heads-up
         env.reset()
+        number_of_hand_per_game = 0
     else:
         env.start_new_hand()
+        number_of_hand_per_game += 1
     
     # Synchroniser les noms et statuts humains entre l'environnement et les agents
     for i, agent in enumerate(agent_list):
