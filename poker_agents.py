@@ -50,7 +50,6 @@ class PokerAgent:
         if load_model:
             self.load(load_path)
 
-        self.old_action_probs = None  # Pour suivre la divergence KL
         self.is_human = False
         self.name = 'unknown_agent'
 
@@ -72,6 +71,8 @@ class PokerAgent:
         """
         Sélectionne une action selon la politique epsilon-greedy.
         Ici, 'state' est une séquence de vecteurs (shape: [n, 116]).
+
+        Retourne l'action choisie et une éventuelle pénalité si l'action était invalide.
         """
         if not isinstance(state, (list, np.ndarray)):
             raise TypeError(f"state doit être une liste ou un numpy array (reçu: {type(state)})")
@@ -96,33 +97,40 @@ class PokerAgent:
         valid_indices = [action_map[a] for a in valid_actions]
 
         # Création d'un masque pour ne considérer que les actions valides
-        action_mask = torch.zeros((1, self.action_size), device=self.device)
+        valid_action_mask = torch.zeros((1, self.action_size), device=self.device)
         for idx in valid_indices:
-            action_mask[0, idx] = 1
+            valid_action_mask[0, idx] = 1
 
         if np.random.random() < epsilon:
             chosen_index = np.random.choice(valid_indices)
             reverse_action_map = {v: k for k, v in action_map.items()}
-            return reverse_action_map[chosen_index]
+            return reverse_action_map[chosen_index], valid_action_mask
+        
         else:
             # Ajout d'une dimension batch : state est une liste de tensors, on utilise torch.stack pour obtenir la séquence sous forme d'un tensor 
             state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
             self.model.eval()
+
             with torch.no_grad():
                 # Le modèle retourne (action_probs, state_value)
                 action_probs, _ = self.model(state_tensor)
-            masked_probs = action_probs * action_mask
+            masked_probs = action_probs * valid_action_mask
+
             if masked_probs.sum().item() == 0:
                 chosen_index = np.random.choice(valid_indices)
+
             else:
                 masked_probs = masked_probs / masked_probs.sum()
                 chosen_index = torch.argmax(masked_probs).item()
-            if chosen_index not in valid_indices:
-                chosen_index = np.random.choice(valid_indices)
-            reverse_action_map = {v: k for k, v in action_map.items()}
-            return reverse_action_map[chosen_index]
 
-    def remember(self, state_seq, action, reward, next_state, done):
+            if chosen_index not in valid_indices:
+                # Forcer une action valide
+                chosen_index = np.random.choice(valid_indices)
+
+            reverse_action_map = {v: k for k, v in action_map.items()}
+            return reverse_action_map[chosen_index], valid_action_mask
+
+    def remember(self, state_seq, action, reward, next_state, done, valid_action_mask):
         """
         Stocke une transition dans la mémoire de replay
         :param state_seq: Séquence d'états
@@ -137,10 +145,10 @@ class PokerAgent:
             PlayerAction.CALL: 2,
             PlayerAction.RAISE: 3,
             PlayerAction.ALL_IN: 4,
-            None: 0
+            None: 0 #  L'action None est mappée au même indice que l'action fold (indice 0). L'action None est utilisée pour traiter le Showdown sans action, sans que cela n'ait d'impact négatif sur l'apprentissage global car elle n'est pas prise en compte dans le calcul des pertes.
         }
-        numerical_action = action_map[action] if action is not None else action_map[None]
-        self.memory.append((state_seq, numerical_action, reward, next_state, done))
+        numerical_action = action_map[action]
+        self.memory.append((state_seq, numerical_action, reward, next_state, done, valid_action_mask))
 
     def train_model(self):
         """
@@ -153,14 +161,21 @@ class PokerAgent:
 
         try:
             batch = random.sample(self.memory, 32)
-            states, actions, rewards, next_states, dones = zip(*batch)
+            state_sequences, actions, rewards, next_state_sequences, dones, valid_action_masks = zip(*batch)
+
+            # Conversion et uniformisation des valid_action_masks en tensors
+            valid_action_masks_tensor = torch.stack([
+                # S'assurer qu'il est de dimension 1
+                torch.tensor(mask, device=self.device).squeeze()
+                for mask in valid_action_masks
+            ]).float()  # Shape: (batch_size, action_size)
 
             # Fixer la longueur de séquence à 10 (padding/tronquage)
             max_seq_len = 10
 
             # Création du tenseur pour les états
-            padded_states = torch.zeros((len(states), max_seq_len, self.state_size), device=self.device)
-            for i, state_sequence in enumerate(states):
+            padded_states = torch.zeros((len(state_sequences), max_seq_len, self.state_size), device=self.device)
+            for i, state_sequence in enumerate(state_sequences):
                 # Si la séquence est trop longue, on ne garde que les max_seq_len derniers états
                 if len(state_sequence) > max_seq_len:
                     seq = state_sequence[-max_seq_len:]
@@ -172,20 +187,20 @@ class PokerAgent:
                 
                 # Vérifier la forme de la séquence
                 if len(seq_tensor.shape) == 1:
-                    # Si c'est un vecteur 1D, on le reshape pour avoir la bonne forme
+                    # Si c'est un vecteur 1D, on le reshape pour avoir la bonne forme (cela peut arriver si l'agent a Fold Preflop la sequence est de longueur 1 et donc la state sequence devient automatiquement un vecteur 1D)
                     seq_tensor = seq_tensor.reshape(1, -1)
                 
                 # Remplir le tenseur padded_states avec la séquence
                 padded_states[i, :len(seq_tensor)] = seq_tensor
 
             # Même chose pour les next_states
-            padded_next_states = torch.zeros((len(next_states), max_seq_len, self.state_size), device=self.device)
-            for i, ns_sequence in enumerate(next_states):
-                if ns_sequence is not None:
-                    if len(ns_sequence) > max_seq_len:
-                        ns_seq = ns_sequence[-max_seq_len:]
+            padded_next_states = torch.zeros((len(next_state_sequences), max_seq_len, self.state_size), device=self.device)
+            for i, next_state_sequence in enumerate(next_state_sequences):
+                if next_state_sequence is not None:
+                    if len(next_state_sequence) > max_seq_len:
+                        ns_seq = next_state_sequence[-max_seq_len:]
                     else:
-                        ns_seq = ns_sequence
+                        ns_seq = next_state_sequence
                     
                     # Convertir directement en tensor PyTorch
                     ns_seq_tensor = torch.stack(ns_seq).to(self.device)
@@ -206,23 +221,24 @@ class PokerAgent:
             action_probs, state_values = self.model(padded_states)
             state_values = state_values.squeeze(-1)
 
-            # Sauvegarder les anciennes probabilités d'action
-            self.old_action_probs = action_probs.detach()
-
             # Calcul des cibles TD et des avantages
             with torch.no_grad():
                 _, next_state_values = self.model(padded_next_states)
                 next_state_values = next_state_values.squeeze(-1)
-            td_targets = rewards_tensor + self.gamma * next_state_values * (1 - dones_tensor)
-            advantages = td_targets - state_values
+            temporal_difference_targets = rewards_tensor + self.gamma * next_state_values * (1 - dones_tensor)
+            advantages = temporal_difference_targets - state_values
 
             # Calcul des pertes
             selected_action_probs = action_probs[torch.arange(len(actions_tensor)), actions_tensor]
             policy_loss = -torch.mean(torch.log(selected_action_probs + 1e-10) * advantages.detach())
-            value_loss = torch.mean((state_values - td_targets.detach()) ** 2)
+            value_loss = torch.mean((state_values - temporal_difference_targets.detach()) ** 2)
             entropy_loss = -torch.mean(torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1))
 
-            total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss
+            # Ajout d'un terme de régularisation pour les actions invalides utilisant le masque des actions valides 0 pour action invalide, 1 pour action valide
+            invalid_action_penalty = torch.sum((1 - valid_action_masks_tensor) * action_probs) * 0.1
+
+            total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss + invalid_action_penalty
+
             advantages_std = advantages.std().item()
 
             self.optimizer.zero_grad()
@@ -233,6 +249,7 @@ class PokerAgent:
             metrics = {
                 'entropy_loss': entropy_loss.item(),
                 'value_loss': value_loss.item(),
+                'invalid_action_penalty': invalid_action_penalty.item(),
                 'std': advantages_std,
                 'learning_rate': self.learning_rate,
                 'loss': total_loss.item()

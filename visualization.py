@@ -244,7 +244,7 @@ class Visualizer:
                 mbb_data[agent].append(episode_results[agent])
         
         for i, (agent, data) in enumerate(mbb_data.items()):
-            rolling_avg = pd.Series(data).rolling(window=window).mean()
+            rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
             ax1.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=3)
         
         ax1.set_title('Average mbb/hand par agent')
@@ -433,7 +433,7 @@ class Visualizer:
             rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
             ax5.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=2)
         
-        ax5.set_title('Winrate par agent (moyenne mobile 100)')
+        ax5.set_title('Winrate par agent')
         ax5.set_xlabel('Episode')
         ax5.set_ylabel('Winrate')
         ax5.legend()

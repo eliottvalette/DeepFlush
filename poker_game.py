@@ -235,7 +235,7 @@ class PokerGame:
         self.pygame_winner_display_duration = 2000  # 2 secondes en millisecondes
         # --------------------
         
-        self.start_new_hand(first_hand = True)
+        self.start_new_hand()
         self._update_button_states()
 
     def reset(self):
@@ -283,7 +283,7 @@ class PokerGame:
         self.pygame_action_history = {'Player_1': [], 'Player_2': [], 'Player_3': [], 'Player_4': [], 'Player_5': [], 'Player_6': []}
         # --------------------
 
-        self.start_new_hand(first_hand = True)
+        self.start_new_hand()
         self._update_button_states()
         
         return self.get_state()
@@ -300,7 +300,7 @@ class PokerGame:
         self.button_seat_position = next_seat
 
 
-    def start_new_hand(self, first_hand=False):
+    def start_new_hand(self):
         """
         Distribue une nouvelle main sans réinitialiser la partie.
         
@@ -335,10 +335,6 @@ class PokerGame:
 
         # Distribuer les cartes aux joueurs actifs
         self.deal_cards()
-
-        # Pour les mains suivantes, déplacer le bouton vers le prochain joueur actif
-        if not first_hand:
-            self._move_button()
 
         # Construire une liste ordonnée des joueurs actifs en fonction de leur seat_position
         active_players = sorted([p for p in self.players if p.is_active],
