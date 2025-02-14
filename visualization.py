@@ -228,16 +228,23 @@ class Visualizer:
                 agents.add(state["player"])
         mbb_data = {agent: [] for agent in agents}
         for episode_num, episode in states_data.items():
-            episode_results = {agent: 0 for agent in agents}
+            episode_results = {agent: np.nan for agent in agents}
+            prev_stacks = {}  # On crée un dictionnaire pour stocker les stacks des joueurs au préflop
             for state in episode:
                 player = state["player"]
+                idx = int(player.split("_")[1]) - 1
                 if state["phase"] == "preflop":
-                    previous_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
+                    # Enregistrer le stack preflop du joueur dans le dictionnaire
+                    prev_stacks[player] = state["state_vector"]["player_stacks"][idx]
                 if state["phase"] == "showdown":
-                    final_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
-                    stack_change = final_stack - previous_stack
-                    episode_results[player] = stack_change * 1000  # Conversion en mbb
-                    previous_stack = None
+                    final_stack = state["state_vector"]["player_stacks"][idx]
+                    # On ne calcule le stack_change que si un stack preflop a été enregistré
+                    if player in prev_stacks and prev_stacks[player] is not None:
+                        stack_change = final_stack - prev_stacks[player]
+                        episode_results[player] = stack_change * 1000  # Conversion to mbb
+                    else:
+                        episode_results[player] = np.nan  # On marque comme manquant si aucun stack preflop n'a été enregistré
+                    prev_stacks[player] = None
             
             for agent in agents:
                 mbb_data[agent].append(episode_results[agent])
@@ -418,7 +425,7 @@ class Visualizer:
                 agents.add(state["player"])
         winrate_data = {agent: [] for agent in agents}
         for episode_num, episode in states_data.items():
-            episode_results = {agent: None for agent in agents}  # Initialiser à None au lieu de 0
+            episode_results = {agent: np.nan for agent in agents}  # Initialiser à np.nan pour ignorer les épisodes où le joueur n'a pas participé
             preflop_stacks = {}  # Initialiser un dictionnaire pour les stacks preflop
             
             for state in episode:
@@ -438,8 +445,7 @@ class Visualizer:
             
             # Ajouter les résultats de l'épisode pour chaque agent
             for agent in agents:
-                if episode_results[agent] is not None:  # N'ajouter que si le joueur a participé
-                    winrate_data[agent].append(episode_results[agent])
+                winrate_data[agent].append(episode_results[agent])
 
         for i, (agent, data) in enumerate(winrate_data.items()):
             rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
