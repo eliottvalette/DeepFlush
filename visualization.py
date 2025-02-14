@@ -175,6 +175,10 @@ class DataCollector:
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
             self.visualizer.plot_progress(dpi = 250)
+        if episode_num % (self.plot_interval * 4) == (self.plot_interval * 4) - 1:
+            self.visualizer.plot_metrics()
+            self.visualizer.plot_analytics()
+            self.visualizer.plot_heatmaps()
     
     def force_visualization(self):
         self.visualizer.plot_progress()
@@ -449,7 +453,10 @@ class Visualizer:
 
         for i, (agent, data) in enumerate(winrate_data.items()):
             rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
-            ax6.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=3)
+            ax6.plot(rolling_avg, 
+                     label=f"{agent} winrate", 
+                     color=pastel_colors[i], 
+                     linewidth=3)
         
         ax6.set_title('Winrate par agent')
         ax6.set_xlabel('Episode')
@@ -575,7 +582,6 @@ class Visualizer:
 
         # Créer une figure avec 8 sous-graphiques (2x4)
         fig = plt.figure(figsize=(25, 20))
-        
         # Définir une palette de couleurs pastel cohérente
         position_colors = {
             "SB": '#003049',
@@ -591,17 +597,29 @@ class Visualizer:
         position_wins = defaultdict(lambda: defaultdict(int))
         position_games = defaultdict(lambda: defaultdict(int))
         
+        # Collect union of all players that were active (i.e. had a showdown state) across all episodes
+        all_active_players = set()
+        
         for episode in states_data.values():
-            # Identifier le gagnant de l'épisode
-            winner = None
-            final_state = episode[-1]
-            for i, stack in enumerate(final_state["state_vector"]["player_stacks"]):
-                if stack > 1.0:  # Le joueur a gagné des jetons
-                    winner = f"Player_{i+1}"
+            # Determine active players for this episode (only those with a showdown phase)
+            active_players = {s["player"] for s in episode if s["phase"].lower() == "showdown"}
+            all_active_players.update(active_players)
             
-            # Compter les positions pour chaque agent
+            # Determine winner using showdown states only
+            showdown_states = [s for s in episode if s["phase"].lower() == "showdown" and s["player"] in active_players]
+            final_stacks = {}
+            for s in showdown_states:
+                player = s["player"]
+                # Assuming player is named like "Player_x"
+                idx = int(player.split("_")[1]) - 1
+                final_stacks[player] = s["state_vector"]["player_stacks"][idx]
+            winner = max(final_stacks, key=final_stacks.get) if final_stacks else None
+
+            # Count positions only for active players in this episode
             for state in episode:
                 player = state["player"]
+                if player not in active_players:
+                    continue  # Skip inactive players for this episode
                 positions = state["state_vector"]["relative_positions"]
                 position_idx = positions.index(1.0)
                 position_name = ["SB", "BB", "UTG", "MP", "CO", "BTN"][position_idx]
@@ -609,10 +627,10 @@ class Visualizer:
                 position_games[player][position_name] += 1
                 if player == winner:
                     position_wins[player][position_name] += 1
-
-        # Préparer les données pour le bar plot
+        
+        # Préparer les données pour le bar plot using active players
         positions = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
-        players = sorted([f"Player_{i+1}" for i in range(6)])  # Trier les joueurs
+        players = sorted(all_active_players)
         bar_width = 0.15
         index = np.arange(len(players))
 
@@ -636,16 +654,11 @@ class Visualizer:
         ax1.set_xlabel('Agent')
         ax1.set_ylabel('Win Rate')
         ax1.set_title('Win Rate par Agent et par Position')
-        ax1.set_xticks(index + bar_width * 2.5)
+        ax1.set_xticks(index + bar_width * (len(positions)-1) / 2)
         ax1.set_xticklabels(players)
         ax1.legend(title='Position')
-        ax1.set_ylim(0, max(max(win_rates) for win_rates in [
-            [position_wins[player][pos] / position_games[player][pos] 
-             if position_games[player][pos] > 0 else 0 
-             for player in players] 
-            for pos in positions
-        ]) * 1.2)  # Ajouter 20% d'espace pour les étiquettes
-
+        ax1.set_ylim(0,1)
+        
         plt.tight_layout()
         plt.savefig('viz_json/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
         plt.close()
@@ -658,10 +671,10 @@ class Visualizer:
 
         # Créer une figure plus grande avec plus d'espace entre les subplots
         fig = plt.figure(figsize=(30, 20))  # Increased figure size
-        plt.subplots_adjust(hspace=0.3, wspace=0.3)  # Add more space between subplots
+        plt.subplots_adjust(hspace=0.3, wspace=0.3)  # More space between subplots
         
         players = sorted([f"Player_{i+1}" for i in range(6)])
-        pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
+        player_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
 
         # 1-6. Range win rate heat maps pour chaque agent
         for i, player in enumerate(players):
@@ -670,26 +683,39 @@ class Visualizer:
             # Initialiser la matrice 13x13 pour les combinaisons de cartes
             hand_matrix = np.zeros((13, 13))
             hand_counts = np.zeros((13, 13))
+            found_active_state = False
             
-            # Analyser les mains gagnantes
+            # Process only episodes where this player was active
             for episode in states_data.values():
-                player_states = [s for s in episode if s["player"] == player]
+                # Determine active players and winner for this episode
+                active_players = {s["player"] for s in episode if s["phase"].lower() == "showdown"}
+                if player not in active_players:
+                    continue
+                
+                found_active_state = True
+                
+                # Determine winner using showdown states
+                showdown_states = [s for s in episode if s["phase"].lower() == "showdown" and s["player"] in active_players]
+                final_stacks = {}
+                for s in showdown_states:
+                    p = s["player"]
+                    idx = int(p.split("_")[1]) - 1
+                    final_stacks[p] = s["state_vector"]["player_stacks"][idx]
+                winner = max(final_stacks, key=final_stacks.get) if final_stacks else None
+                
+                # Get player's cards from their first showdown state
+                player_states = [s for s in episode if s["player"] == player and s["phase"].lower() == "showdown"]
                 if not player_states:
                     continue
-                    
-                # Obtenir les cartes du joueur
+                
                 first_state = player_states[0]
                 state_vector = first_state["state_vector"]
-                
-                # Obtenir les cartes du joueur
                 player_cards = state_vector["player_cards"]
                 
-                # Obtenir la valeur et la couleur de la première carte
+                # Récupérer la première et deuxième carte
                 card1 = player_cards[0]
                 card1_value = int(round(card1["value"] * 14 + 2))  # Denormalise la valeur de la première carte
                 card1_suit = card1["suit"].index(1) if 1 in card1["suit"] else -1
-                
-                # Obtenir la valeur et la couleur de la deuxième carte
                 card2 = player_cards[1]
                 card2_value = int(round(card2["value"] * 14 + 2))  # Denormalise la valeur de la deuxième carte
                 card2_suit = card2["suit"].index(1) if 1 in card2["suit"] else -1
@@ -698,29 +724,24 @@ class Visualizer:
                     continue
                     
                 try:
-                    # Convert to 0-12 index (2->0, A->12)
+                    # Convertir en indices 0-12 (2->0, A->12)
                     card1_idx = card1_value - 2
                     card2_idx = card2_value - 2
                     
                     if card1_idx != -1 and card2_idx != -1:
-                        # Déterminer si la main a gagné
-                        final_state = episode[-1]
-                        final_stacks = final_state["state_vector"]["player_stacks"]
-                        won = final_stacks[i] > 1.0  # Check if stack increased
+                        # Utiliser le winner déterminé précédemment
+                        won = (player == winner)
                         
-                        # Check if suited
-                        is_suited = card1_suit == card2_suit
+                        is_suited = (card1_suit == card2_suit)
                         
-                        # For suited hands, put in upper triangle
-                        # For offsuit hands, put in lower triangle
-                        if card1_idx != card2_idx:  # Different ranks
+                        if card1_idx != card2_idx:
                             if is_suited:
                                 row = min(card1_idx, card2_idx)
                                 col = max(card1_idx, card2_idx)
                             else:
                                 row = max(card1_idx, card2_idx)
                                 col = min(card1_idx, card2_idx)
-                        else:  # Pairs go on diagonal
+                        else:
                             row = card1_idx
                             col = card2_idx
                         
@@ -729,40 +750,49 @@ class Visualizer:
                 except (ValueError, IndexError):
                     continue
 
+            # Si le joueur n'a jamais été actif, afficher "Inactive"
+            if not found_active_state:
+                ax.text(0.5, 0.5, 'Inactive', ha='center', va='center',
+                        transform=ax.transAxes, fontsize=14, color='red')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_title(f'Win Rate Matrix - {player}',
+                            color=player_colors[i],
+                            pad=20,
+                            fontsize=12)
+                continue
+
             # Calculer les win rates en évitant la division par zéro
             win_rates = np.zeros((13, 13))
             mask = hand_counts > 0
             win_rates[mask] = hand_matrix[mask] / hand_counts[mask]
             
-            # Create a mask for the empty cells
             empty_mask = hand_counts == 0
+            card_labels = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']  # Ordre inverse
             
-            # Créer le heatmap avec masque pour les cellules vides
-            card_labels = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']  # Reversed order
-            
-            # Flip the matrices to match the new order
+            # Flip matrices pour correspondre aux étiquettes
             win_rates = np.flip(win_rates, axis=(0, 1))
             empty_mask = np.flip(empty_mask, axis=(0, 1))
             
             sns.heatmap(win_rates,
-                       mask=empty_mask,  # Mask empty cells
-                       annot=True,  # Show values
-                       fmt='.2f',  # Format to 2 decimal places
+                       mask=empty_mask,  # masquer les cellules sans données
+                       annot=True,  # afficher les valeurs
+                       fmt='.2f',
                        cmap='RdYlBu_r',
                        xticklabels=card_labels,
                        yticklabels=card_labels,
                        ax=ax,
                        cbar_kws={'label': 'Win Rate'},
-                       vmin=0,  # Set minimum value
-                       vmax=1)  # Set maximum value
-
-            # Add text annotations for poker hands
+                       vmin=0,
+                       vmax=1)
+            
+            # Ajouter des annotations textuelles pour les mains
             for y in range(13):
                 for x in range(13):
-                    if not empty_mask[y, x]:  # Only annotate non-empty cells
+                    if not empty_mask[y, x]:
                         first_card = card_labels[y]
                         second_card = card_labels[x]
-                        if x == y:  # Pairs
+                        if x == y:
                             hand_text = f"{second_card}{first_card}"
                         elif x > y:  # Suited
                             hand_text = f"{first_card}{second_card}s"
@@ -774,14 +804,12 @@ class Visualizer:
                               color='white', alpha=0.7, 
                               fontsize=8, fontweight='bold')
 
-            # Adjust font sizes and rotation
             ax.set_xticklabels(card_labels, fontsize=10, rotation=0)
             ax.set_yticklabels(card_labels, fontsize=10, rotation=0)
-            
             ax.set_title(f'Win Rate Matrix - {player}',
-                        color=pastel_colors[i],
-                        pad=20,
-                        fontsize=12)
+                         color=player_colors[i],
+                         pad=20,
+                         fontsize=12)
 
         plt.suptitle('Hand Win Rates by Player\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()

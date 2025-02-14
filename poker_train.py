@@ -14,10 +14,10 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 4_000
+EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9994
+EPS_DECAY = 0.9996
 START_EPS = 0.999
 STATE_SIZE = 116
 
@@ -316,7 +316,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon
-            epsilon = 1 # np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
+            epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_list, metrics_list = run_episode(
