@@ -152,7 +152,7 @@ class Player:
         self.cards: List[Card] = []
         self.is_active = True # True si le joueur a assez de fonds pour jouer (stack > big_blind)
         self.has_folded = False
-        self.is_human = True # True si on veut voir les cartes du joueur
+        self.show_cards = True # True si on veut voir les cartes du joueur
         self.is_all_in = False
         self.range = None # Range du joueur (à initialiser comme l'ensemble des mains possibles)
         self.current_player_bet = 0 # Montant de la mise actuelle du joueur
@@ -1947,7 +1947,7 @@ class PokerGame:
         
         # Draw player cards
         if player.is_active and not player.has_folded and len(player.cards) > 0:
-            if player.is_human or self.current_phase == GamePhase.SHOWDOWN:
+            if player.show_cards or self.current_phase == GamePhase.SHOWDOWN:
                 for i, card in enumerate(player.cards):
                     self._draw_card(card, player.x + i * 60, player.y)
             else:

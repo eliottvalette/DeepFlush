@@ -11,7 +11,7 @@ import os
 class PokerAgent:
     """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
     
-    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False, load_path=None):
+    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False, load_path=None, show_cards=False):
         """
         Initialisation de l'agent
         :param state_size: Taille du vecteur d'état
@@ -50,7 +50,7 @@ class PokerAgent:
         if load_model:
             self.load(load_path)
 
-        self.is_human = False
+        self.show_cards = show_cards
         self.name = 'unknown_agent'
 
     def load(self, load_path):

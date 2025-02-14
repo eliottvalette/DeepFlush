@@ -81,7 +81,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     # Synchroniser les noms et statuts humains entre l'environnement et les agents
     for i, agent in enumerate(agent_list):
         env.players[i].name = agent.name
-        env.players[i].is_human = agent.is_human
+        env.players[i].show_cards = agent.show_cards
 
     cumulative_rewards = [0] * len(agent_list)
     initial_stacks = [player.stack for player in env.players]
@@ -311,7 +311,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     # Créer l'environnement de jeu
     for i, agent in enumerate(agent_list):
         env.players[i].name = agent.name
-        env.players[i].is_human = agent.is_human
+        env.players[i].show_cards = agent.show_cards
     
     try:
         for episode in range(episodes):
@@ -352,8 +352,10 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         if episode == episodes - 1:
             print("\nSauvegarde des modèles...")
             for agent in agent_list:
-                torch.save(agent.model.state_dict(), 
-                         f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")
+                # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
+                if hasattr(agent, 'model'):
+                    torch.save(agent.model.state_dict(), 
+                             f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")
             print("Modèles sauvegardés avec succès!")
 
             print("Génération de la vizualiation...")
@@ -363,8 +365,10 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         print("\nEntraînement interrompu par l'utilisateur")
         print("\nSauvegarde des modèles...")
         for agent in agent_list:
-            torch.save(agent.model.state_dict(), 
-                     f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")    
+            # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
+            if hasattr(agent, 'model'):
+                torch.save(agent.model.state_dict(), 
+                         f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")    
         print("Génération de la vizualiation...")
         data_collector.force_visualization()
         

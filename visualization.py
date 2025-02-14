@@ -226,10 +226,8 @@ class Visualizer:
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
         window = 1500
-        agents = set()
-        for episode in states_data.values():
-            for state in episode:
-                agents.add(state["player"])
+
+        agents = sorted([f"Player_{i+1}" for i in range(6)], key=lambda x: int(x.split('_')[1]))
         mbb_data = {agent: [] for agent in agents}
         for episode_num, episode in states_data.items():
             episode_results = {agent: np.nan for agent in agents}
@@ -394,6 +392,9 @@ class Visualizer:
         # 5. Rewards par agent
         ax5 = plt.subplot(2, 3, 5)  # Position in bottom right
         
+        # Collecter et trier les agents
+        agents = sorted([f"Player_{i+1}" for i in range(6)], key=lambda x: int(x.split('_')[1]))
+
         # Tracer les récompenses pour chaque agent
         rewards_window = 250  # Window size for rolling average
         for i, agent in enumerate(agents):
@@ -421,49 +422,72 @@ class Visualizer:
 
         # 6. Winrate par agent
         ax6 = plt.subplot(2, 3, 6)
-        window = 1000  # Fenêtre glissante de 1000 parties
 
-        agents = set()
-        for episode in states_data.values():
-            for state in episode:
-                agents.add(state["player"])
-        winrate_data = {agent: [] for agent in agents}
+        # Collecter et trier les agents
+        agents = sorted([f"Player_{i+1}" for i in range(6)], key=lambda x: int(x.split('_')[1]))
+        window = 1000  # Taille de la fenêtre pour la moyenne mobile
+
+        # Préparer les données pour chaque agent
+        agent_results = {agent: [] for agent in agents}
+
         for episode_num, episode in states_data.items():
-            episode_results = {agent: np.nan for agent in agents}  # Initialiser à np.nan pour ignorer les épisodes où le joueur n'a pas participé
-            preflop_stacks = {}  # Initialiser un dictionnaire pour les stacks preflop
+            # Réinitialiser les stacks preflop pour chaque épisode
+            preflop_stacks = {}
+            showdown_stacks = {}
             
+            # Collecter les stacks preflop et showdown
             for state in episode:
                 player = state["player"]
+                player_idx = int(player.split("_")[1]) - 1
+                
                 if state["phase"] == "preflop":
-                    # S'assurer qu'on enregistre le premier état preflop pour chaque joueur
                     if player not in preflop_stacks:
-                        preflop_stacks[player] = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
+                        preflop_stacks[player] = state["state_vector"]["player_stacks"][player_idx]
                 elif state["phase"] == "showdown":
-                    # Ne traiter que les joueurs dont on a le stack preflop
-                    if player in preflop_stacks:
-                        final_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
-                        stack_change = final_stack - preflop_stacks[player]
-                        # Ne compter que si le joueur a effectivement joué (stack_change != 0)
-                        if stack_change != 0:
-                            episode_results[player] = 1 if stack_change > 0 else 0
+                    showdown_stacks[player] = state["state_vector"]["player_stacks"][player_idx]
             
-            # Ajouter les résultats de l'épisode pour chaque agent
+            # Déterminer le(s) gagnant(s) de l'épisode
+            participating_players = set(preflop_stacks.keys()) & set(showdown_stacks.keys())
+            
+            if participating_players:
+                max_gain = float('-inf')
+                winners = []
+                
+                for player in participating_players:
+                    gain = showdown_stacks[player] - preflop_stacks[player]
+                    if gain > max_gain:
+                        max_gain = gain
+                        winners = [player]
+                    elif gain == max_gain:
+                        winners.append(player)
+            
+            # Distribuer les résultats (1 pour victoire, 0 pour défaite)
+            win_share = 1.0 / len(winners)
             for agent in agents:
-                winrate_data[agent].append(episode_results[agent])
+                if agent in participating_players:
+                    result = win_share if agent in winners else 0
+                    agent_results[agent].append(result)
+                else:
+                    agent_results[agent].append(None)  # Pour les épisodes où l'agent n'a pas participé
 
-        for i, (agent, data) in enumerate(winrate_data.items()):
-            rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
-            ax6.plot(rolling_avg, 
-                     label=f"{agent} winrate", 
-                     color=pastel_colors[i], 
-                     linewidth=3)
-        
-        ax6.set_title('Winrate par agent')
+        # Tracer les courbes de winrate pour chaque agent
+        for i, (agent, results) in enumerate(agent_results.items()):
+            # Convertir en pandas Series pour gérer les valeurs manquantes
+            series = pd.Series(results)
+            # Calculer la moyenne mobile en ignorant les valeurs manquantes
+            rolling_winrate = series.rolling(window=window, min_periods=1).mean()
+            
+            ax6.plot(rolling_winrate, 
+                     label=f"{agent}", 
+                     color=pastel_colors[i],
+                     linewidth=2)
+
+        ax6.set_title('Winrate par agent (moyenne mobile sur 1000 épisodes)')
         ax6.set_xlabel('Episode')
         ax6.set_ylabel('Winrate')
         ax6.legend()
         ax6.set_ylim(0, 1)
-        
+
         ax6.set_facecolor('#F0F0F0')
         ax6.grid(True, alpha=0.3)
 
