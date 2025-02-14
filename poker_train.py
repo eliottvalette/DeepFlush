@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 10_000
+EPISODES = 1_00
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9994
@@ -26,8 +26,8 @@ RENDERING = False      # Active/désactive l'affichage graphique
 FPS = 3                # Images par seconde pour le rendu
 
 # Intervalles de sauvegarde
-SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
-PLOT_INTERVAL = 500    # Fréquence de mise à jour des graphiques
+SAVE_INTERVAL = 25    # Fréquence de sauvegarde des modèles
+PLOT_INTERVAL = 50    # Fréquence de mise à jour des graphiques
 
 # Compteurs
 number_of_hand_per_game = 0
@@ -65,16 +65,18 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     Returns:
         Tuple[List[float], List[dict]]: Récompenses finales et métriques d'entraînement
     """
-    global number_of_hand_per_game  # Added this to reference and update the global variable
+    global number_of_hand_per_game  # Ajout de cette ligne pour référencer et mettre à jour la variable globale
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
     if len(players_that_can_play) < 3 or number_of_hand_per_game > 100:  # Évite les heads-up
         env.reset()
         number_of_hand_per_game = 0
+        players_that_can_play = [p for p in env.players if p.stack > 0]
     else:
         env.start_new_hand()
         number_of_hand_per_game += 1
+    
     
     # Synchroniser les noms et statuts humains entre l'environnement et les agents
     for i, agent in enumerate(agent_list):
@@ -97,8 +99,8 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     # Boucle principale du jeu
     while env.current_phase != GamePhase.SHOWDOWN:
         # Pour éviter les boucles infinies
-        if len(actions_taken[f"Agent {env.current_player_seat + 1}"]) > 25:
-            raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 25 actions")
+        if len(actions_taken[f"Agent {env.current_player_seat + 1}"]) > 20:
+            raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 20 actions")
         
         current_player = env.players[env.current_player_seat]
         current_agent = agent_list[env.current_player_seat]
@@ -117,6 +119,17 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         action_chosen, action_mask = current_agent.get_action(player_state_seq, epsilon, valid_actions)
+
+        # Stocker l'état actuel pour la collecte des métriques (c'est important d'enregistrer l'état avant l'action car l'action modifie l'état et la phase)
+        current_state = player_state_seq[-1].clone()
+        state_info = {
+            "player": current_player.name,
+            "phase": env.current_phase.value,
+            "action": action_chosen.value,
+            "num_active_players": len(players_that_can_play),
+            "state_vector": current_state.tolist()  # Utilisation de l'état pré-action
+        }
+        data_collector.add_state(state_info)
         
         # Exécuter l'action dans l'environnement
         next_state, reward = env.step(action_chosen)
@@ -125,27 +138,19 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         state_seq[env.current_player_seat].append(next_state)
         next_player_state_seq = state_seq[env.current_player_seat].copy()
-        
-        # Stocker l'expérience : on enregistre une copie de la séquence courante
-        current_agent.remember(
-            player_state_seq.copy(), 
-            action_chosen, 
-            reward, 
-            next_player_state_seq,
-            env.current_phase == GamePhase.SHOWDOWN,
-            action_mask
-        )
+
         actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
         
-        # Stocker l'état actuel pour la collecte des métriques
-        current_state = player_state_seq[-1].clone()
-        state_info = {
-            "player": current_player.name,
-            "phase": env.current_phase.value,
-            "action": action_chosen.value if action_chosen else None,
-            "state_vector": current_state.tolist()  # Utilisation de l'état pré-action
-        }
-        data_collector.add_state(state_info)
+        # Stocker l'expérience : on enregistre une copie de la séquence courante (On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte)
+        if env.current_phase != GamePhase.SHOWDOWN:
+            current_agent.remember(
+                player_state_seq.copy(), 
+                action_chosen, 
+                reward, 
+                next_player_state_seq,
+                False,
+                action_mask
+            )
         
         # Rendu graphique si activé
         if rendering and (episode % render_every == 0):
@@ -221,6 +226,17 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         # Enregistrer l'expérience finale
         agent.remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
         cumulative_rewards[i] += final_reward
+
+        # Stocker l'expérience finale pour la collecte des métriques
+        current_state = terminal_state[-1].clone()
+        state_info = {
+            "player": f"Player_{i+1}",  # Utiliser l'index du joueur plutôt que current_player.name
+            "phase": GamePhase.SHOWDOWN.value,
+            "action": None,
+            "num_active_players": len(players_that_can_play),
+            "state_vector": current_state.tolist()
+        }
+        data_collector.add_state(state_info)
 
     # Affichage des résultats
     print("\nRécompenses finales:")
@@ -300,7 +316,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon
-            epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
+            epsilon = 1 # np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_list, metrics_list = run_episode(

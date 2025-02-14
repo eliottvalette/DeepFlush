@@ -226,19 +226,18 @@ class Visualizer:
         for episode in states_data.values():
             for state in episode:
                 agents.add(state["player"])
-        
         mbb_data = {agent: [] for agent in agents}
-        final_stack = 0
         for episode_num, episode in states_data.items():
             episode_results = {agent: 0 for agent in agents}
-            previous_stack = final_stack
             for state in episode:
                 player = state["player"]
+                if state["phase"] == "preflop":
+                    previous_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
                 if state["phase"] == "showdown":
                     final_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
                     stack_change = final_stack - previous_stack
                     episode_results[player] = stack_change * 1000  # Conversion en mbb
-                    previous_stack = final_stack
+                    previous_stack = None
             
             for agent in agents:
                 mbb_data[agent].append(episode_results[agent])
@@ -381,8 +380,8 @@ class Visualizer:
         ax4.set_facecolor('#F0F0F0')
         ax4.grid(True, alpha=0.3)
 
-        # 6. Rewards par agent
-        ax6 = plt.subplot(2, 3, 5)  # Position in bottom right
+        # 5. Rewards par agent
+        ax5 = plt.subplot(2, 3, 5)  # Position in bottom right
         
         # Tracer les récompenses pour chaque agent
         rewards_window = 250  # Window size for rolling average
@@ -397,50 +396,63 @@ class Visualizer:
             
             if rewards:
                 rolling_avg = pd.Series(rewards).rolling(window=rewards_window, min_periods=1).mean()
-                ax6.plot(episodes, rolling_avg, 
+                ax5.plot(episodes, rolling_avg, 
                         label=f"{agent} Reward", 
                         color=pastel_colors[i],
                         linewidth=2)
         
-        ax6.set_title('Evolution des Récompenses par Agent')
-        ax6.set_xlabel('Episode')
-        ax6.set_ylabel('Reward')
-        ax6.legend()
-        ax6.grid(True, alpha=0.3)
-        ax6.set_facecolor('#F0F0F0')
-
-        # Ajouter un nouveau subplot pour le winrate
-        ax5 = plt.subplot(2, 3, 6)
-        window = 1000  # Fenêtre glissante de 1000 parties
-        
-        # Calculer le winrate pour chaque agent
-        winrates = {agent: [] for agent in agents}
-        for episode_num in sorted([int(k) for k in states_data.keys()]):
-            episode = states_data[str(episode_num)]
-            # Identifier le gagnant de l'épisode
-            winner = None
-            final_state = episode[-1]
-            for i, stack in enumerate(final_state["state_vector"]["player_stacks"]):
-                if stack > 1.0:  # Le joueur a gagné des jetons
-                    winner = f"Player_{i+1}"
-            
-            # Mettre à jour les winrates
-            for agent in agents:
-                winrates[agent].append(1 if agent == winner else 0)
-        
-        # Tracer la moyenne mobile du winrate pour chaque agent
-        for i, (agent, data) in enumerate(winrates.items()):
-            rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
-            ax5.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=2)
-        
-        ax5.set_title('Winrate par agent')
+        ax5.set_title('Evolution des Récompenses par Agent')
         ax5.set_xlabel('Episode')
-        ax5.set_ylabel('Winrate')
+        ax5.set_ylabel('Reward')
         ax5.legend()
-        ax5.set_ylim(0, 1)
-        
-        ax5.set_facecolor('#F0F0F0')
         ax5.grid(True, alpha=0.3)
+        ax5.set_facecolor('#F0F0F0')
+
+        # 6. Winrate par agent
+        ax6 = plt.subplot(2, 3, 6)
+        window = 1000  # Fenêtre glissante de 1000 parties
+
+        agents = set()
+        for episode in states_data.values():
+            for state in episode:
+                agents.add(state["player"])
+        winrate_data = {agent: [] for agent in agents}
+        for episode_num, episode in states_data.items():
+            episode_results = {agent: None for agent in agents}  # Initialiser à None au lieu de 0
+            preflop_stacks = {}  # Initialiser un dictionnaire pour les stacks preflop
+            
+            for state in episode:
+                player = state["player"]
+                if state["phase"] == "preflop":
+                    # S'assurer qu'on enregistre le premier état preflop pour chaque joueur
+                    if player not in preflop_stacks:
+                        preflop_stacks[player] = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
+                elif state["phase"] == "showdown":
+                    # Ne traiter que les joueurs dont on a le stack preflop
+                    if player in preflop_stacks:
+                        final_stack = state["state_vector"]["player_stacks"][int(player.split("_")[1]) - 1]
+                        stack_change = final_stack - preflop_stacks[player]
+                        # Ne compter que si le joueur a effectivement joué (stack_change != 0)
+                        if stack_change != 0:
+                            episode_results[player] = 1 if stack_change > 0 else 0
+            
+            # Ajouter les résultats de l'épisode pour chaque agent
+            for agent in agents:
+                if episode_results[agent] is not None:  # N'ajouter que si le joueur a participé
+                    winrate_data[agent].append(episode_results[agent])
+
+        for i, (agent, data) in enumerate(winrate_data.items()):
+            rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
+            ax6.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=3)
+        
+        ax6.set_title('Winrate par agent')
+        ax6.set_xlabel('Episode')
+        ax6.set_ylabel('Winrate')
+        ax6.legend()
+        ax6.set_ylim(0, 1)
+        
+        ax6.set_facecolor('#F0F0F0')
+        ax6.grid(True, alpha=0.3)
 
         # Style global mis à jour
         plt.rcParams.update({
@@ -586,7 +598,7 @@ class Visualizer:
                 player = state["player"]
                 positions = state["state_vector"]["relative_positions"]
                 position_idx = positions.index(1.0)
-                position_name = ["BB", "SB", "UTG", "MP", "CO", "BTN"][position_idx]
+                position_name = ["SB", "BB", "UTG", "MP", "CO", "BTN"][position_idx]
                 
                 position_games[player][position_name] += 1
                 if player == winner:
