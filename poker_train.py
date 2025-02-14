@@ -14,10 +14,10 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 10_000
+EPISODES = 30_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9996
+EPS_DECAY = 0.9998
 START_EPS = 0.999
 STATE_SIZE = 116
 

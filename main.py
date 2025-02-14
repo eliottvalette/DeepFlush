@@ -17,7 +17,7 @@ list_names = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Playe
 agent_list = []
 
 # Créer 4 agents IA
-for i in range(4):
+for i in [0, 1, 3, 4]:
     agent = PokerAgent(
         state_size=STATE_SIZE,
         device=device,
@@ -32,12 +32,12 @@ for i in range(4):
     agent_list.append(agent)
 
 # Créer 2 bots
-for i in range(4, 6):
+for i in [2, 5]:
     bot = PokerBot(name=list_names[i], show_cards=True)
     agent_list.append(bot)
 
 # Faire en sorte que les agents IA partagent le même modèle (Changer entre True et False pour activer ou désactiver le partage de modèle)
-if True:
+if False:
     shared_model = agent_list[0].model
     for agent in agent_list[:4]:  # Seulement pour les 4 premiers agents qui sont des IA
         agent.model = shared_model
