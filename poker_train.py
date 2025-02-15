@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 2_000
+EPISODES = 1_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9998
@@ -69,7 +69,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 2 or number_of_hand_per_game > 100:  # Évite les heads-up
+    if len(players_that_can_play) < 3 or number_of_hand_per_game > 100:  # Évite les heads-up
         env.reset()
         number_of_hand_per_game = 0
         players_that_can_play = [p for p in env.players if p.stack > 0]

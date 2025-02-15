@@ -350,7 +350,8 @@ class PokerGame:
                 break
 
         # Réorganiser la liste pour que le premier joueur soit celui qui a le bouton
-        ordered_players = active_players[button_index:] + active_players[:button_index]
+        adjusted_button_index = (button_index + 1) % len(active_players)
+        ordered_players = active_players[adjusted_button_index:] + active_players[:adjusted_button_index]
         n = len(ordered_players)
 
         # Réattribuer les rôles en fonction du nombre de joueurs actifs
@@ -415,6 +416,14 @@ class PokerGame:
 
         # Clear action history for new hand
         self.pygame_action_history = {player.name: [] for player in self.players}
+
+        # In poker_game.py, inside start_new_hand() after resetting players:
+        print("Player positions and roles for the new hand:")
+        for p in self.players:
+            if p.is_active:
+                print(f"{p.name}: seat={p.seat_position}, role={p.role_position}, stack={p.stack}")
+            else :
+                print(f"{p.name}: seat={p.seat_position}, role=(inactive), stack={p.stack}")
 
         return self.get_state()
 
