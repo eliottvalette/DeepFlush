@@ -12,7 +12,7 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Forcer l'utilisation du CPU
 
 # Liste des noms des joueurs
-list_names = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Player_6"]
+list_names = ["Player_0", "Player_1", "Player_2", "Player_3", "Player_4", "Player_5"]
 
 agent_list = []
 

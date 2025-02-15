@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 1_000
+EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9998
@@ -75,8 +75,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         players_that_can_play = [p for p in env.players if p.stack > 0]
     else:
         env.start_new_hand()
-        number_of_hand_per_game += 1
-    
+        number_of_hand_per_game += 1    
     
     # Synchroniser les noms et statuts humains entre l'environnement et les agents
     for i, agent in enumerate(agent_list):
@@ -176,6 +175,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Récupération des changements de stack pour chaque joueur et des stack finaux
     stack_changes = env.net_stack_changes
+    final_stacks = env.final_stacks
     
     # Cas normal - déterminer les gagnants par les changements de stack
     winning_list = [1 if stack_changes[p.name] > 0 else 0 for p in env.players]
@@ -184,8 +184,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     for i, agent in enumerate(agent_list):
         if not current_in_game_players_mask[i]:
             continue  # Ignorer les joueurs inactifs
-            
-        env.current_player_seat = i
         player_state_seq = state_seq[i]
         terminal_state = player_state_seq.copy()
         is_winner = winning_list[i]
@@ -206,7 +204,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             final_reward = -(abs(stack_change_normalized) ** 0.5) * 5
             
             # Pénalité supplémentaire si le joueur est presque ruiné
-            if env.players[i].stack <= 10:
+            if final_stacks[player_name] <= 2:
                 final_reward -= 2
                 
         # Enregistrer l'expérience finale

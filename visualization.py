@@ -10,6 +10,8 @@ import os
 import json
 import pandas as pd
 
+PLAYERS = ['Player_0', 'Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5']
+
 class DataCollector:
     def __init__(self, save_interval, plot_interval, start_epsilon, epsilon_decay, output_dir="viz_json"):
         """
@@ -228,21 +230,18 @@ class Visualizer:
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
         window = self.plot_interval * 3 
-        agents = ['Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5', 'Player_6']
+        agents = ['Player_0', 'Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5']
         mbb_data = {agent: [] for agent in agents}
         for episode_num, episode in states_data.items():
-            # Trouver le dernier état showdown qui contient les stack_changes finaux
-            showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
-            
-            last_showdown_state = showdown_states[-1]
-            
-            # Pour chaque agent, ajouter son stack change en mbb
-            for agent in agents:
-                if agent in last_showdown_state["stack_changes"]:
-                    stack_change = last_showdown_state["stack_changes"][agent]
-                    mbb_data[agent].append(stack_change * 1000)  # Conversion en mbb
-                else:
-                    raise Exception(f"Agent {agent} n'a pas de showdownd dans les metrics même vide")
+            for state in episode:
+                if state["phase"] == "showdown":            
+                    # Pour chaque agent, ajouter son stack change en mbb
+                    for agent in agents:
+                        if agent in state["stack_changes"]:
+                            stack_change = state["stack_changes"][agent]
+                            mbb_data[agent].append(stack_change * 1000)  # Conversion en mbb
+                        else:
+                            raise Exception(f"Agent {agent} n'a pas de showdown dans les metrics même vide")
 
         # Tracer les moyennes mobiles pour chaque agent
         for i, (agent, data) in enumerate(mbb_data.items()):
@@ -430,18 +429,14 @@ class Visualizer:
             # Trouver le gain maximum
             max_gain = max(stack_changes.values())
             winners = [player for player, gain in stack_changes.items() if gain == max_gain]
-            
-            # Déterminer les joueurs qui ont participé (ceux qui ont un stack_change)
-            participating_players = set(stack_changes.keys())
+            players = PLAYERS
             
             # Distribuer les résultats (1 pour victoire, 0 pour défaite)
             win_share = 1.0 / len(winners) if winners else 0
             for agent in agents:
-                if agent in participating_players:
+                if agent in players:
                     result = win_share if agent in winners else 0
                     agent_results[agent].append(result)
-                else:
-                    agent_results[agent].append(None)  # Pour les épisodes où l'agent n'a pas participé
 
         # Tracer les courbes de winrate pour chaque agent
         for i, (agent, results) in enumerate(agent_results.items()):
@@ -500,7 +495,7 @@ class Visualizer:
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
         # Extraire les agents uniques (maintenant basé sur l'index dans la liste des métriques)
-        agents = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Player_6"]
+        agents = ["Player_0", "Player_1", "Player_2", "Player_3", "Player_4", "Player_5"]
 
         # Métriques spécifiques à tracer
         metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']
@@ -594,13 +589,8 @@ class Visualizer:
         position_games = defaultdict(lambda: defaultdict(int))
         
         # Collect union of all players that were active (i.e. had a showdown state) across all episodes
-        all_active_players = set()
-        
-        for episode in states_data.values():
-            # Determine active players for this episode (only those with a showdown phase)
-            active_players = {s["player"] for s in episode if s["phase"].lower() == "showdown"}
-            all_active_players.update(active_players)
-            
+        players = PLAYERS
+        for episode in states_data.values():            
             # Get the last showdown state to access stack changes
             showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
             if not showdown_states:
@@ -613,7 +603,7 @@ class Visualizer:
             # Count positions only for active players in this episode
             for state in episode:
                 player = state["player"]
-                if player not in active_players:
+                if player not in players:
                     continue  # Skip inactive players for this episode
                 positions = state["state_vector"]["relative_positions"]
                 position_idx = positions.index(1.0)
@@ -625,7 +615,6 @@ class Visualizer:
         
         # Préparer les données pour le bar plot using active players
         positions = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
-        players = sorted(all_active_players)
         bar_width = 0.15
         index = np.arange(len(players))
 
@@ -668,7 +657,7 @@ class Visualizer:
         fig = plt.figure(figsize=(30, 20))  # Increased figure size
         plt.subplots_adjust(hspace=0.3, wspace=0.3)  # More space between subplots
         
-        players = sorted([f"Player_{i+1}" for i in range(6)])
+        players = PLAYERS
         player_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
 
         # 1-6. Range win rate heat maps pour chaque agent
@@ -677,18 +666,9 @@ class Visualizer:
             
             # Initialiser la matrice 13x13 pour les combinaisons de cartes
             hand_matrix = np.zeros((13, 13))
-            hand_counts = np.zeros((13, 13))
-            found_active_state = False
-            
+            hand_counts = np.zeros((13, 13))            
             # Process only episodes where this player was active
-            for episode in states_data.values():
-                # Determine active players and winner for this episode
-                active_players = {s["player"] for s in episode if s["phase"].lower() == "showdown"}
-                if player not in active_players:
-                    continue
-                
-                found_active_state = True
-                
+            for episode in states_data.values():                                
                 # Determine winner using showdown states
                 winners = [s["player"] for s in episode if s["phase"].lower() == "showdown" and s["stack_changes"][s["player"]] > 0]
                 if not winners:
@@ -741,18 +721,6 @@ class Visualizer:
                         hand_counts[row][col] += 1
                 except (ValueError, IndexError):
                     continue
-
-            # Si le joueur n'a jamais été actif, afficher "Inactive"
-            if not found_active_state:
-                ax.text(0.5, 0.5, 'Inactive', ha='center', va='center',
-                        transform=ax.transAxes, fontsize=14, color='red')
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_title(f'Win Rate Matrix - {player}',
-                            color=player_colors[i],
-                            pad=20,
-                            fontsize=12)
-                continue
 
             # Calculer les win rates en évitant la division par zéro
             win_rates = np.zeros((13, 13))

@@ -247,6 +247,7 @@ class PokerAgent:
             self.optimizer.step()
 
             metrics = {
+                'player': self.name,
                 'entropy_loss': entropy_loss.item(),
                 'value_loss': value_loss.item(),
                 'invalid_action_penalty': invalid_action_penalty.item(),

@@ -270,7 +270,7 @@ class PokerGame:
             player.range = None        
         
         # Initialiser les variables d'état du jeu
-        self.current_player_seat = (self.button_seat_position + 1) % 6  # 0-5 initialisé à SB
+        self.current_player_seat = (self.button_seat_position + 1) % 6  # 0-5
         self.current_maximum_bet = 0  # initialisé à 0 mais s'updatera automatiquement à BB
 
         self.number_raise_this_game_phase = 0
@@ -287,18 +287,6 @@ class PokerGame:
         self._update_button_states()
         
         return self.get_state()
-
-    def _move_button(self):
-        """
-        Déplace le bouton vers le prochain joueur actif.
-        Cette méthode incrémente la position du bouton en vérifiant que le joueur est actif.
-        """
-        next_seat = (self.button_seat_position + 1) % self.num_players
-        # Si le joueur à la nouvelle position n'est pas actif, on continue à chercher.
-        while not self.players[next_seat].is_active:
-            next_seat = (next_seat + 1) % self.num_players
-        self.button_seat_position = next_seat
-
 
     def start_new_hand(self):
         """
@@ -2334,6 +2322,6 @@ class PokerGame:
         pygame.quit()
 
 if __name__ == "__main__":
-    list_names = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Player_6"]
+    list_names = ["Player_0", "Player_1", "Player_2", "Player_3", "Player_4", "Player_5"]
     game = PokerGame(list_names)
     game.manual_run()
