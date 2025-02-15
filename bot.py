@@ -132,12 +132,12 @@ class PokerBot:
             dict: Empty metrics dictionary with default values.
         """
         return {
-            'entropy_loss': 0.0,
-            'value_loss': 0.0,
-            'invalid_action_penalty': 0.0,
-            'std': 0.0,
-            'learning_rate': 0.0,
-            'loss': 0.0
+            'entropy_loss': -0.01,
+            'value_loss': -0.01,
+            'invalid_action_penalty': -0.01,
+            'std': -0.01,
+            'learning_rate': -0.01,
+            'loss': -0.01
         }
 
     def remember(self, *args, **kwargs):

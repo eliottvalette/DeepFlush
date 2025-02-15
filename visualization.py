@@ -37,7 +37,7 @@ class DataCollector:
         for file in os.listdir(output_dir):
             os.remove(os.path.join(output_dir, file))
 
-        self.visualizer = Visualizer(output_dir=output_dir, start_epsilon=start_epsilon, epsilon_decay=epsilon_decay)
+        self.visualizer = Visualizer(output_dir=output_dir, start_epsilon=start_epsilon, epsilon_decay=epsilon_decay, plot_interval=plot_interval, save_interval=save_interval)
     
     def add_state(self, state_info):
         """
@@ -74,7 +74,7 @@ class DataCollector:
             },
             "game_phase": state_vector[47:52],  # One-hot encoding de la phase
             "current_max_bet": state_vector[52],  # Mise maximale normalisée
-            "player_stacks": state_vector[53:59],  # Stacks normalisés
+            "player_stacks": state_vector[53:59],  # Stacks normalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
             "current_bets": state_vector[59:65],  # Mises actuelles normalisées
             "player_activity": state_vector[65:71],  # État des joueurs (actif/inactif)
             "relative_positions": state_vector[71:77],  # Position relative one-hot
@@ -104,7 +104,7 @@ class DataCollector:
                 }
             ],
             "player_stacks": state_vector[53:59],  # Stacks normalisés
-            "relative_positions": state_vector[71:77]  # Position relative one-hot
+            "relative_positions": state_vector[71:77],  # Position relative one-hot
         }
 
         # Mettre à jour state_info avec le vecteur d'état subdivisé
@@ -190,10 +190,12 @@ class Visualizer:
     """
     Visualise les données collectées dans le répertoire viz_json
     """
-    def __init__(self, start_epsilon, epsilon_decay, output_dir="viz_json"):
+    def __init__(self, start_epsilon, epsilon_decay, plot_interval, save_interval, output_dir="viz_json"):
         self.output_dir = output_dir
         self.start_epsilon = start_epsilon
         self.epsilon_decay = epsilon_decay
+        self.plot_interval = plot_interval
+        self.save_interval = save_interval
         
         # Définition des couleurs pour chaque action
         self.action_colors = {
@@ -225,35 +227,27 @@ class Visualizer:
         
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
-        window = 1500
-
-        agents = sorted([f"Player_{i+1}" for i in range(6)], key=lambda x: int(x.split('_')[1]))
+        window = self.plot_interval * 3 
+        agents = ['Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5', 'Player_6']
         mbb_data = {agent: [] for agent in agents}
         for episode_num, episode in states_data.items():
-            episode_results = {agent: np.nan for agent in agents}
-            prev_stacks = {}  # On crée un dictionnaire pour stocker les stacks des joueurs au préflop
-            for state in episode:
-                player = state["player"]
-                idx = int(player.split("_")[1]) - 1
-                if state["phase"] == "preflop":
-                    # Enregistrer le stack preflop du joueur dans le dictionnaire
-                    prev_stacks[player] = state["state_vector"]["player_stacks"][idx]
-                if state["phase"] == "showdown":
-                    final_stack = state["state_vector"]["player_stacks"][idx]
-                    # On ne calcule le stack_change que si un stack preflop a été enregistré
-                    if player in prev_stacks and prev_stacks[player] is not None:
-                        stack_change = final_stack - prev_stacks[player]
-                        episode_results[player] = stack_change * 1000  # Conversion to mbb
-                    else:
-                        episode_results[player] = np.nan  # On marque comme manquant si aucun stack preflop n'a été enregistré
-                    prev_stacks[player] = None
+            # Trouver le dernier état showdown qui contient les stack_changes finaux
+            showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
             
+            last_showdown_state = showdown_states[-1]
+            
+            # Pour chaque agent, ajouter son stack change en mbb
             for agent in agents:
-                mbb_data[agent].append(episode_results[agent])
-        
+                if agent in last_showdown_state["stack_changes"]:
+                    stack_change = last_showdown_state["stack_changes"][agent]
+                    mbb_data[agent].append(stack_change * 1000)  # Conversion en mbb
+                else:
+                    raise Exception(f"Agent {agent} n'a pas de showdownd dans les metrics même vide")
+
+        # Tracer les moyennes mobiles pour chaque agent
         for i, (agent, data) in enumerate(mbb_data.items()):
             rolling_avg = pd.Series(data).rolling(window=window, min_periods=1).mean()
-            ax1.plot(rolling_avg, label=agent, color=pastel_colors[i % len(pastel_colors)], linewidth=3)
+            ax1.plot(rolling_avg, label=agent, color=pastel_colors[i], linewidth=3)
         
         ax1.set_title('Average mbb/hand par agent')
         ax1.set_xlabel('Episode')
@@ -262,9 +256,6 @@ class Visualizer:
         
         ax1.set_facecolor('#F0F0F0')  # Fond légèrement gris
         ax1.grid(True, alpha=0.3)
-        
-        # Trier les agents par ordre croissant
-        agents = sorted(agents)
         
         # 2. Fréquence des actions par agent
         ax3 = plt.subplot(2, 3, 2)
@@ -392,11 +383,9 @@ class Visualizer:
         # 5. Rewards par agent
         ax5 = plt.subplot(2, 3, 5)  # Position in bottom right
         
-        # Collecter et trier les agents
-        agents = sorted([f"Player_{i+1}" for i in range(6)], key=lambda x: int(x.split('_')[1]))
 
         # Tracer les récompenses pour chaque agent
-        rewards_window = 250  # Window size for rolling average
+        rewards_window = self.plot_interval * 3
         for i, agent in enumerate(agents):
             episodes = []
             rewards = []
@@ -424,45 +413,29 @@ class Visualizer:
         ax6 = plt.subplot(2, 3, 6)
 
         # Collecter et trier les agents
-        agents = sorted([f"Player_{i+1}" for i in range(6)], key=lambda x: int(x.split('_')[1]))
-        window = 1000  # Taille de la fenêtre pour la moyenne mobile
+        window = self.plot_interval * 3
 
         # Préparer les données pour chaque agent
         agent_results = {agent: [] for agent in agents}
 
         for episode_num, episode in states_data.items():
-            # Réinitialiser les stacks preflop pour chaque épisode
-            preflop_stacks = {}
-            showdown_stacks = {}
-            
-            # Collecter les stacks preflop et showdown
-            for state in episode:
-                player = state["player"]
-                player_idx = int(player.split("_")[1]) - 1
+            # Trouver le dernier état showdown qui contient les stack_changes finaux
+            showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
                 
-                if state["phase"] == "preflop":
-                    if player not in preflop_stacks:
-                        preflop_stacks[player] = state["state_vector"]["player_stacks"][player_idx]
-                elif state["phase"] == "showdown":
-                    showdown_stacks[player] = state["state_vector"]["player_stacks"][player_idx]
+            last_showdown_state = showdown_states[-1]
             
-            # Déterminer le(s) gagnant(s) de l'épisode
-            participating_players = set(preflop_stacks.keys()) & set(showdown_stacks.keys())
-            
-            if participating_players:
-                max_gain = float('-inf')
-                winners = []
+            # Déterminer les gagnants basés sur les stack_changes
+            stack_changes = last_showdown_state["stack_changes"]
                 
-                for player in participating_players:
-                    gain = showdown_stacks[player] - preflop_stacks[player]
-                    if gain > max_gain:
-                        max_gain = gain
-                        winners = [player]
-                    elif gain == max_gain:
-                        winners.append(player)
+            # Trouver le gain maximum
+            max_gain = max(stack_changes.values())
+            winners = [player for player, gain in stack_changes.items() if gain == max_gain]
+            
+            # Déterminer les joueurs qui ont participé (ceux qui ont un stack_change)
+            participating_players = set(stack_changes.keys())
             
             # Distribuer les résultats (1 pour victoire, 0 pour défaite)
-            win_share = 1.0 / len(winners)
+            win_share = 1.0 / len(winners) if winners else 0
             for agent in agents:
                 if agent in participating_players:
                     result = win_share if agent in winners else 0
@@ -527,8 +500,7 @@ class Visualizer:
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
         # Extraire les agents uniques (maintenant basé sur l'index dans la liste des métriques)
-        num_agents = len(next(iter(metrics_data.values())))  # Nombre d'agents basé sur le premier épisode
-        agents = sorted([f"Player_{i+1}" for i in range(num_agents)])
+        agents = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Player_6"]
 
         # Métriques spécifiques à tracer
         metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']
@@ -548,7 +520,7 @@ class Visualizer:
                         values.append(float(episode_metrics[agent_idx][metric_name]))
                 
                 # Calculer la moyenne mobile
-                window = 150
+                window = self.plot_interval * 3
                 if len(values) > 0:
                     rolling_avg = pd.Series(values).rolling(window=window, min_periods=1).mean()
                     ax.plot(episodes, rolling_avg, 
@@ -629,15 +601,14 @@ class Visualizer:
             active_players = {s["player"] for s in episode if s["phase"].lower() == "showdown"}
             all_active_players.update(active_players)
             
-            # Determine winner using showdown states only
-            showdown_states = [s for s in episode if s["phase"].lower() == "showdown" and s["player"] in active_players]
-            final_stacks = {}
-            for s in showdown_states:
-                player = s["player"]
-                # Assuming player is named like "Player_x"
-                idx = int(player.split("_")[1]) - 1
-                final_stacks[player] = s["state_vector"]["player_stacks"][idx]
-            winner = max(final_stacks, key=final_stacks.get) if final_stacks else None
+            # Get the last showdown state to access stack changes
+            showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
+            if not showdown_states:
+                continue
+                
+            last_showdown_state = showdown_states[-1]  # Get the last showdown state
+            winner = max(last_showdown_state["stack_changes"], 
+                        key=last_showdown_state["stack_changes"].get) if last_showdown_state["stack_changes"] else None
 
             # Count positions only for active players in this episode
             for state in episode:
@@ -719,13 +690,10 @@ class Visualizer:
                 found_active_state = True
                 
                 # Determine winner using showdown states
-                showdown_states = [s for s in episode if s["phase"].lower() == "showdown" and s["player"] in active_players]
-                final_stacks = {}
-                for s in showdown_states:
-                    p = s["player"]
-                    idx = int(p.split("_")[1]) - 1
-                    final_stacks[p] = s["state_vector"]["player_stacks"][idx]
-                winner = max(final_stacks, key=final_stacks.get) if final_stacks else None
+                winners = [s["player"] for s in episode if s["phase"].lower() == "showdown" and s["stack_changes"][s["player"]] > 0]
+                if not winners:
+                    continue
+                winner = winners[0]
                 
                 # Get player's cards from their first showdown state
                 player_states = [s for s in episode if s["player"] == player and s["phase"].lower() == "showdown"]
@@ -841,7 +809,7 @@ class Visualizer:
         plt.close()
 
 if __name__ == "__main__":
-    visualizer = Visualizer(start_epsilon=0.8, epsilon_decay=0.9999)
+    visualizer = Visualizer(start_epsilon=0.8, epsilon_decay=0.9999, plot_interval=500, save_interval=250)
     visualizer.plot_progress()
     visualizer.plot_metrics()
     visualizer.plot_analytics()

@@ -1,5 +1,7 @@
 Eliott : 
 - Pour poker_analytics, mettre dans l'ordre SB, BB ... BTN (comme ça on doit voir quelque chose de légèrement croissant)
+- Les SB et BB se font parfois rembourser leur mise initiale
+
 
 Mathias
 - Refaire la reward

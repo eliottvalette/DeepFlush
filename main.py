@@ -5,7 +5,7 @@ from bot import PokerBot
 import torch
 
 # Définir la graine pour la reproductibilité
-set_seed(42)
+set_seed(43)
 
 # Définir le device
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
@@ -16,12 +16,12 @@ list_names = ["Player_1", "Player_2", "Player_3", "Player_4", "Player_5", "Playe
 
 agent_list = []
 
-# Créer 4 agents IA
-for i in [0, 1, 3, 4]:
+# Créer 6 agents IA
+for i in range(6):
     agent = PokerAgent(
         state_size=STATE_SIZE,
         device=device,
-        action_size=5,  # [fold, check, call, raise, all-in]
+        action_size=5,
         gamma=GAMMA,
         learning_rate=ALPHA,
         load_model=False,
@@ -31,10 +31,8 @@ for i in [0, 1, 3, 4]:
     agent.name = list_names[i]
     agent_list.append(agent)
 
-# Créer 2 bots
-for i in [2, 5]:
-    bot = PokerBot(name=list_names[i], show_cards=True)
-    agent_list.append(bot)
+for agent in agent_list:
+    print('agent :', agent.name)
 
 # Faire en sorte que les agents IA partagent le même modèle (Changer entre True et False pour activer ou désactiver le partage de modèle)
 if False:

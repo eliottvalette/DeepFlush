@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 30_000
+EPISODES = 2_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9998
@@ -69,7 +69,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 3 or number_of_hand_per_game > 100:  # Évite les heads-up
+    if len(players_that_can_play) < 2 or number_of_hand_per_game > 100:  # Évite les heads-up
         env.reset()
         number_of_hand_per_game = 0
         players_that_can_play = [p for p in env.players if p.stack > 0]
@@ -84,7 +84,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         env.players[i].show_cards = agent.show_cards
 
     cumulative_rewards = [0] * len(agent_list)
-    initial_stacks = [player.stack for player in env.players]
 
     # Stockage des actions par agent
     actions_taken = {f"Agent {i+1}": [] for i in range(len(agent_list))}
@@ -126,8 +125,10 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             "player": current_player.name,
             "phase": env.current_phase.value,
             "action": action_chosen.value,
+            "stack_changes": env.net_stack_changes,
+            "final_stacks": env.final_stacks,
             "num_active_players": len(players_that_can_play),
-            "state_vector": current_state.tolist()  # Utilisation de l'état pré-action
+            "state_vector": current_state.tolist()
         }
         data_collector.add_state(state_info)
         
@@ -169,35 +170,15 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
                     env.clock.tick(FPS)
                     current_time = pygame.time.get_ticks()
 
-    # Calcul des récompenses finales
+    # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
+    current_in_game_players_mask = [p.is_active for p in env.players]
+
+    # Récupération des changements de stack pour chaque joueur et des stack finaux
+    stack_changes = env.net_stack_changes
     
-    # Calculer les changements de stack pour chaque joueur
-    current_in_game_players_mask = [p.is_active for p in env.players] 
-    final_stacks = [player.stack for player in env.players]
-    stack_changes = [
-        np.clip((final - initial) / env.starting_stack, -1.0, 1.0)
-        for final, initial in zip(final_stacks, initial_stacks)
-    ]
-    
-    # Déterminer les gagnants
-    remaining_players = [p for p in env.players if p.is_active and not p.has_folded]
-    
-    if len(remaining_players) == 1:
-        # Cas où un seul joueur reste (les autres ont fold)
-        winning_list = [1 if (p.is_active and not p.has_folded) else 0 for p in env.players]
-    else:
-        # Cas normal - déterminer les gagnants par les changements de stack
-        winning_list = [1 if change > 0 else 0 for change in stack_changes] # TODO: Arréter de dire que les inactifs (dès le debut de la main) sont des perdants (affecte uniquement les plots et non l'entrainement des modèles)
-        
-        # Vérification de cohérence - au moins un gagnant doit exister
-        if sum(winning_list) == 0 and remaining_players:
-            print("Warning: Aucun gagnant détecté malgré des joueurs actifs")
-            max_stack = max(p.stack for p in remaining_players)
-            winning_list = [
-                1 if (p.is_active and not p.has_folded and p.stack == max_stack) else 0 
-                for p in env.players
-            ]
+    # Cas normal - déterminer les gagnants par les changements de stack
+    winning_list = [1 if stack_changes[p.name] > 0 else 0 for p in env.players]
 
     # Attribution des récompenses finales
     for i, agent in enumerate(agent_list):
@@ -211,13 +192,18 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
         # Calcul de la récompense finale
         if is_winner:
-            if stack_changes[i] < 0:
-                raise Exception(f"Agent {i+1} a gagné avec un stack change négatif: {stack_changes[i]}")
-            final_reward = (stack_changes[i] ** 0.5) * 5
+            # Get player name to access stack changes
+            player_name = env.players[i].name
+            if stack_changes[player_name] < 0:
+                raise Exception(f"Agent {i+1} a gagné avec un stack change négatif: {stack_changes[player_name]}")
+            stack_change_normalized = stack_changes[player_name] / env.starting_stack
+            final_reward = (stack_change_normalized ** 0.5) * 5
         else:
-            if stack_changes[i] > 0:
-                raise Exception(f"Agent {i+1} a perdu avec un stack change positif: {stack_changes[i]}")
-            final_reward = -(abs(stack_changes[i]) ** 0.5) * 5
+            player_name = env.players[i].name
+            if stack_changes[player_name] > 0:
+                raise Exception(f"Agent {i+1} a perdu avec un stack change positif: {stack_changes[player_name]}")
+            stack_change_normalized = stack_changes[player_name] / env.starting_stack
+            final_reward = -(abs(stack_change_normalized) ** 0.5) * 5
             
             # Pénalité supplémentaire si le joueur est presque ruiné
             if env.players[i].stack <= 10:
@@ -229,10 +215,13 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
         # Stocker l'expérience finale pour la collecte des métriques
         current_state = terminal_state[-1].clone()
+        current_player_name = env.players[i].name
         state_info = {
-            "player": f"Player_{i+1}",  # Utiliser l'index du joueur plutôt que current_player.name
+            "player": current_player_name,
             "phase": GamePhase.SHOWDOWN.value,
             "action": None,
+            "stack_changes": env.net_stack_changes,
+            "final_stacks": env.final_stacks,
             "num_active_players": len(players_that_can_play),
             "state_vector": current_state.tolist()
         }

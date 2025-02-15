@@ -327,7 +327,9 @@ class PokerGame:
 
         # --- Nouvelle ligne ajoutée pour enregistrer les stacks initiales des joueurs
         self.initial_stacks = {player.name: player.stack for player in self.players}
-        
+        self.net_stack_changes = {player.name: np.nan for player in self.players}
+        self.final_stacks = {player.name: np.nan for player in self.players}
+
         # Vérifier qu'il y a au moins 2 joueurs actifs sinon on réinitialise la partie
         active_players = [player for player in self.players if player.is_active]
         if len(active_players) < 2:
@@ -1151,6 +1153,10 @@ class PokerGame:
             
             # Enregistrer le résumé de la distribution pour l'affichage
             self.pygame_winner_info = "\n".join(distribution_info)
+
+        print("\nStacks initiaux:")
+        for player in self.players:
+            print(f"- {player.name}: {self.initial_stacks[player.name]}BB")
         
         print("\nStacks finaux:")
         for player in self.players:
@@ -1162,7 +1168,11 @@ class PokerGame:
             variation = player.stack - initial
             signe = "+" if variation >= 0 else ""
             print(f"- {player.name}: {signe}{variation:.2f}BB")
-                
+
+            # Net stack changes
+            self.net_stack_changes = {player.name: (player.stack - initial) for player in self.players}
+            self.final_stacks = {player.name: player.stack for player in self.players}
+            
         # Reset pots
         self.phase_pot = 0
         self.side_pots = self._create_side_pots() 
@@ -1700,7 +1710,7 @@ class PokerGame:
                     reward -= 0.2
 
         # Traiter l'action (met à jour l'état du jeu)
-        self.process_action(current_player, action, bet_amount)
+        action = self.process_action(current_player, action, bet_amount)
 
         return self.get_state(), reward
 
