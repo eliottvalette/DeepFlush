@@ -82,17 +82,21 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         env.players[i].name = agent.name
         env.players[i].show_cards = agent.show_cards
 
-    cumulative_rewards = [0] * len(agent_list)
+    cumulative_rewards = {agent.name: 0 for agent in agent_list}
 
     # Stockage des actions par agent
     actions_taken = {f"Agent {i+1}": [] for i in range(len(agent_list))}
 
-    # --- IMPORTANT : INITIALISER LA SÉQUENCE D'ÉTATS ---
-    # Au lieu d'un simple vecteur, on construit ici une séquence d'états, chaque séquence est spécifique à un agent
-    state_seq = [[] for _ in range(len(agent_list))]
+    # --- UPDATED CODE ---
+    # Créer une correspondance entre les noms des agents et leurs instances
+    agent_mapping = {agent.name: agent for agent in agent_list}
+
+    # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
+    state_seq = {agent.name: [] for agent in agent_list}
     initial_state = env.get_state()  # état initial (vecteur de dimension 116)
-    for i, agent in enumerate(agent_list):
-        state_seq[i].append(initial_state)
+    # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
+    for player in env.players:
+        state_seq[player.name].append(initial_state)
     
     # Boucle principale du jeu
     while env.current_phase != GamePhase.SHOWDOWN:
@@ -101,7 +105,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 20 actions")
         
         current_player = env.players[env.current_player_seat]
-        current_agent = agent_list[env.current_player_seat]
+        current_agent = agent_mapping[current_player.name]
         
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
@@ -109,7 +113,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             raise Exception(f"Agent {env.current_player_seat + 1} n'a plus d'actions valides et il lui a pourtant été demandé de jouer")
 
         # --- Utiliser la séquence d'états accumulée comme entrée ---
-        player_state_seq = state_seq[env.current_player_seat]
+        player_state_seq = state_seq[current_player.name]
         
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         print('Number of states in sequence:', len(player_state_seq))
@@ -133,11 +137,11 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         
         # Exécuter l'action dans l'environnement
         next_state, reward = env.step(action_chosen)
-        cumulative_rewards[env.current_player_seat] += reward
+        cumulative_rewards[current_player.name] += reward
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
-        state_seq[env.current_player_seat].append(next_state)
-        next_player_state_seq = state_seq[env.current_player_seat].copy()
+        state_seq[current_player.name].append(next_state)
+        next_player_state_seq = state_seq[current_player.name].copy()
 
         actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
         
@@ -181,39 +185,36 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     winning_list = [1 if stack_changes[p.name] > 0 else 0 for p in env.players]
 
     # Attribution des récompenses finales
-    for i, agent in enumerate(agent_list):
-        if not current_in_game_players_mask[i]:
+    for player in env.players:
+        if not player.is_active:
             continue  # Ignorer les joueurs inactifs
-        player_state_seq = state_seq[i]
+        player_state_seq = state_seq[player.name]
         terminal_state = player_state_seq.copy()
-        is_winner = winning_list[i]
+        # Déterminer si le joueur a gagné (ici, on utilise l'information stockée par nom)
+        is_winner = 1 if env.net_stack_changes[player.name] > 0 else 0
 
-        # Calcul de la récompense finale
         if is_winner:
-            # Get player name to access stack changes
-            player_name = env.players[i].name
-            if stack_changes[player_name] < 0:
-                raise Exception(f"Agent {i+1} a gagné avec un stack change négatif: {stack_changes[player_name]}")
-            stack_change_normalized = stack_changes[player_name] / env.starting_stack
+            player_name = player.name
+            if env.net_stack_changes[player_name] < 0:
+                raise Exception(f"Agent {player_name} a gagné avec un stack change négatif: {env.net_stack_changes[player_name]}")
+            stack_change_normalized = env.net_stack_changes[player_name] / env.starting_stack
             final_reward = (stack_change_normalized ** 0.5) * 5
         else:
-            player_name = env.players[i].name
-            if stack_changes[player_name] > 0:
-                raise Exception(f"Agent {i+1} a perdu avec un stack change positif: {stack_changes[player_name]}")
-            stack_change_normalized = stack_changes[player_name] / env.starting_stack
+            player_name = player.name
+            if env.net_stack_changes[player_name] > 0:
+                raise Exception(f"Agent {player_name} a perdu avec un stack change positif: {env.net_stack_changes[player_name]}")
+            stack_change_normalized = env.net_stack_changes[player_name] / env.starting_stack
             final_reward = -(abs(stack_change_normalized) ** 0.5) * 5
-            
-            # Pénalité supplémentaire si le joueur est presque ruiné
-            if final_stacks[player_name] <= 2:
+            if env.final_stacks[player_name] <= 2:
                 final_reward -= 2
-                
-        # Enregistrer l'expérience finale
-        agent.remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
-        cumulative_rewards[i] += final_reward
+
+        # Utiliser le mapping pour accéder à l'agent correspondant
+        agent_mapping[player.name].remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
+        cumulative_rewards[player.name] += final_reward
 
         # Stocker l'expérience finale pour la collecte des métriques
         current_state = terminal_state[-1].clone()
-        current_player_name = env.players[i].name
+        current_player_name = player.name
         state_info = {
             "player": current_player_name,
             "phase": GamePhase.SHOWDOWN.value,
@@ -227,8 +228,8 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Affichage des résultats
     print("\nRécompenses finales:")
-    for i, reward in enumerate(cumulative_rewards):
-        print(f"  Joueur {i+1}: {reward:.3f}")
+    for agent in agent_list:
+        print(f"  {agent.name}: {cumulative_rewards[agent.name]:.3f}")
     print(f"\nFin de l'épisode {episode}")
     print(f"Randomness: {epsilon*100:.3f}%")
     
@@ -236,7 +237,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     metrics_list = []
     for agent in agent_list:
         metrics = agent.train_model()
-        metrics['reward'] = cumulative_rewards[agent_list.index(agent)]
+        metrics['reward'] = cumulative_rewards[agent.name]
         metrics_list.append(metrics)
 
     # Sauvegarde des données
@@ -306,26 +307,23 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
-            reward_list, metrics_list = run_episode(
+            reward_dict, metrics_list = run_episode(
                 env, agent_list, epsilon, rendering, episode, render_every, data_collector
             )
             
             # Enregistrer les métriques pour cet épisode en associant chaque métrique à une clé "agent"
-            metrics_with_agent = []
-            for i, metric in enumerate(metrics_list):
-                metrics_with_agent.append({"agent": agent_list[i].name, **metric})
-            metrics_history[str(episode)] = metrics_with_agent
+            metrics_history[str(episode)] = metrics_list
             
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
             print(f"Randomness: {epsilon*100:.3f}%")
-            for i, reward in enumerate(reward_list):
-                print(f"Agent {i+1} reward: {reward:.2f}")
+            for agent in agent_list:
+                print(f"Agent {agent.name} reward: {reward_dict[agent.name]:.2f}")
             
             # Afficher les métriques de chaque agent
             print("Métriques:")
-            for i, metrics in enumerate(metrics_with_agent):
-                metric_str = f"  Agent {i+1}:"
+            for i, metrics in enumerate(metrics_list):
+                metric_str = f"  Agent {metrics['agent']}:"
                 # Print all available metrics
                 for key, value in metrics.items():
                     if key != 'agent':  # Skip the agent name

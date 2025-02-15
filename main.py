@@ -5,7 +5,7 @@ from bot import PokerBot
 import torch
 
 # Définir la graine pour la reproductibilité
-set_seed(43)
+set_seed(42)
 
 # Définir le device
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")

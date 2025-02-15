@@ -230,7 +230,7 @@ class Visualizer:
         # 1. Average mbb/hand par agent
         ax1 = plt.subplot(2, 3, 1)
         window = self.plot_interval * 3 
-        agents = ['Player_0', 'Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5']
+        agents = PLAYERS
         mbb_data = {agent: [] for agent in agents}
         for episode_num, episode in states_data.items():
             for state in episode:
@@ -495,7 +495,7 @@ class Visualizer:
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
         # Extraire les agents uniques (maintenant basé sur l'index dans la liste des métriques)
-        agents = ["Player_0", "Player_1", "Player_2", "Player_3", "Player_4", "Player_5"]
+        agents = PLAYERS
 
         # Métriques spécifiques à tracer
         metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']

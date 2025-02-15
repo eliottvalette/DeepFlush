@@ -157,7 +157,7 @@ class PokerAgent:
         """
         if len(self.memory) < 32:
             print('Not enough data to train :', len(self.memory))
-            return {'loss': 0, 'entropy': 0, 'value_loss': 0, 'std': 0, 'learning_rate': self.learning_rate}
+            return {'agent':self.name, 'loss': 0, 'entropy': 0, 'value_loss': 0, 'std': 0, 'learning_rate': self.learning_rate}
 
         try:
             batch = random.sample(self.memory, 32)
@@ -247,7 +247,7 @@ class PokerAgent:
             self.optimizer.step()
 
             metrics = {
-                'player': self.name,
+                'agent': self.name,
                 'entropy_loss': entropy_loss.item(),
                 'value_loss': value_loss.item(),
                 'invalid_action_penalty': invalid_action_penalty.item(),
