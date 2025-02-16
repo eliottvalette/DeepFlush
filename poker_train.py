@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 4_000
+EPISODES = 30_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9998
@@ -86,6 +86,18 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
         state_seq[player.name].append(initial_state)
+
+    # Stocker l'état initial pour la collecte des métriques
+    state_info = {
+        "player": env.players[env.current_player_seat].name,
+        "phase": "pre-game",
+        "action": None,
+        "stack_changes": env.net_stack_changes,
+        "final_stacks": env.final_stacks,
+        "num_active_players": len(players_that_can_play),
+        "state_vector": initial_state.tolist()
+        }
+    data_collector.add_state(state_info)
     
     # Boucle principale du jeu
     while env.current_phase != GamePhase.SHOWDOWN:
@@ -106,19 +118,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         action_chosen, action_mask = current_player.agent.get_action(player_state_seq, epsilon, valid_actions)
-
-        # Stocker l'état actuel pour la collecte des métriques (c'est important d'enregistrer l'état avant l'action car l'action modifie l'état et la phase)
-        current_state = player_state_seq[-1].clone()
-        state_info = {
-            "player": current_player.name,
-            "phase": env.current_phase.value,
-            "action": action_chosen.value,
-            "stack_changes": env.net_stack_changes,
-            "final_stacks": env.final_stacks,
-            "num_active_players": len(players_that_can_play),
-            "state_vector": current_state.tolist()
-        }
-        data_collector.add_state(state_info)
         
         # Exécuter l'action dans l'environnement
         next_state, reward = env.step(action_chosen)
@@ -131,15 +130,27 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
         
         # Stocker l'expérience : on enregistre une copie de la séquence courante (On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte)
-        if env.current_phase != GamePhase.SHOWDOWN:
-            current_player.agent.remember(
-                player_state_seq.copy(), 
-                action_chosen, 
-                reward, 
-                next_player_state_seq,
-                False,
-                action_mask
-            )
+        
+        current_state = player_state_seq[-1].clone()
+        state_info = {
+            "player": current_player.name,
+            "phase": env.current_phase.value,
+            "action": action_chosen.value,
+            "stack_changes": env.net_stack_changes,
+            "final_stacks": env.final_stacks,
+            "num_active_players": len(players_that_can_play),
+            "state_vector": current_state.tolist()
+            }
+        data_collector.add_state(state_info)
+        
+        current_player.agent.remember(
+            player_state_seq.copy(), 
+            action_chosen, 
+            reward, 
+            next_player_state_seq,
+            False,
+            action_mask
+        )
         
         # Rendu graphique si activé
         if rendering and (episode % render_every == 0):
@@ -161,7 +172,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
     # Attribution des récompenses finales
-    for player in env.players:
+    for player in env.ordered_players:
         player_state_seq = state_seq[player.name]
         terminal_state = player_state_seq.copy()
 
@@ -181,7 +192,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         cumulative_rewards[player.name] += final_reward
 
         # Stocker l'expérience finale pour la collecte des métriques
-        current_state = terminal_state[-1].clone()
+        current_state = terminal_state[-1]
         current_player_name = player.name
         state_info = {
             "player": current_player_name,

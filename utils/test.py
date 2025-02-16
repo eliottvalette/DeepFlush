@@ -9,65 +9,52 @@ with open('./viz_json/episodes_states.json', 'r') as f:
 with open('./viz_json/metrics_history.json', 'r') as f:
     metrics_history = json.load(f)
 
-# Test 1: Vérifier les récompenses par joueur
 rewards = {f"Player_{i}": [] for i in range(6)}
+stack_change_history = {f"Player_{i}": [] for i in range(6)}
+stack_final_history = {f"Player_{i}": [] for i in range(6)}
+
+# Handle rewards
 for episode_idx, metrics_list in metrics_history.items():
     for i in range(6):
         rewards[f"Player_{i}"].append(metrics_list[i]['reward'])
 
-print("\nTest 1: Moyenne des récompenses par joueur:")
-for player, player_rewards in rewards.items():
-    print(f"{player}: {np.mean(player_rewards):.2f}")
+# Handle stack changes and final stacks
+for episode_idx, episode_states in episode_states.items():
+    for state in episode_states:
+        if state['phase'] == 'preflop':
+            for i in range(6):
+                total_bets = sum(state['state_vector']['current_bets'])
+                total_stack = sum(state['state_vector']['player_stacks'])
+                all_money_in_game = total_bets + total_stack
+                if all_money_in_game > 600.2 or all_money_in_game < 599.8:
+                    print('episode_idx :', episode_idx)
+                    print('all_money_in_game :', all_money_in_game)
+                    print('total_bets :', total_bets)
+                    print('total_stack :', total_stack)
+        if state['phase'] == 'showdown':
+            # Extract and process values for each player
+            for i in range(6):
+                player = f"Player_{i}"
+                stack_change_history[player].append(state['stack_changes'][player])
+                stack_final_history[player].append(state['final_stacks'][player])
+                if state['stack_changes'][player] > 600.2:
+                    # Print the debugging dictionary with proper indentation
+                    print('state[stack_changes][player] :', state['stack_changes'][player])
+                    print('episode_idx :', episode_idx)
+                if state['final_stacks'][player] > 600.2:
+                    # Similarly for final stacks
+                    print('state[final_stacks][player] :', state['final_stacks'][player])
+                    print('episode_idx :', episode_idx)
+            break
+# Print statistics
+print("\nRewards Statistics:")
+for player in rewards:
+    print(f"{player}: mean={np.mean(rewards[player]):.2f}, std={np.std(rewards[player]):.2f}, min={np.min(rewards[player]):.2f}, max={np.max(rewards[player]):.2f}")
 
-# Test 2: Vérifier les changements de stack par joueur
-stack_changes = {f"Player_{i}": [] for i in range(6)}
-for episode in episode_states.values():
-    for state in episode:
-        if state["phase"] == "showdown":
-            for player in stack_changes.keys():
-                if player in state["stack_changes"]:
-                    stack_changes[player].append(state["stack_changes"][player])
+print("\nStack Change Statistics:")
+for player in stack_change_history:
+    print(f"{player}: mean={np.mean(stack_change_history[player]):.2f}, std={np.std(stack_change_history[player]):.2f}, min={np.min(stack_change_history[player]):.2f}, max={np.max(stack_change_history[player]):.2f}")
 
-print("\nTest 2: Moyenne des changements de stack par joueur:")
-for player, changes in stack_changes.items():
-    print(f"{player}: {np.mean(changes):.2f}")
-
-# Test 3: Vérifier le nombre d'actions par joueur
-actions = {f"Player_{i}": {"fold": 0, "check": 0, "call": 0, "raise": 0, "all-in": 0} for i in range(6)}
-for episode in episode_states.values():
-    for state in episode:
-        if state["action"] and state["player"] in actions:
-            action = state["action"].lower()
-            if action in actions[state["player"]]:
-                actions[state["player"]][action] += 1
-
-print("\nTest 3: Nombre d'actions par joueur:")
-for player, action_counts in actions.items():
-    print(f"\n{player}:")
-    for action, count in action_counts.items():
-        print(f"  {action}: {count}")
-
-# Test 4: Vérifier la cohérence des données de showdown
-showdown_inconsistencies = 0
-for episode in episode_states.values():
-    showdown_states = [s for s in episode if s["phase"] == "showdown"]
-    if showdown_states:
-        last_showdown = showdown_states[-1]
-        # Vérifier que tous les joueurs sont présents dans stack_changes
-        if len(last_showdown["stack_changes"]) != 6:
-            showdown_inconsistencies += 1
-            print(f"\nIncohérence trouvée dans stack_changes:")
-            print(f"Joueurs présents: {list(last_showdown['stack_changes'].keys())}")
-
-print(f"\nTest 4: Nombre d'incohérences dans les données de showdown: {showdown_inconsistencies}")
-
-# Test 5: Vérifier la distribution des gains/pertes
-print("\nTest 5: Distribution des gains/pertes par joueur:")
-for player, changes in stack_changes.items():
-    if changes:
-        print(f"\n{player}:")
-        print(f"  Nombre de changements enregistrés: {len(changes)}")
-        print(f"  Min: {min(changes):.2f}")
-        print(f"  Max: {max(changes):.2f}")
-        print(f"  Médiane: {np.median(changes):.2f}")
-        print(f"  Écart-type: {np.std(changes):.2f}")
+print("\nFinal Stack Statistics:")
+for player in stack_final_history:
+    print(f"{player}: mean={np.mean(stack_final_history[player]):.2f}, std={np.std(stack_final_history[player]):.2f}, min={np.min(stack_final_history[player]):.2f}, max={np.max(stack_final_history[player]):.2f}")

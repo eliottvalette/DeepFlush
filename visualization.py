@@ -76,8 +76,8 @@ class DataCollector:
             },
             "game_phase": state_vector[47:52],  # One-hot encoding de la phase
             "current_max_bet": state_vector[52],  # Mise maximale normalisée
-            "player_stacks": state_vector[53:59],  # Stacks normalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
-            "current_bets": state_vector[59:65],  # Mises actuelles normalisées
+            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
+            "current_bets": [bet * 100 for bet in state_vector[59:65]],  # Mises actuelles normalisées
             "player_activity": state_vector[65:71],  # État des joueurs (actif/inactif)
             "relative_positions": state_vector[71:77],  # Position relative one-hot
             "available_actions": state_vector[77:82],  # Actions disponibles
@@ -105,7 +105,8 @@ class DataCollector:
                     "suit": state_vector[6:10]  # One-hot encoding de la couleur
                 }
             ],
-            "player_stacks": state_vector[53:59],  # Stacks normalisés
+            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés
+            "current_bets": [bet * 100 for bet in state_vector[59:65]], # Mises actuelles dénormalisées
             "relative_positions": state_vector[71:77],  # Position relative one-hot
         }
 
@@ -252,6 +253,7 @@ class Visualizer:
         ax1.set_xlabel('Episode')
         ax1.set_ylabel('mbb/hand')
         ax1.legend()
+        ax1.set_ylim(-60000, 60000)
         
         ax1.set_facecolor('#F0F0F0')  # Fond légèrement gris
         ax1.grid(True, alpha=0.3)
