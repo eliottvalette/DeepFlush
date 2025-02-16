@@ -320,8 +320,8 @@ class PokerGame:
 
         # --- Nouvelle ligne ajoutée pour enregistrer les stacks initiales des joueurs
         self.initial_stacks = {player.name: player.stack for player in self.players}
-        self.net_stack_changes = {player.name: np.nan for player in self.players}
-        self.final_stacks = {player.name: np.nan for player in self.players}
+        self.net_stack_changes = {player.name: 0 for player in self.players}
+        self.final_stacks = {player.name: 0 for player in self.players}
 
         # Vérifier qu'il y a au moins 2 joueurs actifs sinon on réinitialise la partie
         active_players = [player for player in self.players if player.is_active]
@@ -1166,9 +1166,9 @@ class PokerGame:
             signe = "+" if variation >= 0 else ""
             print(f"- {player.name}: {signe}{variation:.2f}BB")
 
-            # Net stack changes
-            self.net_stack_changes = {player.name: (player.stack - initial) for player in self.players}
-            self.final_stacks = {player.name: player.stack for player in self.players}
+        # Net stack changes
+        self.net_stack_changes = {player.name: (player.stack - initial) for player in self.players}
+        self.final_stacks = {player.name: player.stack for player in self.players}
             
         # Reset pots
         self.phase_pot = 0
@@ -2321,7 +2321,16 @@ class PokerGame:
         
         pygame.quit()
 
+class HumanPlayer(Player):
+    def __init__(self, agent, name, stack, seat_position):
+        super().__init__(agent, name, stack, seat_position)
+
+    def get_action(self, state):
+        return self.agent.get_action(state)
+
 if __name__ == "__main__":
-    list_names = ["Player_0", "Player_1", "Player_2", "Player_3", "Player_4", "Player_5"]
-    game = PokerGame(list_names)
+    human_players_list = []
+    for i in range(6):
+        human_players_list.append(HumanPlayer(None, f"Player_{i}", 100, i))
+    game = PokerGame(human_players_list)
     game.manual_run()

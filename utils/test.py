@@ -66,24 +66,8 @@ print("\nTest 5: Distribution des gains/pertes par joueur:")
 for player, changes in stack_changes.items():
     if changes:
         print(f"\n{player}:")
+        print(f"  Nombre de changements enregistrés: {len(changes)}")
         print(f"  Min: {min(changes):.2f}")
         print(f"  Max: {max(changes):.2f}")
         print(f"  Médiane: {np.median(changes):.2f}")
         print(f"  Écart-type: {np.std(changes):.2f}")
-
-# Ajoutons un test supplémentaire pour voir la corrélation entre stack changes et rewards
-print("\nTest 6: Corrélation stack changes vs rewards par épisode:")
-for episode_num in list(episode_states.keys())[:10]:  # Regardons les 10 premiers épisodes
-    print(f"\nÉpisode {episode_num}:")
-    # Trouver le dernier état showdown
-    showdown_states = [s for s in episode_states[episode_num] if s["phase"] == "showdown"]
-    if showdown_states:
-        last_showdown = showdown_states[-1]
-        stack_changes = last_showdown["stack_changes"]
-        rewards_for_episode = metrics_history[episode_num]
-        
-        for i in range(6):
-            player = f"Player_{i}"
-            stack_change = stack_changes[player]
-            reward = rewards_for_episode[i]["reward"]
-            print(f"{player}: Stack Change = {stack_change:.2f}, Reward = {reward:.2f}")

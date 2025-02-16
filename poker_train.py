@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 1_000
+EPISODES = 4_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9998
@@ -175,7 +175,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 final_reward -= 2
         else:
             final_reward = 0
-
+        
         # Utiliser directement l'agent du joueur
         player.agent.remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
         cumulative_rewards[player.name] += final_reward
