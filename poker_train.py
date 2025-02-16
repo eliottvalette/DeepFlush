@@ -103,9 +103,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # --- Utiliser la séquence d'états accumulée comme entrée ---
         player_state_seq = state_seq[current_player.name]
         
-        # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
-        print('Number of states in sequence:', len(player_state_seq))
-        print('Shape of each state:', player_state_seq[0].shape)
         
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         action_chosen, action_mask = current_player.agent.get_action(player_state_seq, epsilon, valid_actions)
@@ -165,27 +162,19 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     print("\n=== Résultats de l'épisode ===")
     # Attribution des récompenses finales
     for player in env.players:
-        if not player.is_active:
-            continue  # Ignorer les joueurs inactifs
         player_state_seq = state_seq[player.name]
         terminal_state = player_state_seq.copy()
-        # Déterminer si le joueur a gagné (ici, on utilise l'information stockée par nom)
-        is_winner = 1 if env.net_stack_changes[player.name] > 0 else 0
 
-        if is_winner:
-            player_name = player.name
-            if env.net_stack_changes[player_name] < 0:
-                raise Exception(f"Agent {player_name} a gagné avec un stack change négatif: {env.net_stack_changes[player_name]}")
-            stack_change_normalized = env.net_stack_changes[player_name] / env.starting_stack
+        if env.net_stack_changes[player.name] > 0:
+            stack_change_normalized = env.net_stack_changes[player.name] / env.starting_stack
             final_reward = (stack_change_normalized ** 0.5) * 5
-        else:
-            player_name = player.name
-            if env.net_stack_changes[player_name] > 0:
-                raise Exception(f"Agent {player_name} a perdu avec un stack change positif: {env.net_stack_changes[player_name]}")
-            stack_change_normalized = env.net_stack_changes[player_name] / env.starting_stack
+        elif env.net_stack_changes[player.name] < 0:
+            stack_change_normalized = env.net_stack_changes[player.name] / env.starting_stack
             final_reward = -(abs(stack_change_normalized) ** 0.5) * 5
-            if env.final_stacks[player_name] <= 2:
+            if env.final_stacks[player.name] <= 2:
                 final_reward -= 2
+        else:
+            final_reward = 0
 
         # Utiliser directement l'agent du joueur
         player.agent.remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
