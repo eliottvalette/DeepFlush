@@ -105,8 +105,6 @@ class DataCollector:
                     "suit": state_vector[6:10]  # One-hot encoding de la couleur
                 }
             ],
-            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés
-            "current_bets": [bet * 100 for bet in state_vector[59:65]], # Mises actuelles dénormalisées
             "relative_positions": state_vector[71:77],  # Position relative one-hot
         }
 
@@ -478,7 +476,7 @@ class Visualizer:
         })
         
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_progress.jpg', dpi=dpi, bbox_inches='tight')
+        plt.savefig('viz_jpg/Poker_progress.jpg', dpi=dpi, bbox_inches='tight')
         plt.close()
     
     def plot_metrics(self):
@@ -561,7 +559,7 @@ class Visualizer:
         })
 
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_metrics.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig('viz_jpg/Poker_metrics.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_analytics(self):
@@ -646,7 +644,7 @@ class Visualizer:
         ax1.set_ylim(0,1)
         
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig('viz_jpg/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_heatmaps(self):
@@ -775,7 +773,7 @@ class Visualizer:
 
         plt.suptitle('Hand Win Rates by Player\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()
-        plt.savefig('viz_json/Poker_heatmaps.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig('viz_jpg/Poker_heatmaps.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
 if __name__ == "__main__":
