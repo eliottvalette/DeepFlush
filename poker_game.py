@@ -331,20 +331,15 @@ class PokerGame:
         # Distribuer les cartes aux joueurs actifs
         self.deal_cards()
 
+        # Faire tourner le bouton d'une position
+        self.button_seat_position = (self.button_seat_position + 1) % self.num_players
+
         # Construire une liste ordonnée des joueurs actifs en fonction de leur seat_position
         active_players = sorted([p for p in self.players if p.is_active],
                                 key=lambda p: p.seat_position)
 
-        # Trouver l'index du joueur possédant le bouton dans cette liste
-        button_index = 0
-        for i, player in enumerate(active_players):
-            if player.seat_position == self.button_seat_position:
-                button_index = i
-                break
-
         # Réorganiser la liste pour que le premier joueur soit celui qui a le bouton
-        adjusted_button_index = (button_index + 1) % len(active_players)
-        ordered_players = active_players[adjusted_button_index:] + active_players[:adjusted_button_index]
+        ordered_players = active_players[self.button_seat_position:] + active_players[:self.button_seat_position]
         n = len(ordered_players)
 
         # Réattribuer les rôles en fonction du nombre de joueurs actifs
