@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 10_000
+EPISODES = 1_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9998
@@ -49,13 +49,12 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector) -> Tuple[List[float], List[dict]]:
+def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector) -> Tuple[List[float], List[dict]]:
     """
     Exécute un épisode complet du jeu de poker.
     
     Args:
         env (PokerGame): L'environnement de jeu
-        agent_list (List[PokerAgent]): Liste des agents participants
         epsilon (float): Paramètre d'exploration
         rendering (bool): Active/désactive le rendu graphique
         episode (int): Numéro de l'épisode en cours
@@ -76,23 +75,13 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     else:
         env.start_new_hand()
         number_of_hand_per_game += 1    
-    
-    # Synchroniser les noms et statuts humains entre l'environnement et les agents
-    for i, agent in enumerate(agent_list):
-        env.players[i].name = agent.name
-        env.players[i].show_cards = agent.show_cards
 
-    cumulative_rewards = {agent.name: 0 for agent in agent_list}
-
-    # Stockage des actions par agent
-    actions_taken = {f"Agent {i+1}": [] for i in range(len(agent_list))}
-
-    # --- UPDATED CODE ---
-    # Créer une correspondance entre les noms des agents et leurs instances
-    agent_mapping = {agent.name: agent for agent in agent_list}
+    # Stockage des actions et rewards par joueur
+    cumulative_rewards = {player.name: 0 for player in env.players}
+    actions_taken = {player.name: [] for player in env.players}
 
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
-    state_seq = {agent.name: [] for agent in agent_list}
+    state_seq = {player.name: [] for player in env.players}
     initial_state = env.get_state()  # état initial (vecteur de dimension 116)
     # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
@@ -101,11 +90,10 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
     # Boucle principale du jeu
     while env.current_phase != GamePhase.SHOWDOWN:
         # Pour éviter les boucles infinies
-        if len(actions_taken[f"Agent {env.current_player_seat + 1}"]) > 20:
+        if len(actions_taken[env.players[env.current_player_seat].name]) > 20:
             raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 20 actions")
         
-        current_player = env.players[env.current_player_seat]
-        current_agent = agent_mapping[current_player.name]
+        current_player = next(p for p in env.players if p.seat_position == env.current_player_seat)
         
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
@@ -120,7 +108,7 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         print('Shape of each state:', player_state_seq[0].shape)
         
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
-        action_chosen, action_mask = current_agent.get_action(player_state_seq, epsilon, valid_actions)
+        action_chosen, action_mask = current_player.agent.get_action(player_state_seq, epsilon, valid_actions)
 
         # Stocker l'état actuel pour la collecte des métriques (c'est important d'enregistrer l'état avant l'action car l'action modifie l'état et la phase)
         current_state = player_state_seq[-1].clone()
@@ -143,11 +131,11 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
         state_seq[current_player.name].append(next_state)
         next_player_state_seq = state_seq[current_player.name].copy()
 
-        actions_taken[f"Agent {env.current_player_seat + 1}"].append(action_chosen)
+        actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
         
         # Stocker l'expérience : on enregistre une copie de la séquence courante (On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte)
         if env.current_phase != GamePhase.SHOWDOWN:
-            current_agent.remember(
+            current_player.agent.remember(
                 player_state_seq.copy(), 
                 action_chosen, 
                 reward, 
@@ -175,15 +163,6 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
-    current_in_game_players_mask = [p.is_active for p in env.players]
-
-    # Récupération des changements de stack pour chaque joueur et des stack finaux
-    stack_changes = env.net_stack_changes
-    final_stacks = env.final_stacks
-    
-    # Cas normal - déterminer les gagnants par les changements de stack
-    winning_list = [1 if stack_changes[p.name] > 0 else 0 for p in env.players]
-
     # Attribution des récompenses finales
     for player in env.players:
         if not player.is_active:
@@ -208,8 +187,8 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
             if env.final_stacks[player_name] <= 2:
                 final_reward -= 2
 
-        # Utiliser le mapping pour accéder à l'agent correspondant
-        agent_mapping[player.name].remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
+        # Utiliser directement l'agent du joueur
+        player.agent.remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
         cumulative_rewards[player.name] += final_reward
 
         # Stocker l'expérience finale pour la collecte des métriques
@@ -228,16 +207,16 @@ def run_episode(env: PokerGame, agent_list: List[PokerAgent], epsilon: float, re
 
     # Affichage des résultats
     print("\nRécompenses finales:")
-    for agent in agent_list:
-        print(f"  {agent.name}: {cumulative_rewards[agent.name]:.3f}")
+    for player in env.players:
+        print(f"  {player.name}: {cumulative_rewards[player.name]:.3f}")
     print(f"\nFin de l'épisode {episode}")
     print(f"Randomness: {epsilon*100:.3f}%")
     
     # Entraînement et collecte des métriques
     metrics_list = []
-    for agent in agent_list:
-        metrics = agent.train_model()
-        metrics['reward'] = cumulative_rewards[agent.name]
+    for player in env.players:
+        metrics = player.agent.train_model()
+        metrics['reward'] = cumulative_rewards[player.name]
         metrics_list.append(metrics)
 
     # Sauvegarde des données
@@ -285,8 +264,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     """
     # Initialisation des historiques et de l'environnement
     metrics_history = {}
-    list_names = [agent.name for agent in agent_list]
-    env = PokerGame(list_names)
+    env = PokerGame(agent_list)
     
     # Configuration du collecteur de données
     data_collector = DataCollector(
@@ -295,11 +273,6 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         start_epsilon=START_EPS,
         epsilon_decay=EPS_DECAY
     )
-
-    # Créer l'environnement de jeu
-    for i, agent in enumerate(agent_list):
-        env.players[i].name = agent.name
-        env.players[i].show_cards = agent.show_cards
     
     try:
         for episode in range(episodes):
@@ -308,7 +281,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_dict, metrics_list = run_episode(
-                env, agent_list, epsilon, rendering, episode, render_every, data_collector
+                env, epsilon, rendering, episode, render_every, data_collector
             )
             
             # Enregistrer les métriques pour cet épisode en associant chaque métrique à une clé "agent"
@@ -317,8 +290,8 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
             print(f"Randomness: {epsilon*100:.3f}%")
-            for agent in agent_list:
-                print(f"Agent {agent.name} reward: {reward_dict[agent.name]:.2f}")
+            for player in env.players:
+                print(f"Agent {player.name} reward: {reward_dict[player.name]:.2f}")
             
             # Afficher les métriques de chaque agent
             print("Métriques:")
@@ -336,11 +309,11 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         # Sauvegarder les modèles entraînés
         if episode == episodes - 1:
             print("\nSauvegarde des modèles...")
-            for agent in agent_list:
+            for player in env.players:
                 # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
-                if hasattr(agent, 'model'):
-                    torch.save(agent.model.state_dict(), 
-                             f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")
+                if hasattr(player.agent, 'model'):
+                    torch.save(player.agent.model.state_dict(), 
+                             f"saved_models/poker_agent_{player.name}_epoch_{episode+1}.pth")
             print("Modèles sauvegardés avec succès!")
 
             print("Génération de la vizualiation...")
@@ -349,11 +322,11 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     except KeyboardInterrupt:
         print("\nEntraînement interrompu par l'utilisateur")
         print("\nSauvegarde des modèles...")
-        for agent in agent_list:
+        for player in env.players:
             # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
-            if hasattr(agent, 'model'):
-                torch.save(agent.model.state_dict(), 
-                         f"saved_models/poker_agent_{agent.name}_epoch_{episode+1}.pth")    
+            if hasattr(player.agent, 'model'):
+                torch.save(player.agent.model.state_dict(), 
+                         f"saved_models/poker_agent_{player.name}_epoch_{episode+1}.pth")    
         print("Génération de la vizualiation...")
         data_collector.force_visualization()
         

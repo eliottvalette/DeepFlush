@@ -5,7 +5,7 @@ from bot import PokerBot
 import torch
 
 # Définir la graine pour la reproductibilité
-set_seed(42)
+set_seed(43)
 
 # Définir le device
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
@@ -35,9 +35,9 @@ for agent in agent_list:
     print('agent :', agent.name)
 
 # Faire en sorte que les agents IA partagent le même modèle (Changer entre True et False pour activer ou désactiver le partage de modèle)
-if False:
+if True:
     shared_model = agent_list[0].model
-    for agent in agent_list[:4]:  # Seulement pour les 4 premiers agents qui sont des IA
+    for agent in agent_list:  # Seulement pour les 4 premiers agents qui sont des IA
         agent.model = shared_model
 
 # Démarrer l'entraînement

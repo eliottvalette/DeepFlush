@@ -136,16 +136,21 @@ class Player:
     """
     Représente un joueur de poker avec ses cartes, son stack et son état de jeu.
     """
-    def __init__(self, name: str, stack: int, seat_position: int):
+    def __init__(self, agent = None, name: str = "Player", stack: int = 100, seat_position: int = 0):
         """
-        Initialise un joueur avec son nom, son stack de départ et sa position à la table.
+        Initialise un joueur avec son agent associé, son stack et sa position.
         
         Args:
-            name (str): Nom du joueur
+            agent (PokerAgent): L'agent qui contrôle ce joueur
             stack (int): Stack de départ en jetons
             position (int): Position à la table (0-5)
         """
-        self.name = name
+        if agent:
+            self.agent = agent  # Stockage direct de l'objet agent
+            self.name = agent.name  # On garde le nom pour l'affichage
+        else:
+            self.agent = None
+            self.name = name
         self.stack = stack
         self.seat_position = seat_position # 0-5
         self.role_position = None # 0-5 (0 = SB, 1 = BB, 2 = UTG, 3 = HJ, 4 = CO, 5 = BTN)
@@ -178,7 +183,7 @@ class PokerGame:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, list_names: List[str]):
+    def __init__(self, agents):
         """
         Initialise la partie de poker avec les joueurs et les blindes.
         
@@ -197,7 +202,7 @@ class PokerGame:
         self.community_cards: List[Card] = []
 
         self.current_phase = GamePhase.PREFLOP
-        self.players = self._initialize_players(list_names) # self.players est une liste d'objets Player
+        self.players = self._initialize_players(agents) # self.players est une liste d'objets Player
 
         self.button_seat_position = rd.randint(0, 5) # 0-5
         for player in self.players:
@@ -345,8 +350,8 @@ class PokerGame:
         # Réattribuer les rôles en fonction du nombre de joueurs actifs
         if n == 2:
             # Heads-Up : dans le heads-up, le joueur en bouton (qui est également SB) et l'autre (BB)
-            ordered_players[0].role_position = 0  # Small Blind (et Dealer)
-            ordered_players[1].role_position = 5  # Big Blind
+            ordered_players[0].role_position = 5  # Small Blind (et Dealer)
+            ordered_players[1].role_position = 0  # Big Blind
         elif n == 3:
             # Dans le 3-handed, le joueur en bouton est SB.
             ordered_players[0].role_position = 5  # Button (BTN)
@@ -415,7 +420,7 @@ class PokerGame:
 
         return self.get_state()
 
-    def _initialize_players(self, list_names: List[str]) -> List[Player]:
+    def _initialize_players(self, agents) -> List[Player]:
         """
         Crée et initialise tous les joueurs pour la partie.
         
@@ -423,8 +428,8 @@ class PokerGame:
             List[Player]: Liste des objets joueurs initialisés
         """
         players = []
-        for idx, name in enumerate(list_names):
-            player = Player(name, self.starting_stack, idx)
+        for idx, agent in enumerate(agents):
+            player = Player(agent=agent, name=agent.name, stack=self.starting_stack, seat_position=idx)
             players.append(player)
         return players
     
