@@ -2,5 +2,7 @@ poker_env/
 .venv/
 temp/
 __pycache__/
-viz_json/
+viz_json/episodes_states.json
+viz_json/metrics_history.json
 saved_models/
+viz_jpg/

@@ -181,13 +181,15 @@ class DataCollector:
         if episode_num % (self.plot_interval * 4) == (self.plot_interval * 4) - 1:
             self.visualizer.plot_metrics()
             self.visualizer.plot_analytics()
-            self.visualizer.plot_heatmaps()
+            self.visualizer.plot_heatmaps_by_players()
+            self.visualizer.plot_heatmaps_by_position()
     
     def force_visualization(self):
         self.visualizer.plot_progress()
         self.visualizer.plot_metrics()
         self.visualizer.plot_analytics()
-        self.visualizer.plot_heatmaps()
+        self.visualizer.plot_heatmaps_by_players()
+        self.visualizer.plot_heatmaps_by_position()
 
 class Visualizer:
     """
@@ -653,7 +655,7 @@ class Visualizer:
         plt.savefig('viz_jpg/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
-    def plot_heatmaps(self):
+    def plot_heatmaps_by_players(self):
         # Charger les données
         states_path = os.path.join(self.output_dir, "episodes_states.json")
         with open(states_path, 'r') as f:
@@ -782,9 +784,156 @@ class Visualizer:
         plt.savefig('viz_jpg/Poker_heatmaps.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
+    def plot_heatmaps_by_position(self):
+        """
+        Génère des heatmaps des win rates par position, basées sur les données collectées.
+        Chaque heatmap représente le taux de victoire pour chaque combinaison de cartes,
+        regroupé par position (SB, BB, UTG, MP, CO, BTN).
+        """
+        import numpy as np
+        import seaborn as sns
+        import matplotlib.pyplot as plt
+
+        # Charger les données
+        states_path = os.path.join(self.output_dir, "episodes_states.json")
+        with open(states_path, 'r') as f:
+            states_data = json.load(f)
+
+        positions_list = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
+
+        # Initialiser les matrices pour chaque position
+        pos_hand_matrix = {pos: np.zeros((13, 13)) for pos in positions_list}
+        pos_hand_counts = {pos: np.zeros((13, 13)) for pos in positions_list}
+
+        # Traiter chaque épisode
+        for episode in states_data.values():
+            # Sélectionner les états de showdown
+            showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
+            if not showdown_states:
+                continue
+            # Utiliser le dernier état de showdown pour déterminer le gagnant
+            last_showdown_state = showdown_states[-1]
+            stack_changes = last_showdown_state.get("stack_changes", {})
+            if not stack_changes:
+                continue
+            max_gain = max(stack_changes.values())
+            winners = [player for player, gain in stack_changes.items() if gain == max_gain]
+            winner = winners[0] if winners else None
+
+            # Pour chaque position, rechercher le premier état correspondant dans l'épisode
+            for pos in positions_list:
+                candidate_state = None
+                for state in episode:
+                    if state["phase"].lower() == "showdown":
+                        rel_positions = state["state_vector"].get("relative_positions", [])
+                        if not rel_positions:
+                            continue
+                        try:
+                            pos_index = rel_positions.index(1.0)
+                        except ValueError:
+                            continue
+                        pos_name = ["SB", "BB", "UTG", "MP", "CO", "BTN"][pos_index]
+                        if pos_name == pos:
+                            candidate_state = state
+                            break
+                if candidate_state is None:
+                    continue
+                # Extraire les cartes du joueur
+                state_vector = candidate_state["state_vector"]
+                player_cards = state_vector.get("player_cards", [])
+                if len(player_cards) < 2:
+                    continue
+                card1 = player_cards[0]
+                card2 = player_cards[1]
+                # Dénormaliser les valeurs des cartes
+                card1_value = int(round(card1["value"] * 14 + 2))
+                card2_value = int(round(card2["value"] * 14 + 2))
+                card1_suit = card1["suit"].index(1) if 1 in card1["suit"] else -1
+                card2_suit = card2["suit"].index(1) if 1 in card2["suit"] else -1
+                if card1_value < 2 or card2_value < 2:
+                    continue
+                try:
+                    card1_idx = card1_value - 2  # Indice de 0 à 12
+                    card2_idx = card2_value - 2
+                    is_winner = (candidate_state["player"] == winner)
+                    is_suited = (card1_suit == card2_suit)
+                    if card1_idx != card2_idx:
+                        if is_suited:
+                            row = min(card1_idx, card2_idx)
+                            col = max(card1_idx, card2_idx)
+                        else:
+                            row = max(card1_idx, card2_idx)
+                            col = min(card1_idx, card2_idx)
+                    else:
+                        row = card1_idx
+                        col = card2_idx
+                    pos_hand_counts[pos][row][col] += 1
+                    if is_winner:
+                        pos_hand_matrix[pos][row][col] += 1
+                except Exception:
+                    continue
+
+        # Paramètres d'affichage
+        card_labels = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']
+
+        # Créer une figure avec des subplots (grid 2x3)
+        fig, axs = plt.subplots(2, 3, figsize=(25, 15))
+        axs = axs.flatten()
+        for i, pos in enumerate(positions_list):
+            counts = pos_hand_counts[pos]
+            wins = pos_hand_matrix[pos]
+            win_rates = np.zeros((13, 13))
+            mask = counts > 0
+            win_rates[mask] = wins[mask] / counts[mask]
+            empty_mask = counts == 0
+            # Inverser pour une meilleure visualisation (affichage avec A en haut)
+            win_rates_disp = np.flip(win_rates, axis=(0, 1))
+            empty_mask = np.flip(empty_mask, axis=(0, 1))
+            ax = axs[i]
+            sns.heatmap(win_rates_disp,
+                        mask=empty_mask,
+                        annot=True,
+                        fmt=".2f",
+                        cmap="RdYlBu_r",
+                        xticklabels=card_labels,
+                        yticklabels=card_labels,
+                        ax=ax,
+                        cbar_kws={'label': 'Win Rate'},
+                        vmin=0,
+                        vmax=1)
+            # Ajouter des annotations textuelles pour chaque main
+            for y in range(13):
+                for x in range(13):
+                    if not empty_mask[y, x]:
+                        first_card = card_labels[y]
+                        second_card = card_labels[x]
+                        if x == y:
+                            hand_text = f"{second_card}{first_card}"
+                        elif x > y:
+                            hand_text = f"{first_card}{second_card}s"
+                        else:
+                            hand_text = f"{second_card}{first_card}o"
+                        ax.text(x + 0.5, y + 0.2, hand_text,
+                                ha='center', va='center',
+                                color='white', alpha=0.7,
+                                fontsize=8, fontweight='bold')
+            ax.set_xticklabels(card_labels, fontsize=10, rotation=0)
+            ax.set_yticklabels(card_labels, fontsize=10, rotation=0)
+            ax.set_title(f"Win Rate Matrix - Position {pos}", fontsize=12, pad=20)
+        # Supprimer les subplots inutilisés (le cas échéant)
+        if len(axs) > len(positions_list):
+            for j in range(len(positions_list), len(axs)):
+                fig.delaxes(axs[j])
+        plt.suptitle('Hand Win Rates par Position\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
+        plt.tight_layout()
+        plt.savefig('viz_jpg/Poker_heatmaps_by_position.jpg', dpi=500, bbox_inches='tight')
+        plt.close()
+
 if __name__ == "__main__":
     visualizer = Visualizer(start_epsilon=0.8, epsilon_decay=0.9999, plot_interval=500, save_interval=250)
     visualizer.plot_progress()
     visualizer.plot_metrics()
     visualizer.plot_analytics()
-    visualizer.plot_heatmaps()
+    visualizer.plot_heatmaps_by_players()
+    # Appel de la nouvelle méthode pour générer la heatmap par position
+    visualizer.plot_heatmaps_by_position()
