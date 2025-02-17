@@ -315,6 +315,8 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         # Sauvegarder les modèles entraînés
         if episode == episodes - 1:
             print("\nSauvegarde des modèles...")
+            if not os.path.exists("saved_models"):  # Création du dossier si nécessaire
+                os.makedirs("saved_models")
             for player in env.players:
                 # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
                 if hasattr(player.agent, 'model'):
@@ -328,6 +330,8 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     except KeyboardInterrupt:
         print("\nEntraînement interrompu par l'utilisateur")
         print("\nSauvegarde des modèles...")
+        if not os.path.exists("saved_models"):  # Création du dossier si nécessaire
+            os.makedirs("saved_models")
         for player in env.players:
             # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
             if hasattr(player.agent, 'model'):

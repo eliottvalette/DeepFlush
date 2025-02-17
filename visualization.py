@@ -199,6 +199,10 @@ class Visualizer:
         self.epsilon_decay = epsilon_decay
         self.plot_interval = plot_interval
         self.save_interval = save_interval
+
+        # Création du dossier "viz_jpg" s'il n'existe pas, pour éviter les erreurs lors de plt.savefig
+        if not os.path.exists("viz_jpg"):
+            os.makedirs("viz_jpg")
         
         # Définition des couleurs pour chaque action
         self.action_colors = {
