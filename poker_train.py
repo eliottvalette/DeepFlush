@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 100
+EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.99995
@@ -26,8 +26,8 @@ RENDERING = False      # Active/désactive l'affichage graphique
 FPS = 3                # Images par seconde pour le rendu
 
 # Intervalles de sauvegarde
-SAVE_INTERVAL = 25    # Fréquence de sauvegarde des modèles
-PLOT_INTERVAL = 50    # Fréquence de mise à jour des graphiques
+SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
+PLOT_INTERVAL = 500    # Fréquence de mise à jour des graphiques
 
 # Compteurs
 number_of_hand_per_game = 0
