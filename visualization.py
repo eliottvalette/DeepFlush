@@ -183,6 +183,7 @@ class DataCollector:
             self.visualizer.plot_analytics()
             self.visualizer.plot_heatmaps_by_players()
             self.visualizer.plot_heatmaps_by_position()
+            self.visualizer.plot_stack_sum()
     
     def force_visualization(self):
         self.visualizer.plot_progress()
@@ -190,6 +191,7 @@ class DataCollector:
         self.visualizer.plot_analytics()
         self.visualizer.plot_heatmaps_by_players()
         self.visualizer.plot_heatmaps_by_position()
+        self.visualizer.plot_stack_sum()
 
 class Visualizer:
     """
@@ -929,11 +931,158 @@ class Visualizer:
         plt.savefig('viz_jpg/Poker_heatmaps_by_position.jpg', dpi=500, bbox_inches='tight')
         plt.close()
 
+    def plot_stack_sum(self, dpi=500):
+        # Charger les données d'états
+        states_path = os.path.join(self.output_dir, "episodes_states.json")
+        with open(states_path, 'r') as f:
+            states_data = json.load(f)
+        
+        # Trier les épisodes par numéro
+        episodes_nums = sorted(states_data, key=lambda x: int(x))
+        x_data = []
+        stack_sums = []
+        winner_gains = []  # Liste pour stocker les gains du gagnant en BB
+        
+        for ep in episodes_nums:
+            episode = states_data[ep]
+            if not episode:
+                continue
+            # Calcul de la somme des stacks (inchangé)
+            final_state = None
+            for s in reversed(episode):
+                if "final_stacks" in s and s["final_stacks"] and sum(s["final_stacks"].values()) > 0:
+                    final_state = s
+                    break
+            if final_state is None:
+                final_state = episode[-1]
+            if "final_stacks" in final_state and final_state["final_stacks"]:
+                total_stack = sum(final_state["final_stacks"].values())
+            else:
+                total_stack = sum(final_state["state_vector"]["player_stacks"])
+            x_data.append(int(ep))
+            stack_sums.append(total_stack)
+            
+            # Calcul du gain du gagnant en BB pour cet épisode
+            showdown_states = [s for s in episode if s["phase"].lower() == "showdown" and "stack_changes" in s and s["stack_changes"]]
+            if showdown_states:
+                last_showdown_state = showdown_states[-1]
+                max_gain = max(last_showdown_state["stack_changes"].values())
+            else:
+                max_gain = 0
+            winner_gains.append(max_gain)
+        
+        # Création d'une figure à 4 sous-graphiques : 
+        #  - ax1 : évolution de la somme des stacks
+        #  - ax2 : gains du gagnant en BB en bar plot
+        #  - ax3 : gains du gagnant en BB en box plot (par groupes d'épisodes)
+        #  - ax4 : gains du gagnant en BB en box plot global (pour l'ensemble des épisodes)
+        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 24))
+        
+        # Graphique 1 : Évolution de la somme des stacks
+        mean_stack = np.mean(stack_sums)
+        std_stack = np.std(stack_sums)
+        anomalies_x = []
+        anomalies_y = []
+        for x, y in zip(x_data, stack_sums):
+            if not np.isclose(y, 600):
+                anomalies_x.append(x)
+                anomalies_y.append(y)
+        
+        ax1.plot(x_data, stack_sums, label="Somme des Stacks", marker='o')
+        ax1.axhline(600, color='grey', linestyle='--', label="Stack attendu (600)")
+        if anomalies_x:
+            ax1.scatter(anomalies_x, anomalies_y, color='red', s=100, zorder=5, label="Anomalie")
+        
+        ax1.text(0.05, 0.95, f"Moyenne: {mean_stack:.2f}\nÉcart-type: {std_stack:.2f}",
+                 transform=ax1.transAxes, fontsize=10,
+                 verticalalignment='top',
+                 bbox=dict(boxstyle="round", facecolor="white", edgecolor="black"))
+        
+        ax1.set_title("Évolution de la somme des stacks des joueurs")
+        ax1.set_xlabel("Episode")
+        ax1.set_ylabel("Somme des Stacks")
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Graphique 2 : Gains du gagnant en BB en bar plot
+        bar_colors = ['red' if gain > 500 else 'green' for gain in winner_gains]
+        ax2.bar(x_data, winner_gains, color=bar_colors, label="Gain du gagnant (BB)")
+        ax2.axhline(500, color='grey', linestyle='--', label="Limite 500BB")
+        
+        ax2.set_title("Évolution des gains du gagnant en BB (Bar Plot)")
+        ax2.set_xlabel("Episode")
+        ax2.set_ylabel("Gain (BB)")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        # Graphique 3 : Gains du gagnant en BB en box plot (groupés par fenêtre)
+        # Définir la taille du groupe (bin)
+        bin_size = 50
+        bins = [winner_gains[i:i+bin_size] for i in range(0, len(winner_gains), bin_size)]
+        # Positionne chaque box au milieu du groupe en calculant la moyenne des épisodes dans le bin
+        positions = [np.mean(x_data[i:i+bin_size]) for i in range(0, len(winner_gains), bin_size)]
+        # Pour les labels, on peut indiquer l'intervalle du bin
+        labels = [f"{x_data[i]}-{x_data[min(i+bin_size-1, len(x_data)-1)]}" for i in range(0, len(winner_gains), bin_size)]
+        
+        bplot = ax3.boxplot(bins, patch_artist=True, positions=positions, widths=bin_size*0.8)
+        # Personnaliser les couleurs des boîtes en fonction de la médiane
+        for box, data in zip(bplot['boxes'], bins):
+            median = np.median(data)
+            if median > 500:
+                box.set_facecolor('red')
+            else:
+                box.set_facecolor('lightblue')
+                
+        ax3.axhline(500, color='grey', linestyle='--', label="Limite 500BB")
+        ax3.set_title("Gains du gagnant en BB (Box Plot par groupes d'épisodes)")
+        ax3.set_xlabel("Episode (bin d'intervalle)")
+        ax3.set_ylabel("Gain (BB)")
+        ax3.set_xticks(positions)
+        ax3.set_xticklabels(labels, rotation=45)
+        # Annoter les valeurs aberrantes (fliers) qui dépassent 500BB
+        for flier in bplot['fliers']:
+            xdata = flier.get_xdata()
+            ydata = flier.get_ydata()
+            for x_val, y_val in zip(xdata, ydata):
+                if y_val >= 500:
+                    ax3.text(x_val, y_val, f"{y_val:.0f}", fontsize=8, color='black', ha='center', va='bottom')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+        
+        # Graphique 4 : Gains du gagnant en BB en box plot global (pour l'ensemble des épisodes)
+        bplot_global = ax4.boxplot(winner_gains, patch_artist=True)
+        median_global = np.median(winner_gains)
+        if median_global > 500:
+            bplot_global['boxes'][0].set_facecolor('red')
+        else:
+            bplot_global['boxes'][0].set_facecolor('lightblue')
+        ax4.axhline(500, color='grey', linestyle='--', label="Limite 500BB")
+        ax4.set_title("Gains du gagnant en BB (Box Plot global)")
+        ax4.set_xlabel("Tous les épisodes")
+        ax4.set_ylabel("Gain (BB)")
+        # Calcul de statistiques globales
+        mean_global = np.mean(winner_gains)
+        std_global = np.std(winner_gains)
+        min_global = np.min(winner_gains)
+        max_global = np.max(winner_gains)
+        stats_text = f"Moyenne : {mean_global:.1f}\nMédiane : {median_global:.1f}\nMin : {min_global:.1f}\nMax : {max_global:.1f}\nÉcart-type : {std_global:.1f}"
+        ax4.text(0.95, 0.95, stats_text, transform=ax4.transAxes, fontsize=10,
+                 verticalalignment='top', horizontalalignment='right',
+                 bbox=dict(boxstyle="round", facecolor="white", edgecolor="black"))
+        ax4.legend()
+        ax4.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig('viz_jpg/Poker_stack_sum.jpg', dpi=dpi, bbox_inches='tight')
+        plt.close()
+
 if __name__ == "__main__":
     visualizer = Visualizer(start_epsilon=0.8, epsilon_decay=0.9999, plot_interval=500, save_interval=250)
     visualizer.plot_progress()
     visualizer.plot_metrics()
     visualizer.plot_analytics()
     visualizer.plot_heatmaps_by_players()
-    # Appel de la nouvelle méthode pour générer la heatmap par position
+    # Appel de la méthode pour générer la heatmap par position
     visualizer.plot_heatmaps_by_position()
+    # Ajout de l'appel pour tracer l'évolution de la somme des stacks
+    visualizer.plot_stack_sum()
