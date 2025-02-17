@@ -305,6 +305,9 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
                             metric_str += f" {key} = {value},"
                 print(metric_str.rstrip(','))  # Remove trailing comma
 
+        # Créer le dossier saved_models s'il n'existe pas
+        os.makedirs("saved_models", exist_ok=True)
+        
         # Sauvegarder les modèles entraînés
         if episode == episodes - 1:
             print("\nSauvegarde des modèles...")
