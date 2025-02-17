@@ -3,5 +3,4 @@ poker_env/
 temp/
 __pycache__/
 viz_json/
-viz_jpgs/
 saved_models/
