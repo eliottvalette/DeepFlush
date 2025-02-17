@@ -14,11 +14,11 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 5_000
+EPISODES = 2_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.99995
-START_EPS = 0.3
+START_EPS = 1
 STATE_SIZE = 116
 
 # Paramètres de visualisation
@@ -43,6 +43,10 @@ def set_seed(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
+    if torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+         
+    # Set MPS seed if available
     if torch.backends.mps.is_available():
         torch.mps.manual_seed(seed)
     

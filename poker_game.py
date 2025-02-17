@@ -599,6 +599,7 @@ class PokerGame:
         if self.current_phase == GamePhase.RIVER:
             print("River complete - going to showdown")
             self.handle_showdown()
+            return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         else:
             self.advance_phase()
             print(f"Advanced to {self.current_phase}")
@@ -1025,7 +1026,8 @@ class PokerGame:
         # Cas particulier : victoire par fold (il ne reste qu'un joueur actif)
         if len(active_players) == 1:
             winner = active_players[0]
-            total_pot = self.main_pot  # ou bien la somme de toutes les mises
+            contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
+            total_pot = sum(contributions.values())
             print(f"\nVictoire par fold - {winner.name} gagne {total_pot:.2f}BB")
             winner.stack += total_pot
             self.pygame_winner_info = f"{winner.name} gagne {total_pot:.2f}BB (tous les autres joueurs ont fold)"
