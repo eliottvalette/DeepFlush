@@ -18,21 +18,28 @@ for episode_idx, metrics_list in metrics_history.items():
     for i in range(6):
         rewards[f"Player_{i}"].append(metrics_list[i]['reward'])
 
+problematic_episodes = []
+
 # Handle stack changes and final stacks
 for episode_idx, episode_states in episode_states.items():
     for state in episode_states:
-        for i in range(6):
-            total_bets = sum(state['state_vector']['current_bets'])
-            total_stack = sum(state['state_vector']['player_stacks'])
-            all_money_in_game = total_bets + total_stack
-            if all_money_in_game > 600.2 or all_money_in_game < 599.8:
-                print('episode_idx :', episode_idx)
-                print('all_money_in_game :', all_money_in_game)
-                print('total_bets :', total_bets)
-                print('total_stack :', total_stack)
-                print('--------------------------------')
+        if state['phase'] == 'pre-game':
+            for i in range(6):
+                total_bets = sum(state['state_vector']['current_bets'])
+                total_stack = sum(state['state_vector']['player_stacks'])
+                all_money_in_game = total_bets + total_stack
+                if all_money_in_game > 600.2 or all_money_in_game < 599.8:
+                    if int(episode_idx) - 1 in problematic_episodes:
+                        problematic_episodes.append(int(episode_idx))
+                        continue
+                    print('episode_idx :', episode_idx)
+                    print('all_money_in_game :', all_money_in_game)
+                    print('total_bets :', total_bets)
+                    print('total_stack :', total_stack)
+                    print('--------------------------------')
+                    problematic_episodes.append(int(episode_idx))
+                    break
                 break
-            break
         if state['phase'] == 'showdown':
             # Extract and process values for each player
             for i in range(6):
@@ -40,14 +47,22 @@ for episode_idx, episode_states in episode_states.items():
                 stack_change_history[player].append(state['stack_changes'][player])
                 stack_final_history[player].append(state['final_stacks'][player])
                 if state['stack_changes'][player] > 500.2:
+                    if int(episode_idx) - 1 in problematic_episodes:
+                        problematic_episodes.append(episode_idx)
+                        continue
                     print('state[stack_changes][player] :', state['stack_changes'][player])
                     print('episode_idx :', episode_idx)
                     print('--------------------------------')
+                    problematic_episodes.append(int(episode_idx))
                     break
                 if state['final_stacks'][player] > 600.2:
+                    if int(episode_idx) - 1 in problematic_episodes:
+                        problematic_episodes.append(episode_idx)
+                        continue
                     print('state[final_stacks][player] :', state['final_stacks'][player])
                     print('episode_idx :', episode_idx)
                     print('--------------------------------')
+                    problematic_episodes.append(int(episode_idx))
                     break
             break
 # Print statistics
