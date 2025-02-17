@@ -21,30 +21,34 @@ for episode_idx, metrics_list in metrics_history.items():
 # Handle stack changes and final stacks
 for episode_idx, episode_states in episode_states.items():
     for state in episode_states:
-        if state['phase'] == 'preflop':
-            for i in range(6):
-                total_bets = sum(state['state_vector']['current_bets'])
-                total_stack = sum(state['state_vector']['player_stacks'])
-                all_money_in_game = total_bets + total_stack
-                if all_money_in_game > 600.2 or all_money_in_game < 599.8:
-                    print('episode_idx :', episode_idx)
-                    print('all_money_in_game :', all_money_in_game)
-                    print('total_bets :', total_bets)
-                    print('total_stack :', total_stack)
+        for i in range(6):
+            total_bets = sum(state['state_vector']['current_bets'])
+            total_stack = sum(state['state_vector']['player_stacks'])
+            all_money_in_game = total_bets + total_stack
+            if all_money_in_game > 600.2 or all_money_in_game < 599.8:
+                print('episode_idx :', episode_idx)
+                print('all_money_in_game :', all_money_in_game)
+                print('total_bets :', total_bets)
+                print('total_stack :', total_stack)
+                print('--------------------------------')
+                break
+            break
         if state['phase'] == 'showdown':
             # Extract and process values for each player
             for i in range(6):
                 player = f"Player_{i}"
                 stack_change_history[player].append(state['stack_changes'][player])
                 stack_final_history[player].append(state['final_stacks'][player])
-                if state['stack_changes'][player] > 600.2:
-                    # Print the debugging dictionary with proper indentation
+                if state['stack_changes'][player] > 500.2:
                     print('state[stack_changes][player] :', state['stack_changes'][player])
                     print('episode_idx :', episode_idx)
+                    print('--------------------------------')
+                    break
                 if state['final_stacks'][player] > 600.2:
-                    # Similarly for final stacks
                     print('state[final_stacks][player] :', state['final_stacks'][player])
                     print('episode_idx :', episode_idx)
+                    print('--------------------------------')
+                    break
             break
 # Print statistics
 print("\nRewards Statistics:")

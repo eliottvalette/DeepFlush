@@ -2187,6 +2187,8 @@ class PokerGame:
                         self.start_new_hand()
                     if event.key == pygame.K_r:
                         self.reset()
+                    if event.key == pygame.K_c:
+                        print(self.players)
                     if event.key == pygame.K_s:
                         state = self.get_state()
                         print('\n=== État actuel du jeu ===')
@@ -2302,4 +2304,5 @@ if __name__ == "__main__":
     for i in range(6):
         human_players_list.append(HumanPlayer(None, f"Player_{i}", 100, i))
     game = PokerGame(human_players_list)
+    game.reset()
     game.manual_run()

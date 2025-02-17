@@ -14,11 +14,11 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 30_000
+EPISODES = 5_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9998
-START_EPS = 0.999
+EPS_DECAY = 0.99995
+START_EPS = 0.3
 STATE_SIZE = 116
 
 # Paramètres de visualisation
@@ -130,7 +130,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
         
         # Stocker l'expérience : on enregistre une copie de la séquence courante (On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte)
-        
         current_state = player_state_seq[-1].clone()
         state_info = {
             "player": current_player.name,

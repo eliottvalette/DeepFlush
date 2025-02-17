@@ -95,6 +95,8 @@ class DataCollector:
         }
 
         subdivided_simple_state = {
+            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
+            "current_bets": [bet * 100 for bet in state_vector[59:65]],  # Mises actuelles normalisées
             "player_cards": [
                 {
                     "value": state_vector[0],  # Valeur normalisée
