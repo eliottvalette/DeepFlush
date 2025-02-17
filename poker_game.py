@@ -1162,7 +1162,6 @@ class PokerGame:
         self.pygame_winner_display_duration = 2000  # 2 secondes
         print("=== FIN SHOWDOWN ===\n")
 
-
     def _create_deck(self) -> List[Card]:
         """
         Crée et mélange un nouveau jeu de 52 cartes.
@@ -1443,6 +1442,92 @@ class PokerGame:
         # Avant de retourner, conversion en tableau tensor
         state = torch.tensor(state, dtype=torch.float32)
         return state
+    
+    def get_final_state(self, previous_state, final_stacks):
+        """
+        Reconstruit l'Etat final de la main en fonction de l'état précédent et du stack final.
+        Cette fonction est utilisée pour reconstruire l'état final de la main lorsque le showdown est déclenché car une fois
+        déclenché, l'état est réinitialisé le get_state appelle l'état de la main suivante.
+
+        1. Cartes du joueur (inchangées)
+        
+        2. Cartes communes (inchangées)
+        
+        3. Information sur la main (inchangées)
+        
+        4. Phase de jeu (changer en one-hot showdown)
+        
+        5. Information sur les mises (passer la mise max actuelle à 0)
+        
+        6. Stacks des joueurs (recupérer les stacks finaux dans le dict final_stack)
+        
+        7. Mises actuelles (changer en 0 pour tous)
+        
+        8. État des joueurs (changer en 0 pour tous)
+        
+        9. Positions relatives (inchangée)
+        
+        10. Actions disponibles (toutes les actions sont indisponibles)
+        
+        11. Historique des actions (changer en -1 pour tous)
+        
+        12. Informations stratégiques (changer en 0 pour tous)
+        
+        13. Potentiel de quinte (changer en 0 pour tous)
+
+        14. Potentiel de couleur (changer en 0 pour tous)
+
+        Args:
+            previous_state (torch.Tensor): Etat précédent
+            final_stack (float): Stack final
+        
+        Returns:
+            torch.Tensor: Vecteur d'état final de dimension 106, normalisé entre -1 et 1
+        """
+
+        # Créer une copie modifiable du previous_state
+        final_state = previous_state.clone()
+        
+        # 1-3. Garder les cartes du joueur, cartes communes et info de la main inchangées
+        # (indices 0-46 restent les mêmes)
+        
+        # 4. Mettre à jour la phase de jeu en SHOWDOWN
+        final_state[47:52] = torch.tensor([-1, -1, -1, -1, 1])  # One-hot encoding pour SHOWDOWN
+        
+        # 5. Mettre la mise maximale actuelle à 0
+        final_state[52] = 0
+        
+        # 6. Mettre à jour les stacks des joueurs avec les stacks finaux
+        for i, player in enumerate(self.players):
+            final_state[53 + i] = final_stacks[player.name] / self.starting_stack
+        
+        # 7. Mettre les mises actuelles à 0
+        final_state[59:65] = 0
+        
+        # 8. Mettre l'état des joueurs à inactif (-1)
+        final_state[65:71] = -1
+        
+        # 9. Garder les positions relatives inchangées
+        # (indices 71-76 restent les mêmes)
+        
+        # 10. Désactiver toutes les actions disponibles
+        final_state[77:82] = -1
+        
+        # 11. Réinitialiser l'historique des actions
+        for i in range(6):  # Pour chaque joueur
+            final_state[82+i*5:82+(i+1)*5] = -1
+        
+        # 12. Réinitialiser les informations stratégiques
+        final_state[112] = 0  # Probabilité de victoire
+        final_state[113] = 0  # Cotes du pot
+        
+        # 13-15. Réinitialiser les potentiels de tirage
+        final_state[114:] = 0
+
+        # Avant de retourner, conversion en tableau tensor
+        final_state = torch.tensor(final_state, dtype=torch.float32)
+        
+        return final_state    
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
         """
@@ -1692,8 +1777,9 @@ class PokerGame:
 
         # Traiter l'action (met à jour l'état du jeu)
         action = self.process_action(current_player, action, bet_amount)
+        next_state = self.get_state()
 
-        return self.get_state(), reward
+        return next_state, reward
 
 # ======================================================================
 # Methodes de calculs (à exporter dans un autre fichier)

@@ -14,7 +14,7 @@ import json
 import glob
 
 # Hyperparamètres
-EPISODES = 2_000
+EPISODES = 100
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.99995
@@ -26,8 +26,8 @@ RENDERING = False      # Active/désactive l'affichage graphique
 FPS = 3                # Images par seconde pour le rendu
 
 # Intervalles de sauvegarde
-SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
-PLOT_INTERVAL = 500    # Fréquence de mise à jour des graphiques
+SAVE_INTERVAL = 25    # Fréquence de sauvegarde des modèles
+PLOT_INTERVAL = 50    # Fréquence de mise à jour des graphiques
 
 # Compteurs
 number_of_hand_per_game = 0
@@ -119,7 +119,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # --- Utiliser la séquence d'états accumulée comme entrée ---
         player_state_seq = state_seq[current_player.name]
         
-        
         # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
         action_chosen, action_mask = current_player.agent.get_action(player_state_seq, epsilon, valid_actions)
         
@@ -128,32 +127,34 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         cumulative_rewards[current_player.name] += reward
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
-        state_seq[current_player.name].append(next_state)
-        next_player_state_seq = state_seq[current_player.name].copy()
+        if env.current_phase != GamePhase.SHOWDOWN:
+            state_seq[current_player.name].append(next_state)
+            
+            # Sauve l'exp dans un json. On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte
+            current_state = player_state_seq[-1].clone()
+            state_info = {
+                "player": current_player.name,
+                "phase": env.current_phase.value,
+                "action": action_chosen.value,
+                "stack_changes": env.net_stack_changes,
+                "final_stacks": env.final_stacks,
+                "num_active_players": len(players_that_can_play),
+                "state_vector": current_state.tolist()
+                }
+            data_collector.add_state(state_info)
 
-        actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
-        
-        # Stocker l'expérience : on enregistre une copie de la séquence courante (On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte)
-        current_state = player_state_seq[-1].clone()
-        state_info = {
-            "player": current_player.name,
-            "phase": env.current_phase.value,
-            "action": action_chosen.value,
-            "stack_changes": env.net_stack_changes,
-            "final_stacks": env.final_stacks,
-            "num_active_players": len(players_that_can_play),
-            "state_vector": current_state.tolist()
-            }
-        data_collector.add_state(state_info)
-        
-        current_player.agent.remember(
-            player_state_seq.copy(), 
-            action_chosen, 
-            reward, 
-            next_player_state_seq,
-            False,
-            action_mask
-        )
+            # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
+            next_player_state_seq = state_seq[current_player.name].copy()
+            actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
+            # Stocker l'expérience
+            current_player.agent.remember(
+                player_state_seq.copy(), 
+                action_chosen, 
+                reward, 
+                next_player_state_seq,
+                False,
+                action_mask
+            )
         
         # Rendu graphique si activé
         if rendering and (episode % render_every == 0):
@@ -176,9 +177,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     print("\n=== Résultats de l'épisode ===")
     # Attribution des récompenses finales
     for player in env.ordered_players:
-        player_state_seq = state_seq[player.name]
-        terminal_state = player_state_seq.copy()
-
         if env.net_stack_changes[player.name] > 0:
             stack_change_normalized = env.net_stack_changes[player.name] / env.starting_stack
             final_reward = (stack_change_normalized ** 0.5) * 5
@@ -189,13 +187,19 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 final_reward -= 2
         else:
             final_reward = 0
+
+        # Créer et utiliser l'état final
+        player_state_seq = state_seq[player.name]
+        penultimate_state = player_state_seq[-1]
+        final_state = env.get_final_state(penultimate_state, env.final_stacks)
+        state_seq[player.name].append(final_state)
+        full_player_state_seq = state_seq[player.name].copy()
         
         # Utiliser directement l'agent du joueur
-        player.agent.remember(terminal_state, None, final_reward, None, True, [1, 1, 1, 1, 1])
+        player.agent.remember(full_player_state_seq, None, final_reward, None, True, [1, 1, 1, 1, 1])
         cumulative_rewards[player.name] += final_reward
 
         # Stocker l'expérience finale pour la collecte des métriques
-        current_state = terminal_state[-1]
         current_player_name = player.name
         state_info = {
             "player": current_player_name,
@@ -204,7 +208,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             "stack_changes": env.net_stack_changes,
             "final_stacks": env.final_stacks,
             "num_active_players": len(players_that_can_play),
-            "state_vector": current_state.tolist()
+            "state_vector": final_state.tolist()
         }
         data_collector.add_state(state_info)
 
