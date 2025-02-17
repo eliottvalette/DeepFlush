@@ -1439,7 +1439,7 @@ class PokerGame:
         state.append(straight_draw)
         state.append(flush_draw)
 
-        # Avant de retourner, conversion en tableau tensor
+        # Avant de retourner, conversion en tableau tensor.
         state = torch.tensor(state, dtype=torch.float32)
         return state
     
