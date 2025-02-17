@@ -1,24 +1,22 @@
 # poker_train.py
 import os
-import logging
+import gc
 import numpy as np
 import random as rd
 import pygame
 import torch
-import time
 from visualization import DataCollector
 from poker_agents import PokerAgent
-from poker_game import PokerGame, GamePhase, PlayerAction, HandRank
+from poker_game import PokerGame, GamePhase, PlayerAction
 from typing import List, Tuple
 import json
-import glob
 
 # Hyperparamètres
 EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.99995
-START_EPS = 1
+START_EPS = 0.5
 STATE_SIZE = 116
 
 # Paramètres de visualisation
@@ -68,6 +66,13 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     Returns:
         Tuple[List[float], List[dict]]: Récompenses finales et métriques d'entraînement
     """
+
+    # Nettoyage des variables non utilisées
+    if episode % PLOT_INTERVAL + 1 == 0:
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.mps.empty_cache()
+
     global number_of_hand_per_game  # Ajout de cette ligne pour référencer et mettre à jour la variable globale
 
     # Vérification du nombre minimum de joueurs
@@ -299,19 +304,6 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             print(f"Randomness: {epsilon*100:.3f}%")
             for player in env.players:
                 print(f"Agent {player.name} reward: {reward_dict[player.name]:.2f}")
-            
-            # Afficher les métriques de chaque agent
-            print("Métriques:")
-            for i, metrics in enumerate(metrics_list):
-                metric_str = f"  Agent {metrics['agent']}:"
-                # Print all available metrics
-                for key, value in metrics.items():
-                    if key != 'agent':  # Skip the agent name
-                        try:
-                            metric_str += f" {key} = {float(value):.6f},"
-                        except (ValueError, TypeError):
-                            metric_str += f" {key} = {value},"
-                print(metric_str.rstrip(','))  # Remove trailing comma
 
         # Créer le dossier saved_models s'il n'existe pas
         os.makedirs("saved_models", exist_ok=True)

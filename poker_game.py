@@ -8,9 +8,8 @@ import random as rd
 from enum import Enum
 from typing import List, Dict, Optional, Tuple
 import pygame.font
-from collections import Counter, defaultdict
+from collections import Counter
 import numpy as np
-import logging
 
 SCREEN_WIDTH = 1400
 SCREEN_HEIGHT = 900

@@ -45,7 +45,7 @@ class PokerAgent:
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = deque(maxlen=10000)  # Buffer de replay
+        self.memory = deque(maxlen=5000)  # Buffer de replay
 
         if load_model:
             self.load(load_path)
@@ -198,22 +198,22 @@ class PokerAgent:
             for i, next_state_sequence in enumerate(next_state_sequences):
                 if next_state_sequence is not None:
                     if len(next_state_sequence) > max_seq_len:
-                        ns_seq = next_state_sequence[-max_seq_len:]
+                        next_state_seq = next_state_sequence[-max_seq_len:]
                     else:
-                        ns_seq = next_state_sequence
+                        next_state_seq = next_state_sequence
                     
                     # Convertir directement en tensor PyTorch
-                    ns_seq_tensor = torch.stack(ns_seq).to(self.device)
+                    next_state_seq_tensor = torch.stack(next_state_seq).to(self.device)
                     
                     # Vérifier la forme de la séquence
-                    if len(ns_seq_tensor.shape) == 1:
-                        ns_seq_tensor = ns_seq_tensor.reshape(1, -1)
+                    if len(next_state_seq_tensor.shape) == 1:
+                        next_state_seq_tensor = next_state_seq_tensor.reshape(1, -1)
                     
                     # Remplir le tenseur padded_next_states
-                    padded_next_states[i, :len(ns_seq_tensor)] = ns_seq_tensor
+                    padded_next_states[i, :len(next_state_seq_tensor)] = next_state_seq_tensor
 
             # Conversion des autres données en tensors PyTorch
-            actions_tensor = torch.LongTensor(actions).to(self.device)
+            actionext_state_tensor = torch.LongTensor(actions).to(self.device)
             rewards_tensor = torch.FloatTensor(rewards).to(self.device)
             dones_tensor = torch.FloatTensor(dones).to(self.device)
 
@@ -229,7 +229,7 @@ class PokerAgent:
             advantages = temporal_difference_targets - state_values
 
             # Calcul des pertes
-            selected_action_probs = action_probs[torch.arange(len(actions_tensor)), actions_tensor]
+            selected_action_probs = action_probs[torch.arange(len(actionext_state_tensor)), actionext_state_tensor]
             policy_loss = -torch.mean(torch.log(selected_action_probs + 1e-10) * advantages.detach())
             value_loss = torch.mean((state_values - temporal_difference_targets.detach()) ** 2)
             entropy_loss = -torch.mean(torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1))

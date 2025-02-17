@@ -4,7 +4,6 @@ matplotlib.use('Agg')  # Use Agg backend that doesn't require GUI
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
-from poker_game import HandRank
 import seaborn as sns
 import os
 import json
@@ -391,10 +390,9 @@ class Visualizer:
 
         # 5. Rewards par agent
         ax5 = plt.subplot(2, 3, 5)  # Position in bottom right
-        
 
         # Tracer les récompenses pour chaque agent
-        rewards_window = self.plot_interval * 3
+        rewards_window = self.plot_interval
         for i, agent in enumerate(agents):
             episodes = []
             rewards = []
