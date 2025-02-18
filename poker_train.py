@@ -164,11 +164,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
             # On ajoute le nouvel état à la fin de la séquence (car dans ce cas, c'est un state issu d'une action)
             state_seq[current_player.name].append(next_state)
-            player_state_seq = state_seq[current_player.name].copy()
+            next_player_state_seq = state_seq[current_player.name].copy()
 
             # Stocker l'expérience
             current_player.agent.temp_remember(
-                state_seq = player_state_seq.copy(), 
+                state_seq = previous_player_state_seq.copy(), 
                 action = action_chosen, 
                 reward = reward, 
                 next_state_seq = next_player_state_seq,
