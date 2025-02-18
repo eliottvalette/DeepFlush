@@ -8,6 +8,7 @@ import seaborn as sns
 import os
 import json
 import pandas as pd
+from datetime import datetime
 
 PLAYERS = ['Player_0', 'Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5']
 
@@ -18,7 +19,7 @@ class DataCollector:
         
         Args:
             save_interval (int): Nombre d'épisodes à regrouper avant de sauvegarder
-            plot_interval (int): Intervalle pour le tracé (actuellement non utilisé)
+            plot_interval (int): Intervalle pour le tracé
             output_dir (str): Répertoire pour enregistrer les fichiers JSON
         """
         self.save_interval = save_interval
@@ -30,15 +31,27 @@ class DataCollector:
         self.batch_episode_states = [] # Contient un liste de current_episode_states qui seront ajouté toutes les save_interval dans le fichier json
         self.batch_episode_metrics = [] # Contient les métriques d'entraînement pour chaque épisode
         
-        # Créer le répertoire s'il n'existe pas
+        # Créer le répertoire pour les JSON s'il n'existe pas
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        # Créer le dossier daté pour les visualisations
+        self.viz_dir = os.path.join("visualizations", datetime.now().strftime("%Y-%m-%d_%Hh %Mm %Ss"))
+        if not os.path.exists(self.viz_dir):
+            os.makedirs(self.viz_dir)
 
         # Supprimer les fichiers JSON existants dans le répertoire
         for file in os.listdir(output_dir):
             os.remove(os.path.join(output_dir, file))
 
-        self.visualizer = Visualizer(output_dir=output_dir, start_epsilon=start_epsilon, epsilon_decay=epsilon_decay, plot_interval=plot_interval, save_interval=save_interval)
+        self.visualizer = Visualizer(
+            output_dir=output_dir, 
+            viz_dir=self.viz_dir,
+            start_epsilon=start_epsilon, 
+            epsilon_decay=epsilon_decay, 
+            plot_interval=plot_interval, 
+            save_interval=save_interval
+        )
     
     def add_state(self, state_info):
         """
@@ -196,8 +209,9 @@ class Visualizer:
     """
     Visualise les données collectées dans le répertoire viz_json
     """
-    def __init__(self, start_epsilon, epsilon_decay, plot_interval, save_interval, output_dir="viz_json"):
+    def __init__(self, start_epsilon, epsilon_decay, plot_interval, save_interval, output_dir="viz_json", viz_dir=None):
         self.output_dir = output_dir
+        self.viz_dir = viz_dir or os.path.join("visualizations", datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         self.start_epsilon = start_epsilon
         self.epsilon_decay = epsilon_decay
         self.plot_interval = plot_interval
@@ -484,7 +498,7 @@ class Visualizer:
         })
         
         plt.tight_layout()
-        plt.savefig('viz_jpg/Poker_progress.jpg', dpi=dpi, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_progress.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
     
     def plot_metrics(self):
@@ -567,7 +581,7 @@ class Visualizer:
         })
 
         plt.tight_layout()
-        plt.savefig('viz_jpg/Poker_metrics.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_metrics.jpg'), dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_analytics(self):
@@ -652,7 +666,7 @@ class Visualizer:
         ax1.set_ylim(0,1)
         
         plt.tight_layout()
-        plt.savefig('viz_jpg/Poker_analytics.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_analytics.jpg'), dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_heatmaps_by_players(self):
@@ -781,7 +795,7 @@ class Visualizer:
 
         plt.suptitle('Hand Win Rates by Player\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()
-        plt.savefig('viz_jpg/Poker_heatmaps.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_heatmaps.jpg'), dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_heatmaps_by_position(self):
@@ -919,7 +933,7 @@ class Visualizer:
                 fig.delaxes(axs[j])
         plt.suptitle('Hand Win Rates par Position\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()
-        plt.savefig('viz_jpg/Poker_heatmaps_by_position.jpg', dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_heatmaps_by_position.jpg'), dpi=500, bbox_inches='tight')
         plt.close()
 
     def plot_stack_sum(self, dpi=500):
@@ -1064,7 +1078,7 @@ class Visualizer:
         ax4.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig('viz_jpg/Poker_stack_sum.jpg', dpi=dpi, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_stack_sum.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
 
 if __name__ == "__main__":
