@@ -10,22 +10,8 @@ from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction
 from typing import List, Tuple
 import json
-
-# Hyperparamètres
-EPISODES = 10_000
-GAMMA = 0.9985
-ALPHA = 0.001
-EPS_DECAY = 0.9996
-START_EPS = 0.8
-STATE_SIZE = 116
-
-# Paramètres de visualisation
-RENDERING = False      # Active/désactive l'affichage graphique
-FPS = 3                # Images par seconde pour le rendu
-
-# Intervalles de sauvegarde
-SAVE_INTERVAL = 250    # Fréquence de sauvegarde des modèles
-PLOT_INTERVAL = 500    # Fréquence de mise à jour des graphiques
+from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL
+from utils.renderer import handle_final_rendering, handle_rendering
 
 # Compteurs
 number_of_hand_per_game = 0
@@ -178,7 +164,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         
         
         # Rendu graphique si activé
-        _handle_rendering(env, rendering, episode, render_every)
+        handle_rendering(env, rendering, episode, render_every)
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
@@ -269,7 +255,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Gestion du rendu graphique final
     if rendering and (episode % render_every == 0):
-        _handle_final_rendering(env)
+        handle_final_rendering(env)
 
     return cumulative_rewards, metrics_list
 
@@ -354,52 +340,3 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         with open(metrics_path, "w") as f:
             json.dump(metrics_history, f, indent=2)
         print(f"\nEntraînement terminé et métriques sauvegardées dans '{metrics_path}'")
-
-
-
-
-
-### FONCTIONS AUXILLIAIRES ###
-
-def _handle_final_rendering(env):
-    """
-    Gère l'affichage final de l'épisode, incluant l'information du gagnant.
-    
-    Args:
-        env (PokerGame): L'environnement de jeu
-    """
-    env._draw()
-    pygame.display.flip()
-    
-    if env.pygame_winner_info:
-        current_time = pygame.time.get_ticks()
-        while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    return
-            env._draw()
-            pygame.display.flip()
-            env.clock.tick(FPS)
-            current_time = pygame.time.get_ticks()
-
-def _handle_rendering(env, rendering, episode, render_every):
-    """Gère l'affichage du jeu."""
-    if not (rendering and episode % render_every == 0):
-        return
-        
-    env._draw()
-    pygame.display.flip()
-    env.clock.tick(FPS)
-    
-    if env.pygame_winner_info:
-        current_time = pygame.time.get_ticks()
-        while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    return
-            env._draw()
-            pygame.display.flip()
-            env.clock.tick(FPS)
-            current_time = pygame.time.get_ticks()

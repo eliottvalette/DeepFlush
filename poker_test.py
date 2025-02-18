@@ -4,7 +4,7 @@ import random as rd
 import pygame
 import time
 from poker_game import PokerGame, GamePhase, PlayerAction
-from bot import hardcoded_poker_bot
+from poker_bot import hardcoded_poker_bot
 import matplotlib
 matplotlib.use('Agg')
 
