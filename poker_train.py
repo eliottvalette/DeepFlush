@@ -92,6 +92,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
     initial_state = env.get_state()  # état initial (vecteur de dimension 116)
+
     # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
         state_seq[player.name].append(initial_state)
@@ -108,23 +109,17 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         }
     data_collector.add_state(state_info)
     
-    # Boucle principale du jeu
+    #### Boucle principale du jeu ####
     while env.current_phase != GamePhase.SHOWDOWN:
-        # Pour éviter les boucles infinies
-        if len(actions_taken[env.players[env.current_player_seat].name]) > 20:
-            raise Exception(f"Agent {env.current_player_seat + 1} a pris plus de 20 actions")
-        
+        # Récupération du joueur actuel et mise à jour des boutons   
         current_player = next(p for p in env.players if p.seat_position == env.current_player_seat)
-        
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
-        if len(valid_actions) == 0:
-            raise Exception(f"Agent {env.current_player_seat + 1} n'a plus d'actions valides et il lui a pourtant été demandé de jouer")
 
-        # --- Utiliser la séquence d'états accumulée comme entrée ---
+        # On récupere la sequence d'entat du joueur actuel
         player_state_seq = state_seq[current_player.name]
         
-        # Récupérer l'action à partir du modèle en lui passant la sequence des états précédents
+        # Prédiction de l'action à partir du model en lui passant la sequence des états précédents
         action_chosen, action_mask = current_player.agent.get_action(player_state_seq, epsilon, valid_actions)
         
         # Exécuter l'action dans l'environnement
@@ -152,31 +147,17 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             next_player_state_seq = state_seq[current_player.name].copy()
             actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
             # Stocker l'expérience
-            current_player.agent.remember(
-                player_state_seq.copy(), 
-                action_chosen, 
-                reward, 
-                next_player_state_seq,
-                False,
-                action_mask
+            current_player.agent.temp_remember(
+                state_seq = player_state_seq.copy(), 
+                action = action_chosen, 
+                reward = reward, 
+                next_state_seq = next_player_state_seq,
+                done = False,
+                valid_action_mask = action_mask,
             )
         
         # Rendu graphique si activé
-        if rendering and (episode % render_every == 0):
-            env._draw()
-            pygame.display.flip()
-            env.clock.tick(FPS)
-            if env.pygame_winner_info:
-                current_time = pygame.time.get_ticks()
-                while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
-                    for event in pygame.event.get():
-                        if event.type == pygame.QUIT:
-                            pygame.quit()
-                            return
-                    env._draw()
-                    pygame.display.flip()
-                    env.clock.tick(FPS)
-                    current_time = pygame.time.get_ticks()
+        _handle_rendering(env, rendering, episode, render_every)
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
@@ -193,17 +174,34 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         else:
             final_reward = 0
 
-        # Créer et utiliser l'état final
+        # --- Pour l'entrainement du model ----
+        for player in env.players:
+            # On va récupérer toutes les transitions temporaires de l'agent et on va update chacune des rewards, associées aux séquences d'états, grace a la final reward
+            temp_memory = player.agent.temp_memory
+            for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory:
+                # Calculate discount based on state position in sequence
+                state_idx = len(temp_state_seq) - 1  # Index of current state in sequence
+                seq_length = len(next_state_seq)
+                discount = state_idx / seq_length if seq_length > 0 else 1
+                
+                # Apply discount to final reward
+                updated_reward = reward + (final_reward * discount)
+                player.agent.remember(
+                    temp_state_seq = temp_state_seq,
+                    numerical_action = numerical_action,
+                    reward = updated_reward,
+                    next_state_seq = next_state_seq,
+                    done = done,
+                    valid_action_mask = valid_action_mask,
+                )
+
+        # ---- Pour la collecte et l'affichage des métriques ----
+        # Récupération de l'état final
         player_state_seq = state_seq[player.name]
         penultimate_state = player_state_seq[-1]
         final_state = env.get_final_state(penultimate_state, env.final_stacks)
-        state_seq[player.name].append(final_state)
-        full_player_state_seq = state_seq[player.name].copy()
-        
         # Utiliser directement l'agent du joueur
-        player.agent.remember(full_player_state_seq, None, final_reward, None, True, [1, 1, 1, 1, 1])
         cumulative_rewards[player.name] += final_reward
-
         # Stocker l'expérience finale pour la collecte des métriques
         current_player_name = player.name
         state_info = {
@@ -240,28 +238,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         _handle_final_rendering(env)
 
     return cumulative_rewards, metrics_list
-
-def _handle_final_rendering(env):
-    """
-    Gère l'affichage final de l'épisode, incluant l'information du gagnant.
-    
-    Args:
-        env (PokerGame): L'environnement de jeu
-    """
-    env._draw()
-    pygame.display.flip()
-    
-    if env.pygame_winner_info:
-        current_time = pygame.time.get_ticks()
-        while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    return
-            env._draw()
-            pygame.display.flip()
-            env.clock.tick(FPS)
-            current_time = pygame.time.get_ticks()
 
 def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES, 
                       rendering: bool = RENDERING, render_every: int = 1000):
@@ -344,3 +320,52 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         with open(metrics_path, "w") as f:
             json.dump(metrics_history, f, indent=2)
         print(f"\nEntraînement terminé et métriques sauvegardées dans '{metrics_path}'")
+
+
+
+
+
+### FONCTIONS AUXILLIAIRES ###
+
+def _handle_final_rendering(env):
+    """
+    Gère l'affichage final de l'épisode, incluant l'information du gagnant.
+    
+    Args:
+        env (PokerGame): L'environnement de jeu
+    """
+    env._draw()
+    pygame.display.flip()
+    
+    if env.pygame_winner_info:
+        current_time = pygame.time.get_ticks()
+        while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
+            env._draw()
+            pygame.display.flip()
+            env.clock.tick(FPS)
+            current_time = pygame.time.get_ticks()
+
+def _handle_rendering(env, rendering, episode, render_every):
+    """Gère l'affichage du jeu."""
+    if not (rendering and episode % render_every == 0):
+        return
+        
+    env._draw()
+    pygame.display.flip()
+    env.clock.tick(FPS)
+    
+    if env.pygame_winner_info:
+        current_time = pygame.time.get_ticks()
+        while current_time - env.pygame_winner_display_start < env.pygame_winner_display_duration:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
+            env._draw()
+            pygame.display.flip()
+            env.clock.tick(FPS)
+            current_time = pygame.time.get_ticks()

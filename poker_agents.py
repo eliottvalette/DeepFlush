@@ -46,6 +46,7 @@ class PokerAgent:
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = deque(maxlen=5000)  # Buffer de replay
+        self.temp_memory = deque(maxlen=50) # Buffer temporaire pour les transitions de l'agent, avant update en backpropagation de la final reward
 
         if load_model:
             self.load(load_path)
@@ -129,8 +130,8 @@ class PokerAgent:
 
             reverse_action_map = {v: k for k, v in action_map.items()}
             return reverse_action_map[chosen_index], valid_action_mask
-
-    def remember(self, state_seq, action, reward, next_state, done, valid_action_mask):
+        
+    def temp_remember(self, state_seq, action, reward, next_state_seq, done, valid_action_mask):
         """
         Stocke une transition dans la mémoire de replay
         :param state_seq: Séquence d'états
@@ -138,6 +139,7 @@ class PokerAgent:
         :param reward: Récompense reçue
         :param next_state: État suivant
         :param done: True si l'épisode est terminé
+        :param is_temp: True si la transition est temporaire (pour les transitions de l'agent, avant update en backpropagation de la final reward)
         """
         action_map = {
             PlayerAction.FOLD: 0,
@@ -148,8 +150,16 @@ class PokerAgent:
             None: 0 #  L'action None est mappée au même indice que l'action fold (indice 0). L'action None est utilisée pour traiter le Showdown sans action, sans que cela n'ait d'impact négatif sur l'apprentissage global car elle n'est pas prise en compte dans le calcul des pertes.
         }
         numerical_action = action_map[action]
-        self.memory.append((state_seq, numerical_action, reward, next_state, done, valid_action_mask))
+        self.temp_memory.append((state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask))
 
+    def remember(self, temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask):
+        """
+        Stocke une transition dans la mémoire de replay, cette transition sera utilisée pour l'entrainement du model
+        """
+        self.memory.append((temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask))
+
+    
+    
     def train_model(self):
         """
         Entraîne le modèle sur un batch de transitions.

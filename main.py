@@ -37,8 +37,10 @@ for agent in agent_list:
 # Faire en sorte que les agents IA partagent le même modèle (Changer entre True et False pour activer ou désactiver le partage de modèle)
 if True:
     shared_model = agent_list[0].model
+    shared_memory = agent_list[0].memory
     for agent in agent_list:  # Seulement pour les 4 premiers agents qui sont des IA
         agent.model = shared_model
+        agent.memory = shared_memory
 
 # Démarrer l'entraînement
 main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1)
