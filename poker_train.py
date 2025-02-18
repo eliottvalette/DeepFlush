@@ -203,7 +203,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory: 
             if final_reward <= 0 :
                 if numerical_action in [0, 1]: # Le joueur a perdu du stack et a fait un fold ou un check
-                    coef = - 0.3
+                    coef = 0.1
                 elif numerical_action == 2 : # Le joueur a perdu du stack et a fait un call
                     coef = 0.6
                 else : # Le joueur a perdu du stack et a fait un raise ou un all in
