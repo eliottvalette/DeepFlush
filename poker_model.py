@@ -62,8 +62,8 @@ class PokerTransformerModel(nn.Module):
         # Elle transforme la représentation finale (64 dimensions) en un vecteur de probabilité de taille output_dim (ici 5).
         self.action_head = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
-            nn.ReLU(),
-            nn.BatchNorm1d(dim_feedforward),
+            nn.GELU(),
+            nn.LayerNorm(dim_feedforward),
             nn.Linear(dim_feedforward, output_dim),
             nn.Softmax(dim=-1)
         )
@@ -72,8 +72,8 @@ class PokerTransformerModel(nn.Module):
         # Elle transforme la représentation finale (64 dimensions) en un scalaire.
         self.value_head = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
-            nn.ReLU(),
-            nn.BatchNorm1d(dim_feedforward),
+            nn.GELU(),
+            nn.LayerNorm(dim_feedforward),
             nn.Linear(dim_feedforward, 1)
         )
 
