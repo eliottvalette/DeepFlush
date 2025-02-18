@@ -45,8 +45,8 @@ class PokerAgent:
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = deque(maxlen=5000)  # Buffer de replay
-        self.temp_memory = deque(maxlen=50) # Buffer temporaire pour les transitions de l'agent, avant update en backpropagation de la final reward
+        self.memory = deque(maxlen=10000)  # Buffer de replay
+        self.temp_memory = [] # Buffer temporaire pour les transitions de l'agent, avant update en backpropagation de la final reward
 
         if load_model:
             self.load(load_path)
@@ -158,8 +158,6 @@ class PokerAgent:
         """
         self.memory.append((temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask))
 
-    
-    
     def train_model(self):
         """
         Entraîne le modèle sur un batch de transitions.

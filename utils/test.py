@@ -35,7 +35,7 @@ for episode_idx, episode_states in episode_states.items():
                 print('phase :', state['phase'])
                 print('player :', player)
                 print('--------------------------------')
-                raise Exception('Error')
+                raise ValueError('Error')
         for i in range(6):
             player = f"Player_{i}"
             stack_change_history[player].append(state['stack_changes'][player])

@@ -20,7 +20,7 @@ START_EPS = 0.5
 STATE_SIZE = 116
 
 # Paramètres de visualisation
-RENDERING = False      # Active/désactive l'affichage graphique
+RENDERING = True      # Active/désactive l'affichage graphique
 FPS = 3                # Images par seconde pour le rendu
 
 # Intervalles de sauvegarde
@@ -124,7 +124,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         
         # Exécuter l'action dans l'environnement
         next_state, reward = env.step(action_chosen)
-        cumulative_rewards[current_player.name] += reward
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         if env.current_phase != GamePhase.SHOWDOWN:
@@ -156,13 +155,35 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 valid_action_mask = action_mask,
             )
         
+        else : # Cas spécifique au joueur qui déclenche le showdown par son action
+            # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
+            previous_player_state_seq = state_seq[current_player.name].copy()
+            penultimate_state = previous_player_state_seq[-1]
+            final_state = env.get_final_state(penultimate_state, env.final_stacks)
+            actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
+
+            # On ajoute le nouvel état à la fin de la séquence (car dans ce cas, c'est un state issu d'une action)
+            state_seq[current_player.name].append(next_state)
+            player_state_seq = state_seq[current_player.name].copy()
+
+            # Stocker l'expérience
+            current_player.agent.temp_remember(
+                state_seq = player_state_seq.copy(), 
+                action = action_chosen, 
+                reward = reward, 
+                next_state_seq = next_player_state_seq,
+                done = False,
+                valid_action_mask = action_mask,
+            )
+        
+        
         # Rendu graphique si activé
         _handle_rendering(env, rendering, episode, render_every)
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
     # Attribution des récompenses finales
-    for player in env.ordered_players:
+    for player in env.players:
         if env.net_stack_changes[player.name] > 0:
             stack_change_normalized = env.net_stack_changes[player.name] / env.starting_stack
             final_reward = (stack_change_normalized ** 0.5) * 5
@@ -175,33 +196,31 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             final_reward = 0
 
         # --- Pour l'entrainement du model ----
-        for player in env.players:
-            # On va récupérer toutes les transitions temporaires de l'agent et on va update chacune des rewards, associées aux séquences d'états, grace a la final reward
-            temp_memory = player.agent.temp_memory
-            for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory:
-                # Calculate discount based on state position in sequence
-                state_idx = len(temp_state_seq) - 1  # Index of current state in sequence
-                seq_length = len(next_state_seq)
-                discount = state_idx / seq_length if seq_length > 0 else 1
-                
-                # Apply discount to final reward
-                updated_reward = reward + (final_reward * discount)
-                player.agent.remember(
-                    temp_state_seq = temp_state_seq,
-                    numerical_action = numerical_action,
-                    reward = updated_reward,
-                    next_state_seq = next_state_seq,
-                    done = done,
-                    valid_action_mask = valid_action_mask,
-                )
+        print('player', player.name)
+        print('player.agent.temp_memory', len(player.agent.temp_memory))
+        # On va récupérer toutes les transitions temporaires de l'agent et on va update chacune des rewards, associées aux séquences d'états, grace a la final reward
+        temp_memory = player.agent.temp_memory
+        for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory:            
+            # Apply discount to final reward
+            updated_reward = reward + final_reward + 1000
+            player.agent.remember(
+                temp_state_seq = temp_state_seq,
+                numerical_action = numerical_action,
+                reward = updated_reward,
+                next_state_seq = next_state_seq,
+                done = done,
+                valid_action_mask = valid_action_mask,
+            )
+            cumulative_rewards[player.name] = updated_reward # On ne garde que la dernière reward
 
+        # On vide la mémoire temporaire
+        player.agent.temp_memory = [] 
+        
         # ---- Pour la collecte et l'affichage des métriques ----
         # Récupération de l'état final
         player_state_seq = state_seq[player.name]
         penultimate_state = player_state_seq[-1]
         final_state = env.get_final_state(penultimate_state, env.final_stacks)
-        # Utiliser directement l'agent du joueur
-        cumulative_rewards[player.name] += final_reward
         # Stocker l'expérience finale pour la collecte des métriques
         current_player_name = player.name
         state_info = {
