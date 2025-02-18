@@ -807,7 +807,7 @@ class Visualizer:
 
         # Traiter chaque épisode
         for episode in states_data.values():
-            # Sélectionner les états de showdown
+            # Trouver le dernier état showdown pour déterminer le gagnant
             showdown_states = [s for s in episode if s["phase"].lower() == "showdown"]
             if not showdown_states:
                 continue
@@ -816,79 +816,71 @@ class Visualizer:
             stack_changes = last_showdown_state.get("stack_changes", {})
             if not stack_changes:
                 continue
-            max_gain = max(stack_changes.values())
-            winners = [player for player, gain in stack_changes.items() if gain == max_gain]
-            winner = winners[0] if winners else None
+            
+            winner = max(stack_changes.items(), key=lambda x: x[1])[0]
 
-            # Pour chaque position, rechercher le premier état correspondant dans l'épisode
-            for pos in positions_list:
-                candidate_state = None
-                for state in episode:
-                    if state["phase"].lower() == "showdown":
-                        rel_positions = state["state_vector"].get("relative_positions", [])
-                        if not rel_positions:
-                            continue
-                        try:
-                            pos_index = rel_positions.index(1.0)
-                        except ValueError:
-                            continue
-                        pos_name = ["SB", "BB", "UTG", "MP", "CO", "BTN"][pos_index]
-                        if pos_name == pos:
-                            candidate_state = state
-                            break
-                if candidate_state is None:
+            # Analyser uniquement les états preflop
+            preflop_states = [s for s in episode if s["phase"].lower() == "preflop"]
+            for state in preflop_states:
+                # Extraire la position du joueur
+                rel_positions = state["state_vector"]["relative_positions"]
+                if not rel_positions or 1 not in rel_positions:
                     continue
+                
+                pos_index = rel_positions.index(1.0)
+                pos_name = positions_list[pos_index]
+                
                 # Extraire les cartes du joueur
-                state_vector = candidate_state["state_vector"]
-                player_cards = state_vector.get("player_cards", [])
-                if len(player_cards) < 2:
+                player_cards = state["state_vector"]["player_cards"]
+                if len(player_cards) != 2:
                     continue
+                
+                # Convertir les cartes en indices
                 card1 = player_cards[0]
                 card2 = player_cards[1]
                 # Dénormaliser les valeurs des cartes
                 card1_value = int(round(card1["value"] * 14 + 2))
                 card2_value = int(round(card2["value"] * 14 + 2))
-                card1_suit = card1["suit"].index(1) if 1 in card1["suit"] else -1
-                card2_suit = card2["suit"].index(1) if 1 in card2["suit"] else -1
-                if card1_value < 2 or card2_value < 2:
-                    continue
-                try:
-                    card1_idx = card1_value - 2  # Indice de 0 à 12
-                    card2_idx = card2_value - 2
-                    is_winner = (candidate_state["player"] == winner)
-                    is_suited = (card1_suit == card2_suit)
-                    if card1_idx != card2_idx:
-                        if is_suited:
-                            row = min(card1_idx, card2_idx)
-                            col = max(card1_idx, card2_idx)
-                        else:
-                            row = max(card1_idx, card2_idx)
-                            col = min(card1_idx, card2_idx)
-                    else:
-                        row = card1_idx
-                        col = card2_idx
-                    pos_hand_counts[pos][row][col] += 1
-                    if is_winner:
-                        pos_hand_matrix[pos][row][col] += 1
-                except Exception:
-                    continue
+                
+                # Convertir en indices 0-12 (A=0, K=1, etc.)
+                i1 = 14 - card1_value
+                i2 = 14 - card2_value
+                
+                # Déterminer si suited
+                is_suited = (card1["suit"].index(1) if 1 in card1["suit"] else -1) == \
+                           (card2["suit"].index(1) if 1 in card2["suit"] else -1)
+                
+                # Appliquer la même logique que dans _evaluate_preflop_strength
+                if is_suited:
+                    if i1 > i2:
+                        i1, i2 = i2, i1
+                else:
+                    if i1 < i2:
+                        i1, i2 = i2, i1
+                
+                # Mettre à jour les matrices
+                pos_hand_counts[pos_name][i1][i2] += 1
+                if state["player"] == winner:
+                    pos_hand_matrix[pos_name][i1][i2] += 1
 
-        # Paramètres d'affichage
-        card_labels = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']
-
-        # Créer une figure avec des subplots (grid 2x3)
+        # Créer la visualisation
         fig, axs = plt.subplots(2, 3, figsize=(25, 15))
         axs = axs.flatten()
+        card_labels = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']
+
         for i, pos in enumerate(positions_list):
             counts = pos_hand_counts[pos]
             wins = pos_hand_matrix[pos]
+            
             win_rates = np.zeros((13, 13))
             mask = counts > 0
             win_rates[mask] = wins[mask] / counts[mask]
             empty_mask = counts == 0
-            # Inverser pour une meilleure visualisation (affichage avec A en haut)
+            
+            # Inverser pour une meilleure visualisation
             win_rates_disp = np.flip(win_rates, axis=(0, 1))
             empty_mask = np.flip(empty_mask, axis=(0, 1))
+            
             ax = axs[i]
             sns.heatmap(win_rates_disp,
                         mask=empty_mask,
@@ -901,7 +893,8 @@ class Visualizer:
                         cbar_kws={'label': 'Win Rate'},
                         vmin=0,
                         vmax=1)
-            # Ajouter des annotations textuelles pour chaque main
+
+            # Ajouter les annotations de mains
             for y in range(13):
                 for x in range(13):
                     if not empty_mask[y, x]:

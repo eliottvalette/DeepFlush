@@ -15,8 +15,8 @@ import json
 EPISODES = 10_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.99995
-START_EPS = 0.5
+EPS_DECAY = 0.9996
+START_EPS = 0.8
 STATE_SIZE = 116
 
 # Paramètres de visualisation
@@ -200,9 +200,24 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         print('player.agent.temp_memory', len(player.agent.temp_memory))
         # On va récupérer toutes les transitions temporaires de l'agent et on va update chacune des rewards, associées aux séquences d'états, grace a la final reward
         temp_memory = player.agent.temp_memory
-        for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory:            
+        for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory: 
+            if final_reward <= 0 :
+                if numerical_action in [0, 1]: # Le joueur a perdu du stack et a fait un fold ou un check
+                    coef = - 0.3
+                elif numerical_action == 2 : # Le joueur a perdu du stack et a fait un call
+                    coef = 0.6
+                else : # Le joueur a perdu du stack et a fait un raise ou un all in
+                    coef = 1
+            else :
+                if numerical_action in [0, 1]: # Le joueur a gagné du stack et a fait un fold ou un check
+                    coef = 0.1
+                elif numerical_action == 2 : # Le joueur a gagné du stack et a fait un call
+                    coef = 0.4
+                else : # Le joueur a gagné du stack et a fait un raise ou un all in
+                    coef = 1
+            
             # Apply discount to final reward
-            updated_reward = reward + final_reward 
+            updated_reward = reward + coef * final_reward 
             player.agent.remember(
                 temp_state_seq = temp_state_seq,
                 numerical_action = numerical_action,
