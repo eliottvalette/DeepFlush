@@ -20,7 +20,7 @@ START_EPS = 0.5
 STATE_SIZE = 116
 
 # Paramètres de visualisation
-RENDERING = True      # Active/désactive l'affichage graphique
+RENDERING = False      # Active/désactive l'affichage graphique
 FPS = 3                # Images par seconde pour le rendu
 
 # Intervalles de sauvegarde
@@ -202,7 +202,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         temp_memory = player.agent.temp_memory
         for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory:            
             # Apply discount to final reward
-            updated_reward = reward + final_reward + 1000
+            updated_reward = reward + final_reward 
             player.agent.remember(
                 temp_state_seq = temp_state_seq,
                 numerical_action = numerical_action,
