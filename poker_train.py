@@ -16,27 +16,6 @@ from utils.renderer import handle_final_rendering, handle_rendering
 # Compteurs
 number_of_hand_per_game = 0
 
-def set_seed(seed=42):
-    """
-    Définit les graines aléatoires pour garantir la reproductibilité des résultats.
-    
-    Args:
-        seed (int): La graine à utiliser pour l'initialisation des générateurs aléatoires
-    """
-    rd.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    
-    if torch.backends.mps.is_available():
-        torch.mps.manual_seed(seed)
-         
-    # Set MPS seed if available
-    if torch.backends.mps.is_available():
-        torch.mps.manual_seed(seed)
-    
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
 def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector) -> Tuple[List[float], List[dict]]:
     """
     Exécute un épisode complet du jeu de poker.

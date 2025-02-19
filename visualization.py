@@ -189,21 +189,50 @@ class DataCollector:
         self.current_episode_states = []
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
-            self.visualizer.plot_progress(dpi = 250)
+            # Load Jsons
+            states_path = os.path.join(self.output_dir, "episodes_states.json")
+            metrics_path = os.path.join(self.output_dir, "metrics_history.json")
+            
+            with open(states_path, 'r') as f:
+                states_data = json.load(f)
+            with open(metrics_path, 'r') as f:
+                metrics_data = json.load(f)
+            self.visualizer.plot_progress(states_data, metrics_data, dpi = 250)
         if episode_num % (self.plot_interval * 4) == (self.plot_interval * 4) - 1:
-            self.visualizer.plot_metrics()
-            self.visualizer.plot_analytics()
-            self.visualizer.plot_heatmaps_by_players()
-            self.visualizer.plot_heatmaps_by_position()
-            self.visualizer.plot_stack_sum()
+            # Load Jsons
+            states_path = os.path.join(self.output_dir, "episodes_states.json")
+            metrics_path = os.path.join(self.output_dir, "metrics_history.json")
+            
+            with open(states_path, 'r') as f:
+                states_data = json.load(f)
+            with open(metrics_path, 'r') as f:
+                metrics_data = json.load(f)
+            self.visualizer.plot_metrics(metrics_data)
+            self.visualizer.plot_analytics(states_data)
+            self.visualizer.plot_heatmaps_by_players(states_data)
+            self.visualizer.plot_heatmaps_by_position(states_data)
+            self.visualizer.plot_stack_sum(states_data)
     
     def force_visualization(self):
-        self.visualizer.plot_progress()
-        self.visualizer.plot_metrics()
-        self.visualizer.plot_analytics()
-        self.visualizer.plot_heatmaps_by_players()
-        self.visualizer.plot_heatmaps_by_position()
-        self.visualizer.plot_stack_sum()
+        """
+        Force la génération de toutes les visualisations
+        """
+        # On les json une seule fois
+        states_path = os.path.join(self.output_dir, "episodes_states.json")
+        metrics_path = os.path.join(self.output_dir, "metrics_history.json")
+        
+        with open(states_path, 'r') as f:
+            states_data = json.load(f)
+        with open(metrics_path, 'r') as f:
+            metrics_data = json.load(f)
+
+
+        self.visualizer.plot_progress(states_data, metrics_data)
+        self.visualizer.plot_metrics(metrics_data)
+        self.visualizer.plot_analytics(states_data)
+        self.visualizer.plot_heatmaps_by_players(states_data)
+        self.visualizer.plot_heatmaps_by_position(states_data)
+        self.visualizer.plot_stack_sum(states_data)
 
 class Visualizer:
     """
@@ -211,16 +240,16 @@ class Visualizer:
     """
     def __init__(self, start_epsilon, epsilon_decay, plot_interval, save_interval, output_dir="viz_json", viz_dir=None):
         self.output_dir = output_dir
-        self.viz_dir = viz_dir or os.path.join("visualizations", datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        self.viz_dir = viz_dir or os.path.join("visualizations", datetime.now().strftime("%Y-%m-%d_%Hh-%Mm-%Ss"))
         self.start_epsilon = start_epsilon
         self.epsilon_decay = epsilon_decay
         self.plot_interval = plot_interval
         self.save_interval = save_interval
 
-        # Création du dossier "viz_jpg" s'il n'existe pas, pour éviter les erreurs lors de plt.savefig
-        if not os.path.exists("viz_jpg"):
-            os.makedirs("viz_jpg")
-        
+        # Create all necessary directories
+        for directory in [self.output_dir, self.viz_dir]:
+            os.makedirs(directory, exist_ok=True)
+
         # Définition des couleurs pour chaque action
         self.action_colors = {
             'fold': '#780000',     # Rouge Sang
@@ -230,19 +259,10 @@ class Visualizer:
             'all-in': '#003049'    # Bleu Nuit
         }
 
-    def plot_progress(self, dpi=500):
+    def plot_progress(self, states_data, metrics_data, dpi=500):
         """
         Génère les visualisations à partir des données JSON enregistrées
-        """
-        # Charger les données
-        states_path = os.path.join(self.output_dir, "episodes_states.json")
-        metrics_path = os.path.join(self.output_dir, "metrics_history.json")
-        
-        with open(states_path, 'r') as f:
-            states_data = json.load(f)
-        with open(metrics_path, 'r') as f:
-            metrics_data = json.load(f)
-
+        """        
         # Créer une figure avec 6 sous-graphiques (2x3)
         fig = plt.figure(figsize=(25, 20))
         
@@ -501,15 +521,10 @@ class Visualizer:
         plt.savefig(os.path.join(self.viz_dir, 'Poker_progress.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
     
-    def plot_metrics(self):
+    def plot_metrics(self, metrics_data, dpi=500):
         """
         Génère des visualisations des métriques d'entraînement à partir du fichier metrics_history.json
         """
-        # Charger les données
-        metrics_path = os.path.join(self.output_dir, "metrics_history.json")
-        with open(metrics_path, 'r') as f:
-            metrics_data = json.load(f)
-
         # Créer une figure avec 4 sous-graphiques
         fig = plt.figure(figsize=(20, 15))
         
@@ -584,15 +599,10 @@ class Visualizer:
         plt.savefig(os.path.join(self.viz_dir, 'Poker_metrics.jpg'), dpi=500, bbox_inches='tight')
         plt.close()
 
-    def plot_analytics(self):
+    def plot_analytics(self, states_data, dpi=500):
         """
         Génère des visualisations analytiques avancées du jeu de poker
         """
-        # Charger les données
-        states_path = os.path.join(self.output_dir, "episodes_states.json")
-        with open(states_path, 'r') as f:
-            states_data = json.load(f)
-
         # Créer une figure avec 8 sous-graphiques (2x4)
         fig = plt.figure(figsize=(25, 20))
         # Définir une palette de couleurs pastel cohérente
@@ -666,15 +676,15 @@ class Visualizer:
         ax1.set_ylim(0,1)
         
         plt.tight_layout()
-        plt.savefig(os.path.join(self.viz_dir, 'Poker_analytics.jpg'), dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_analytics.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
 
-    def plot_heatmaps_by_players(self):
-        # Charger les données
-        states_path = os.path.join(self.output_dir, "episodes_states.json")
-        with open(states_path, 'r') as f:
-            states_data = json.load(f)
-
+    def plot_heatmaps_by_players(self, states_data, dpi=500):
+        """
+        Génère des heatmaps des win rates par joueur, basées sur les données collectées.
+        Chaque heatmap représente le taux de victoire pour chaque combinaison de cartes,
+        regroupé par joueur.
+        """
         # Créer une figure plus grande avec plus d'espace entre les subplots
         fig = plt.figure(figsize=(30, 20))  # Increased figure size
         plt.subplots_adjust(hspace=0.3, wspace=0.3)  # More space between subplots
@@ -795,24 +805,15 @@ class Visualizer:
 
         plt.suptitle('Hand Win Rates by Player\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()
-        plt.savefig(os.path.join(self.viz_dir, 'Poker_heatmaps.jpg'), dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_heatmaps.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
 
-    def plot_heatmaps_by_position(self):
+    def plot_heatmaps_by_position(self, states_data, dpi=500):
         """
         Génère des heatmaps des win rates par position, basées sur les données collectées.
         Chaque heatmap représente le taux de victoire pour chaque combinaison de cartes,
         regroupé par position (SB, BB, UTG, MP, CO, BTN).
         """
-        import numpy as np
-        import seaborn as sns
-        import matplotlib.pyplot as plt
-
-        # Charger les données
-        states_path = os.path.join(self.output_dir, "episodes_states.json")
-        with open(states_path, 'r') as f:
-            states_data = json.load(f)
-
         positions_list = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
 
         # Initialiser les matrices pour chaque position
@@ -863,8 +864,6 @@ class Visualizer:
                 # Déterminer si suited
                 is_suited = (card1["suit"].index(1) if 1 in card1["suit"] else -1) == \
                            (card2["suit"].index(1) if 1 in card2["suit"] else -1)
-                
-                # Appliquer la même logique que dans _evaluate_preflop_strength
                 if is_suited:
                     if i1 > i2:
                         i1, i2 = i2, i1
@@ -933,15 +932,10 @@ class Visualizer:
                 fig.delaxes(axs[j])
         plt.suptitle('Hand Win Rates par Position\n(s: suited, o: offsuit)', fontsize=16, y=1.02)
         plt.tight_layout()
-        plt.savefig(os.path.join(self.viz_dir, 'Poker_heatmaps_by_position.jpg'), dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_heatmaps_by_position.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
 
-    def plot_stack_sum(self, dpi=500):
-        # Charger les données d'états
-        states_path = os.path.join(self.output_dir, "episodes_states.json")
-        with open(states_path, 'r') as f:
-            states_data = json.load(f)
-        
+    def plot_stack_sum(self, states_data, dpi=500):        
         # Trier les épisodes par numéro
         episodes_nums = sorted(states_data, key=lambda x: int(x))
         x_data = []
@@ -1083,11 +1077,18 @@ class Visualizer:
 
 if __name__ == "__main__":
     visualizer = Visualizer(start_epsilon=0.8, epsilon_decay=0.9999, plot_interval=500, save_interval=250)
-    visualizer.plot_progress()
-    visualizer.plot_metrics()
-    visualizer.plot_analytics()
-    visualizer.plot_heatmaps_by_players()
-    # Appel de la méthode pour générer la heatmap par position
-    visualizer.plot_heatmaps_by_position()
-    # Ajout de l'appel pour tracer l'évolution de la somme des stacks
-    visualizer.plot_stack_sum()
+    # On les json une seule fois
+    states_path = os.path.join(visualizer.output_dir, "episodes_states.json")
+    metrics_path = os.path.join(visualizer.output_dir, "metrics_history.json")
+    
+    with open(states_path, 'r') as f:
+        states_data = json.load(f)
+    with open(metrics_path, 'r') as f:
+        metrics_data = json.load(f)
+
+    visualizer.plot_progress(states_data, metrics_data)
+    visualizer.plot_metrics(metrics_data)
+    visualizer.plot_analytics(states_data)
+    visualizer.plot_heatmaps_by_players(states_data)
+    visualizer.plot_heatmaps_by_position(states_data)
+    visualizer.plot_stack_sum(states_data)
