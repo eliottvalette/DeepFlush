@@ -12,6 +12,7 @@ from typing import List, Tuple
 import json
 from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL
 from utils.renderer import handle_final_rendering, handle_rendering
+from utils.helping_funcs import save_models, save_metrics
 
 # Compteurs
 number_of_hand_per_game = 0
@@ -238,6 +239,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     return cumulative_rewards, metrics_list
 
+
+
 def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES, 
                       rendering: bool = RENDERING, render_every: int = 1000):
     """
@@ -280,42 +283,19 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             for player in env.players:
                 print(f"Agent {player.name} reward: {reward_dict[player.name]:.2f}")
 
-        # Créer le dossier saved_models s'il n'existe pas
-        os.makedirs("saved_models", exist_ok=True)
-        
-        # Sauvegarder les modèles entraînés
+        # Save models at end of training
         if episode == episodes - 1:
-            print("\nSauvegarde des modèles...")
-            if not os.path.exists("saved_models"):  # Création du dossier si nécessaire
-                os.makedirs("saved_models")
-            for player in env.players:
-                # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
-                if hasattr(player.agent, 'model'):
-                    torch.save(player.agent.model.state_dict(), 
-                             f"saved_models/poker_agent_{player.name}_epoch_{episode+1}.pth")
-            print("Modèles sauvegardés avec succès!")
-
-            print("Génération de la vizualiation...")
+            save_models(env.players, episode)
+            print("Generating visualization...")
             data_collector.force_visualization()
 
     except KeyboardInterrupt:
-        print("\nEntraînement interrompu par l'utilisateur")
-        print("\nSauvegarde des modèles...")
-        if not os.path.exists("saved_models"):  # Création du dossier si nécessaire
-            os.makedirs("saved_models")
-        for player in env.players:
-            # Ne sauvegarder que les agents qui ont un modèle (pas les bots)
-            if hasattr(player.agent, 'model'):
-                torch.save(player.agent.model.state_dict(), 
-                         f"saved_models/poker_agent_{player.name}_epoch_{episode+1}.pth")    
-        print("Génération de la vizualiation...")
+        print("\nTraining interrupted by user")
+        save_models(env.players, episode)
+        print("Generating visualization...")
         data_collector.force_visualization()
         
     finally:
         if rendering:
             pygame.quit()
-        # Sauvegarder l'historique des métriques dans le dossier viz_json
-        metrics_path = os.path.join(data_collector.output_dir, "metrics_history.json")
-        with open(metrics_path, "w") as f:
-            json.dump(metrics_history, f, indent=2)
-        print(f"\nEntraînement terminé et métriques sauvegardées dans '{metrics_path}'")
+        save_metrics(metrics_history, data_collector.output_dir)
