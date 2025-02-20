@@ -15,7 +15,7 @@ class MCCFRTrainer:
         self.player = player
         self.num_simulations = num_simulations
 
-    def get_state_info(self, current_state) -> Dict:
+    def extract_simple_game_state(self, current_state) -> Dict:
         """
         Extrait les informations essentielles du vecteur d'état de manière dévectorisée.
         
@@ -146,44 +146,61 @@ class MCCFRTrainer:
         
         return remaining_deck
     
-    def generate_random_opponent_hands(self, state_info: Dict):
+    def get_opponent_hands_and_community_cards(self, state_info: Dict):
         """
-        Génère des mains aléatoires pour les adversaires en évitant les cartes déjà visibles.
+        Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes de manière aléatoire en évitant les cartes déjà visibles.
         """
         player_cards = state_info['player_cards']
         community_cards = state_info['community_cards']
         num_opponents = state_info['num_active_players'] - 1
+        missing_cards = 5 - len(state_info["community_cards"])
         
         remaining_deck = self.get_remaining_deck(player_cards, community_cards)
 
-        opponent_hands = rd.sample(remaining_deck, 2*num_opponents)
+        extracted_cards = rd.sample(remaining_deck, missing_cards + 2*num_opponents)
+        community_cards = extracted_cards[:missing_cards]
+        opponent_hands = [extracted_cards[missing_cards+i*2:missing_cards+i*2+2] for i in range(num_opponents)]
         
-        return opponent_hands
-        
+        return opponent_hands, community_cards
 
-    def simulate_future_game(self, current_state, valid_actions: List[PlayerAction]) -> float:
+    def estimate_future_payoffs(self, current_state, valid_actions: List[PlayerAction]) -> float:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
-        state_info = self.get_state_info(current_state)
+        state_info = self.extract_simple_game_state(current_state)
 
         self.payoff_per_trajectory_action = defaultdict(float)
 
         for _ in range(self.num_simulations):
-            rd_opponents_cards = self.generate_random_opponent_hands(state_info)
-            rd_community_cards = ['cards_3', 'cards_4'] if state_info['game_phase'] == 'FLOP' else ['cards_3'] if state_info['game_phase'] == 'TURN' else []
+            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(state_info)
 
             for trajectory_action in valid_actions:
-                payoff = self.simulate_trajectory(trajectory_action, rd_opponents_cards, rd_community_cards)
-                self.payoff_per_trajectory_action[trajectory_action] += payoff
+                payoff = self.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards)
+                self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations # Moyenne des payoffs
         
         return self.payoff_per_trajectory_action
         
-    def simulate_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[str], rd_community_cards: List[str]) -> float:    
+    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[str], rd_community_cards: List[str]) -> float:    
         """
         Simule une trajectoire en prenant les actions valides.
         """
         current_player = self.game.current_player
         current_state = self.game.current_state
         current_player_actions = []
+
+    def add_noise_to_policy(self, base_probs: np.ndarray, noise_level: float = 0.1) -> np.ndarray:
+        """
+        Applique du bruit sur la distribution de probabilités d'un adversaire pour éviter une prédiction déterministe.
+
+        Args:
+            base_probs (np.ndarray): Distribution de base
+            noise_level (float): Niveau de bruit appliqué
+        
+        Returns:
+            np.ndarray: Nouvelle distribution bruitée
+        """
+        noise = np.random.dirichlet(np.ones_like(base_probs)) * noise_level
+        new_probs = base_probs * (1 - noise_level) + noise
+        return new_probs / new_probs.sum()  # Normalisation
+
         

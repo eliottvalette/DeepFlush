@@ -239,8 +239,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     return cumulative_rewards, metrics_list
 
-
-
 def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES, 
                       rendering: bool = RENDERING, render_every: int = 1000):
     """
