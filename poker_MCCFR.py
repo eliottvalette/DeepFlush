@@ -36,112 +36,46 @@ class MCCFRTrainer:
         
     def extract_simple_game_state(self, current_state) -> Dict:
         """
-        Extrait les informations essentielles du vecteur d'état de manière dévectorisée.
-        
-        Args:
-            current_state: Le vecteur d'état du jeu
-            
-        Returns:
-            Dict: Dictionnaire contenant les informations clés du state
-
-        Example:
-        {
-            "player_id": 2,
-            "player_cards": [(10, "♠"), (12, "♦")],
-            "community_cards": [(11, "♠"), (13, "♦"), (14, "♣")],
-            "game_phase": "FLOP",
-            "valid_actions": ["FOLD", "CALL", "RAISE", "ALL_IN"],
-            "players_info": [
-                {
-                    "player_id": 0,
-                    "stack": 80,
-                    "current_bet": 20,
-                    "position": "SB"
-                },
-                {
-                    "player_id": 1,
-                    "stack": 80,
-                    "current_bet": 20,
-                    "position": "BB"
-                },
-                {
-                    "player_id": 2,
-                    "stack": 100,
-                    "current_bet": 0,
-                    "position": "UTG"
-                }
-            ],
-            "num_active_players": 3
-        }
+        Extrait un état de jeu simplifié pour une simulation optimisée.
         """
-        # Extraction des cartes du joueur
-        player_cards = []
-        for i in range(2):  # 2 cartes
-            base_idx = i * 5
-            if current_state[base_idx] != -1:  # Si la carte existe
-                value = int(current_state[base_idx] * 14 + 2)  # Dénormalisation de la valeur
-                suit_vector = current_state[base_idx+1:base_idx+5].tolist()
-                if 1 in suit_vector:
-                    suit = ["♠", "♥", "♦", "♣"][suit_vector.index(1)]
-                    player_cards.append((value, suit))
-
-        # Extraction des cartes communes
-        community_cards = []
-        for i in range(5):  # 5 cartes max
-            base_idx = 10 + (i * 5)
-            if current_state[base_idx] != -1:  # Si la carte existe
-                value = int(current_state[base_idx] * 14 + 2)
-                suit_vector = current_state[base_idx+1:base_idx+5].tolist()
-                if 1 in suit_vector:
-                    suit = ["♠", "♥", "♦", "♣"][suit_vector.index(1)]
-                    community_cards.append((value, suit))
-
-        # Extraction de la phase de jeu
-        phase_vector = current_state[47:52].tolist()
-        phase = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"][phase_vector.index(1)]
-
-        # Extraction des actions disponibles
-        valid_actions = []
-        action_names = ["FOLD", "CHECK", "CALL", "RAISE", "ALL_IN"]
-        for i, is_valid in enumerate(current_state[77:82]):
-            if is_valid == 1:
-                valid_actions.append(action_names[i])
-
-        # Extraction des informations sur les joueurs
-        players_info = []
-        positions = ["SB", "BB", "UTG", "HJ", "CO", "BTN"]
+        # Récupérer les cartes du joueur
+        player_cards = self.extract_cards(current_state[:10])
+        # Récupérer les cartes communes connues
+        community_cards = self.extract_cards(current_state[10:35])
         
-        for i in range(6):
-            # Stack à l'index 53+i
-            stack = float(current_state[53+i])
-            # Mise actuelle à l'index 59+i
-            current_bet = float(current_state[59+i])
-            # État actif/inactif à l'index 65+i
-            is_active = current_state[65+i] == 1
-            
-            # Position relative (one-hot vector de 71 à 77)
-            position = None
-            if i == self.player.seat_position:  # Pour le joueur courant uniquement
-                pos_vector = current_state[71:77].tolist()
-                position = positions[pos_vector.index(1)]
-            
-            if is_active:  # On n'ajoute que les joueurs actifs
-                players_info.append({
-                    "player_id": i,
-                    "stack": stack,
-                    "current_bet": current_bet,
-                    "position": position
-                })
+        # Détecter la phase actuelle du jeu
+        phase_index = np.argmax(current_state[47:52])  # Index de la phase active
+        game_phase = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"][phase_index]
 
+        # Identifier les joueurs actifs et leurs stacks
+        player_info = [
+            {"player_id": i, "stack": current_state[53+i], "bet": current_state[59+i]}
+            for i in range(6) if current_state[65+i] == 1
+        ]
+        
         return {
             "player_id": self.player.seat_position,
             "player_cards": player_cards,
             "community_cards": community_cards,
-            "game_phase": phase,
-            "valid_actions": valid_actions,
-            "players_info": players_info,
-            "num_active_players": len(players_info)
-            }
+            "game_phase": game_phase,
+            "players_info": player_info,
+            "num_active_players": len(player_info)
+        }
+
+    def extract_cards(self, state_vector: np.ndarray) -> List[Tuple[int, str]]:
+        """
+        Extrait les cartes sous forme de tuples (valeur, couleur) à partir d'un vecteur d'état.
+        """
+        cards = []
+        for i in range(0, len(state_vector), 5):  # Chaque carte est codée sur 5 indices
+            if state_vector[i] == -1:
+                continue  # Carte non définie
+            
+            value = int(state_vector[i] * 14 + 2)  # Dénormalisation de la valeur
+            suit = ["♠", "♥", "♦", "♣"][np.argmax(state_vector[i+1:i+5])]
+            cards.append((value, suit))
+        
+        return cards
     
     def get_remaining_deck(self, player_cards: List[Tuple[int, str]], community_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
@@ -167,29 +101,62 @@ class MCCFRTrainer:
     
     def get_opponent_hands_and_community_cards(self, state_info: Dict):
         """
-        Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes de manière aléatoire en évitant les cartes déjà visibles.
+        Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes.
         """
-        player_cards = state_info['player_cards']
-        community_cards = state_info['community_cards']
+        known_cards = state_info['player_cards'] + state_info['community_cards']
+        remaining_deck = self.get_remaining_deck(known_cards)
+
         num_opponents = state_info['num_active_players'] - 1
-        missing_cards = 5 - len(state_info["community_cards"])
-        
-        remaining_deck = self.get_remaining_deck(player_cards, community_cards)
+        missing_community_cards = 5 - len(state_info["community_cards"])
 
-        extracted_cards = rd.sample(remaining_deck, missing_cards + 2*num_opponents)
-        community_cards = extracted_cards[:missing_cards]
-        opponent_hands = [extracted_cards[missing_cards+i*2:missing_cards+i*2+2] for i in range(num_opponents)]
+        # Échantillonnage des cartes restantes
+        drawn_cards = rd.sample(remaining_deck, missing_community_cards + 2 * num_opponents)
         
+        community_cards = drawn_cards[:missing_community_cards]
+        opponent_hands = [drawn_cards[missing_community_cards + i*2: missing_community_cards + i*2+2] for i in range(num_opponents)]
+
         return opponent_hands, community_cards
-    
-    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[str], rd_community_cards: List[str]) -> float:    
-        """
-        Simule une trajectoire en prenant les actions valides.
-        """
-        current_player = self.game.current_player
-        current_state = self.game.current_state
-        current_player_actions = []
 
+    
+    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[str], rd_missing_community_cards: List[str]) -> float:    
+        """
+        Simule une trajectoire en prenant les actions valides jusqu'au showdown.
+        Retourne uniquement le payoff du joueur cible.
+        """
+        game_clone = self.game.clone()
+        game_clone.set_hidden_cards(rd_opponents_cards, rd_missing_community_cards)
+        
+        game_clone.step(trajectory_action)  # Appliquer l’action initiale
+        
+        while game_clone.current_phase != GamePhase.SHOWDOWN:
+            current_player = game_clone.players[game_clone.current_player_seat]
+            
+            if current_player == self.player:
+                action_probs = self.get_self_strategy(current_player, game_clone.get_state(), game_clone.get_valid_actions())
+            else:
+                action_probs = self.get_opponent_strategy(current_player, game_clone.get_state(), game_clone.get_valid_actions())
+
+            next_action = np.random.choice(game_clone.get_valid_actions(), p=action_probs)
+            game_clone.step(next_action)
+        
+        return game_clone.get_player_payoff(self.player)
+
+
+    def get_self_strategy(self, self_agent, self_state, valid_actions: List[PlayerAction]) -> np.ndarray:
+        """
+        Retourne la stratégie du joueur pour l'état donné.
+        """
+        _, _, action_probs = self_agent.get_action(self_state, valid_actions)
+        return action_probs
+
+    def get_opponent_strategy(self, opponent_agent, opponent_state, valid_actions: List[PlayerAction]) -> np.ndarray:
+        """
+        Retourne la stratégie de l'adversaire pour l'état donné.
+        """
+        _, _, action_probs = opponent_agent.get_action(opponent_state, valid_actions)
+        action_probs_noised = self.add_noise_to_policy(action_probs)
+        return action_probs_noised
+                              
     def add_noise_to_policy(self, base_probs: np.ndarray, noise_level: float = 0.1) -> np.ndarray:
         """
         Applique du bruit sur la distribution de probabilités d'un adversaire pour éviter une prédiction déterministe.
@@ -210,29 +177,12 @@ class MCCFRTrainer:
     def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> np.ndarray:
         """
         Calcule le vecteur de probabilité cible basé sur les regrets estimés.
-
-        Args:
-            payoffs (Dict[PlayerAction, float]): Dictionnaire des payoffs estimés pour chaque action.
-
-        Returns:
-            np.ndarray: Vecteur de probabilités cible pour l'entraînement du modèle.
         """
-        # Obtenir la meilleure valeur de payoff
         max_payoff = max(payoffs.values())
+        positive_regrets = np.array([max(0, max_payoff - payoffs[action]) for action in PlayerAction])
 
-        # Calculer les regrets pour chaque action
-        regrets = {action: max_payoff - payoff for action, payoff in payoffs.items()}
-
-        # Appliquer le regret matching : ignorer les regrets négatifs
-        positive_regrets = np.array([max(0, regrets[action]) for action in PlayerAction])
-
-        # Normalisation pour obtenir une distribution de probabilité
-        total_positive_regret = np.sum(positive_regrets)
-        
-        if total_positive_regret > 0:
-            probability_vector = positive_regrets / total_positive_regret
+        if np.sum(positive_regrets) > 0:
+            return positive_regrets / np.sum(positive_regrets)
         else:
-            # Si tous les regrets sont négatifs, prendre une distribution uniforme
-            probability_vector = np.ones(len(PlayerAction)) / len(PlayerAction)
+            return np.ones(len(PlayerAction)) / len(PlayerAction)  # Uniforme si regrets nuls
 
-        return probability_vector

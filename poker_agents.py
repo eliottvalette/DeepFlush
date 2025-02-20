@@ -123,16 +123,7 @@ class PokerAgent:
             chosen_index = np.random.choice(valid_indices)
 
         reverse_action_map = {v: k for k, v in action_map.items()}
-        return reverse_action_map[chosen_index], valid_action_mask
-        
-    def temp_remember(self, state_seq, target_vector, valid_action_mask):
-        """
-        Stocke une transition dans la mémoire de replay
-        :param state_seq: Séquence d'états
-        :param target_vector: Vecteur cible
-        :param valid_action_mask: Masque des actions valides
-        """
-        self.temp_memory.append((state_seq, target_vector, valid_action_mask))
+        return reverse_action_map[chosen_index], valid_action_mask, action_probs
 
     def remember(self, temp_state_seq, target_vector, valid_action_mask):
         """
