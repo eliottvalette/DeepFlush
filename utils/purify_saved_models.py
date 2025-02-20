@@ -5,7 +5,7 @@ import re
 
 def updated_saved_models():
     # Path to saved_models directory
-    saved_models_dir = "../saved_models"
+    saved_models_dir = "./saved_models"
     print("Purifying saved models...")
 
     # Check if directory exists
@@ -53,7 +53,7 @@ def updated_saved_models():
 
 def purify_saved_models():
     # Path to saved_models directory
-    saved_models_dir = "../saved_models"
+    saved_models_dir = "./saved_models"
     print("Deleting models containing 'epoch'...")
 
     # Check if directory exists
