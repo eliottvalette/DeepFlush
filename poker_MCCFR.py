@@ -15,6 +15,25 @@ class MCCFRTrainer:
         self.player = player
         self.num_simulations = num_simulations
 
+    def compute_expected_payoffs(self, current_state, valid_actions: List[PlayerAction]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
+        """
+        Simule le futur d'une partie en parcourant les trajectoires des actions valides.
+        """
+        state_info = self.extract_simple_game_state(current_state)
+
+        self.payoff_per_trajectory_action = defaultdict(float)
+
+        for _ in range(self.num_simulations):
+            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(state_info)
+
+            for trajectory_action in valid_actions:
+                payoff = self.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards)
+                self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations # Moyenne des payoffs
+
+        target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
+        
+        return target_vector, self.payoff_per_trajectory_action
+        
     def extract_simple_game_state(self, current_state) -> Dict:
         """
         Extrait les informations essentielles du vecteur d'état de manière dévectorisée.
@@ -162,24 +181,7 @@ class MCCFRTrainer:
         opponent_hands = [extracted_cards[missing_cards+i*2:missing_cards+i*2+2] for i in range(num_opponents)]
         
         return opponent_hands, community_cards
-
-    def estimate_future_payoffs(self, current_state, valid_actions: List[PlayerAction]) -> float:
-        """
-        Simule le futur d'une partie en parcourant les trajectoires des actions valides.
-        """
-        state_info = self.extract_simple_game_state(current_state)
-
-        self.payoff_per_trajectory_action = defaultdict(float)
-
-        for _ in range(self.num_simulations):
-            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(state_info)
-
-            for trajectory_action in valid_actions:
-                payoff = self.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards)
-                self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations # Moyenne des payoffs
-        
-        return self.payoff_per_trajectory_action
-        
+    
     def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[str], rd_community_cards: List[str]) -> float:    
         """
         Simule une trajectoire en prenant les actions valides.
@@ -202,5 +204,35 @@ class MCCFRTrainer:
         noise = np.random.dirichlet(np.ones_like(base_probs)) * noise_level
         new_probs = base_probs * (1 - noise_level) + noise
         return new_probs / new_probs.sum()  # Normalisation
+    
+    import numpy as np
 
+    def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> np.ndarray:
+        """
+        Calcule le vecteur de probabilité cible basé sur les regrets estimés.
+
+        Args:
+            payoffs (Dict[PlayerAction, float]): Dictionnaire des payoffs estimés pour chaque action.
+
+        Returns:
+            np.ndarray: Vecteur de probabilités cible pour l'entraînement du modèle.
+        """
+        # Obtenir la meilleure valeur de payoff
+        max_payoff = max(payoffs.values())
+
+        # Calculer les regrets pour chaque action
+        regrets = {action: max_payoff - payoff for action, payoff in payoffs.items()}
+
+        # Appliquer le regret matching : ignorer les regrets négatifs
+        positive_regrets = np.array([max(0, regrets[action]) for action in PlayerAction])
+
+        # Normalisation pour obtenir une distribution de probabilité
+        total_positive_regret = np.sum(positive_regrets)
         
+        if total_positive_regret > 0:
+            probability_vector = positive_regrets / total_positive_regret
+        else:
+            # Si tous les regrets sont négatifs, prendre une distribution uniforme
+            probability_vector = np.ones(len(PlayerAction)) / len(PlayerAction)
+
+        return probability_vector

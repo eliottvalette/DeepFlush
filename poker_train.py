@@ -13,11 +13,12 @@ import json
 from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL
 from utils.renderer import handle_final_rendering, handle_rendering
 from utils.helping_funcs import save_models, save_metrics
+from poker_MCCFR import MCCFRTrainer
 
 # Compteurs
 number_of_hand_per_game = 0
 
-def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector) -> Tuple[List[float], List[dict]]:
+def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector, mccfr_trainer: MCCFRTrainer) -> Tuple[List[float], List[dict]]:
     """
     Exécute un épisode complet du jeu de poker.
     
@@ -85,11 +86,15 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # On récupere la sequence d'entat du joueur actuel
         player_state_seq = state_seq[current_player.name]
         
-        # Prédiction de l'action à partir du model en lui passant la sequence des états précédents
-        action_chosen, action_mask = current_player.agent.get_action(player_state_seq, epsilon, valid_actions)
+        # Génération du vecteur de probabilités cible avec MCCFR
+        target_vector, payoffs = mccfr_trainer.compute_expected_payoffs(player_state_seq[-1], valid_actions)
+
+        # Prédiction avec une inférence de classique du model
+        action_chosen, action_mask = current_player.agent.get_action(player_state_seq, valid_actions)
+
         
         # Exécuter l'action dans l'environnement
-        next_state, reward = env.step(action_chosen)
+        next_state, _ = env.step(action_chosen)
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         if env.current_phase != GamePhase.SHOWDOWN:
@@ -115,10 +120,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             current_player.agent.temp_remember(
                 state_seq = player_state_seq.copy(), 
                 action = action_chosen, 
-                reward = reward, 
-                next_state_seq = next_player_state_seq,
+                target_vector = target_vector, 
                 done = False,
-                valid_action_mask = action_mask,
             )
         
         else : # Cas spécifique au joueur qui déclenche le showdown par son action
@@ -261,7 +264,9 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         start_epsilon=START_EPS,
         epsilon_decay=EPS_DECAY
     )
-    
+
+    # Initialisation du MCCFRTrainer
+    mccfr_trainer = MCCFRTrainer(env.players[0])
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon
@@ -269,7 +274,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             reward_dict, metrics_list = run_episode(
-                env, epsilon, rendering, episode, render_every, data_collector
+                env, epsilon, rendering, episode, render_every, data_collector, mccfr_trainer
             )
             
             # Enregistrer les métriques pour cet épisode en associant chaque métrique à une clé "agent"
