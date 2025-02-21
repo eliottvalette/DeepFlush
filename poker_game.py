@@ -890,6 +890,37 @@ class PokerGame:
             if player.stack == 0:
                 player.is_all_in = True
             print(f"{player.name} a call {call_amount}BB")
+
+        elif action == PlayerAction.RAISE:
+            print(f"{player.name} raise.")
+            # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
+            if self.current_maximum_bet == 0:
+                min_raise = self.big_blind
+            else:
+                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
+        
+            # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
+            if bet_amount is None or (bet_amount < min_raise and action != PlayerAction.ALL_IN):
+                bet_amount = min_raise
+        
+            # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
+            if player.stack < (bet_amount - player.current_player_bet):
+                raise ValueError(
+                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
+                )
+        
+            # Traitement du raise standard
+            actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
+            player.stack -= actual_bet
+            player.current_player_bet = bet_amount
+            self.main_pot += actual_bet
+            player.total_bet += actual_bet
+            self.current_maximum_bet = bet_amount
+            self.number_raise_this_game_phase += 1
+            self.last_raiser = player.seat_position
+        
+            print(f"{player.name} a raise {bet_amount}BB")
         
         # --- Nouvelles actions pot-based ---
         elif action in {
@@ -954,36 +985,6 @@ class PokerGame:
         
             print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
         
-        elif action == PlayerAction.RAISE:
-            print(f"{player.name} raise.")
-            # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
-            if self.current_maximum_bet == 0:
-                min_raise = self.big_blind
-            else:
-                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
-        
-            # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
-            if bet_amount is None or (bet_amount < min_raise and action != PlayerAction.ALL_IN):
-                bet_amount = min_raise
-        
-            # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
-            if player.stack < (bet_amount - player.current_player_bet):
-                raise ValueError(
-                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
-                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
-                )
-        
-            # Traitement du raise standard
-            actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
-            player.stack -= actual_bet
-            player.current_player_bet = bet_amount
-            self.main_pot += actual_bet
-            player.total_bet += actual_bet
-            self.current_maximum_bet = bet_amount
-            self.number_raise_this_game_phase += 1
-            self.last_raiser = player.seat_position
-        
-            print(f"{player.name} a raise {bet_amount}BB")
         
         elif action == PlayerAction.ALL_IN:
             print(f"{player.name} all-in.")
@@ -2385,7 +2386,7 @@ class PokerGame:
         
         # Draw bet slider with min and max values
         current_player = self.players[self.current_player_seat]
-        min_raise = max(self.current_maximum_bet * 2, self.big_blind * 2)
+        min_raise = max(self.current_maximum_bet * 2, self.big_blind)
         max_raise = current_player.stack + current_player.current_player_bet
         
         pygame.draw.rect(self.screen, (200, 200, 200), self.pygame_bet_slider)
