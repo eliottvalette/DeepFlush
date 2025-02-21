@@ -707,43 +707,80 @@ class PokerGame:
             button.enabled = True
         
         # ---- CHECK ----
-        if current_player.current_player_bet < self.current_maximum_bet: # Si le joueur n'a pas égalisé la mise maximale, il ne peut pas check
+        if current_player.current_player_bet < self.current_maximum_bet:  # Si le joueur n'a pas égalisé la mise maximale, il ne peut pas check
             self.action_buttons[PlayerAction.CHECK].enabled = False
-
+        
         # ---- FOLD ----
-        if self.action_buttons[PlayerAction.CHECK].enabled: # Si le joueur peut check, il ne peut pas fold
+        if self.action_buttons[PlayerAction.CHECK].enabled:  # Si le joueur peut check, il ne peut pas fold
             self.action_buttons[PlayerAction.FOLD].enabled = False
-
+        
         # ---- CALL ----
         # Désactiver call si pas de mise à suivre ou pas assez de jetons
-        if current_player.current_player_bet == self.current_maximum_bet: # Si le joueur a égalisé la mise maximale, il ne peut pas call
+        if current_player.current_player_bet == self.current_maximum_bet:  # Si le joueur a égalisé la mise maximale, il ne peut pas call
             self.action_buttons[PlayerAction.CALL].enabled = False
         elif current_player.stack < (self.current_maximum_bet - current_player.current_player_bet): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call
             self.action_buttons[PlayerAction.CALL].enabled = False
-            # Activer all-in si le joueur a des jetons mais pas assez pour call
+            # Activer all-in si le joueur a des jetons même si insuffisants pour call
             if current_player.stack > 0:
                 self.action_buttons[PlayerAction.ALL_IN].enabled = True
             self.action_buttons[PlayerAction.RAISE].enabled = False
-
-        # ---- RAISE ----
-        # Calculer le raise minimal
+        
+        # ---- RAISE standard ----
         if self.current_maximum_bet == 0:
             min_raise = self.big_blind
         else:
             min_raise = (self.current_maximum_bet - current_player.current_player_bet) * 2
-
-        # Désactiver l'action raise si le joueur n'a pas suffisamment de jetons pour couvrir le raise minimum
+        
         if current_player.stack < min_raise:
             self.action_buttons[PlayerAction.RAISE].enabled = False
 
         # Désactiver raise si déjà 4 relances dans le tour
         if self.number_raise_this_game_phase >= 4:
             self.action_buttons[PlayerAction.RAISE].enabled = False
-
+        
+        # ---- Raises pot-based (custom) ----
+        pot_raise_actions = [
+            PlayerAction.RAISE_25_POT,
+            PlayerAction.RAISE_33_POT,
+            PlayerAction.RAISE_50_POT,
+            PlayerAction.RAISE_66_POT,
+            PlayerAction.RAISE_75_POT,
+            PlayerAction.RAISE_100_POT,
+            PlayerAction.RAISE_125_POT,
+            PlayerAction.RAISE_150_POT,
+            PlayerAction.RAISE_175_POT,
+            PlayerAction.RAISE_2X_POT,
+            PlayerAction.RAISE_3X_POT
+        ]
+        raise_percentages = {
+            PlayerAction.RAISE_25_POT: 0.25,
+            PlayerAction.RAISE_33_POT: 0.33,
+            PlayerAction.RAISE_50_POT: 0.50,
+            PlayerAction.RAISE_66_POT: 0.66,
+            PlayerAction.RAISE_75_POT: 0.75,
+            PlayerAction.RAISE_100_POT: 1.00,
+            PlayerAction.RAISE_125_POT: 1.25,
+            PlayerAction.RAISE_150_POT: 1.50,
+            PlayerAction.RAISE_175_POT: 1.75,
+            PlayerAction.RAISE_2X_POT: 2.00,
+            PlayerAction.RAISE_3X_POT: 3.00
+        }
+        for action in pot_raise_actions:
+            # Si le nombre de raises dans la phase est déjà atteint, désactiver la raise pot-based
+            if self.number_raise_this_game_phase >= 4:
+                self.action_buttons[action].enabled = False
+            else:
+                percentage = raise_percentages[action]
+                # Calcul du montant d'augmentation requis via le pourcentage du pot
+                required_increase = self.main_pot * percentage
+                # Si le joueur n'a pas suffisamment de jetons pour augmenter d'au moins "required_increase" ou si le required_increase est inférieur à min_raise, désactiver le bouton
+                if current_player.stack < required_increase or required_increase < min_raise:
+                    self.action_buttons[action].enabled = False
+        
         # ---- ALL-IN ----
         # All-in disponible si le joueur a des jetons, qu'il soit le premier à agir ou non
         self.action_buttons[PlayerAction.ALL_IN].enabled = current_player.stack > 0
-
+        
         if self.current_phase == GamePhase.SHOWDOWN:
             for button in self.action_buttons.values():
                 button.enabled = False
@@ -756,12 +793,36 @@ class PokerGame:
             Dict[PlayerAction, Button]: Dictionnaire associant les actions aux objets boutons
         """
         buttons = {
-            PlayerAction.FOLD: Button(300, SCREEN_HEIGHT - 100, 100, 40, "Fold", (200, 0, 0)),
-            PlayerAction.CHECK: Button(450, SCREEN_HEIGHT - 100, 100, 40, "Check", (0, 200, 0)),
-            PlayerAction.CALL: Button(600, SCREEN_HEIGHT - 100, 100, 40, "Call", (0, 0, 200)),
-            PlayerAction.RAISE: Button(750, SCREEN_HEIGHT - 100, 100, 40, "Raise", (200, 200, 0)),
-            PlayerAction.ALL_IN: Button(900, SCREEN_HEIGHT - 100, 100, 40, "All-in", (150, 0, 150))
+            PlayerAction.FOLD: Button(300, SCREEN_HEIGHT - 50, 100, 40, "Fold", (200, 0, 0)),
+            PlayerAction.CHECK: Button(450, SCREEN_HEIGHT - 50, 100, 40, "Check", (0, 200, 0)),
+            PlayerAction.CALL: Button(600, SCREEN_HEIGHT - 50, 100, 40, "Call", (0, 0, 200)),
+            PlayerAction.RAISE: Button(750, SCREEN_HEIGHT - 50, 100, 40, "Raise", (200, 200, 0)),
+            PlayerAction.ALL_IN: Button(900, SCREEN_HEIGHT - 50, 100, 40, "All-in", (150, 0, 150))
         }
+        # Ajout des boutons pour les raises pot-based
+        pot_raise_color = (255, 140, 0)  # Couleur orange pour les raises pot-based
+        # Première rangée (6 boutons)
+        start_x_row1 = 315
+        y_row1 = SCREEN_HEIGHT - 140
+        btn_width = 120
+        btn_height = 30
+        gap = 5
+        buttons[PlayerAction.RAISE_25_POT] = Button(start_x_row1, y_row1, btn_width, btn_height, "25%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_33_POT] = Button(start_x_row1 + (btn_width + gap) * 1, y_row1, btn_width, btn_height, "33%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_50_POT] = Button(start_x_row1 + (btn_width + gap) * 2, y_row1, btn_width, btn_height, "50%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_66_POT] = Button(start_x_row1 + (btn_width + gap) * 3, y_row1, btn_width, btn_height, "66%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_75_POT] = Button(start_x_row1 + (btn_width + gap) * 4, y_row1, btn_width, btn_height, "75%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_100_POT] = Button(start_x_row1 + (btn_width + gap) * 5, y_row1, btn_width, btn_height, "100%Pot", pot_raise_color)
+        
+        # Deuxième rangée (5 boutons)
+        start_x_row2 = 380
+        y_row2 = SCREEN_HEIGHT - 100
+        buttons[PlayerAction.RAISE_125_POT] = Button(start_x_row2, y_row2, btn_width, btn_height, "125%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row2 + (btn_width + gap) * 1, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_175_POT] = Button(start_x_row2 + (btn_width + gap) * 2, y_row2, btn_width, btn_height, "175%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row2 + (btn_width + gap) * 3, y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
+        buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row2 + (btn_width + gap) * 4, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
+        
         return buttons
 
     def process_action(self, player: Player, action: PlayerAction, bet_amount: Optional[int] = None):
@@ -806,22 +867,22 @@ class PokerGame:
         print(f"Mise maximale actuelle : {self.current_maximum_bet}BB")
         print(f"Stack du joueur avant action : {player.stack}BB")
         print(f"Mise actuelle du joueur : {player.current_player_bet}BB")
-
-         #----- Traitement de l'action en fonction de son type -----
+        
+        #----- Traitement de l'action en fonction de son type -----
         if action == PlayerAction.FOLD:
             # Le joueur se couche il n'est plus actif pour ce tour.
             player.has_folded = True
             print(f"{player.name} se couche (Fold).")
-
+        
         elif action == PlayerAction.CHECK:
             print(f"{player.name} check.")
-
+        
         elif action == PlayerAction.CALL:
             print(f"{player.name} call.")
             call_amount = self.current_maximum_bet - player.current_player_bet
             if call_amount > player.stack: 
                 raise ValueError(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
-
+        
             player.stack -= call_amount
             player.current_player_bet += call_amount
             self.main_pot += call_amount
@@ -830,6 +891,69 @@ class PokerGame:
                 player.is_all_in = True
             print(f"{player.name} a call {call_amount}BB")
         
+        # --- Nouvelles actions pot-based ---
+        elif action in {
+            PlayerAction.RAISE_25_POT,
+            PlayerAction.RAISE_33_POT,
+            PlayerAction.RAISE_50_POT,
+            PlayerAction.RAISE_66_POT,
+            PlayerAction.RAISE_75_POT,
+            PlayerAction.RAISE_100_POT,
+            PlayerAction.RAISE_125_POT,
+            PlayerAction.RAISE_150_POT,
+            PlayerAction.RAISE_175_POT,
+            PlayerAction.RAISE_2X_POT,
+            PlayerAction.RAISE_3X_POT
+        }:
+            raise_percentages = {
+                PlayerAction.RAISE_25_POT: 0.25,
+                PlayerAction.RAISE_33_POT: 0.33,
+                PlayerAction.RAISE_50_POT: 0.50,
+                PlayerAction.RAISE_66_POT: 0.66,
+                PlayerAction.RAISE_75_POT: 0.75,
+                PlayerAction.RAISE_100_POT: 1.00,
+                PlayerAction.RAISE_125_POT: 1.25,
+                PlayerAction.RAISE_150_POT: 1.50,
+                PlayerAction.RAISE_175_POT: 1.75,
+                PlayerAction.RAISE_2X_POT: 2.00,
+                PlayerAction.RAISE_3X_POT: 3.00
+            }
+            percentage = raise_percentages[action]
+            # Calcul de la raise additionnelle basée sur le pourcentage du pot
+            custom_raise_amount = self.main_pot * percentage
+            # La nouvelle mise est : la mise actuelle + montant pour caller + raise additionnel
+            computed_bet = player.current_player_bet + custom_raise_amount
+        
+            if self.current_maximum_bet == 0:
+                min_raise = self.big_blind
+            else:
+                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
+        
+            # Vérifier que le montant additionnel respecte le minimum exigé
+            if computed_bet - player.current_player_bet < min_raise:
+                computed_bet = player.current_player_bet + min_raise
+        
+            bet_amount = computed_bet
+        
+            # Vérifier que le joueur a suffisamment de jetons pour cette raise
+            if player.stack < (bet_amount - player.current_player_bet):
+                raise ValueError(
+                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
+                )
+        
+            # Traitement de la raise pot-based
+            actual_bet = bet_amount - player.current_player_bet  # Calcul du supplément à miser
+            player.stack -= actual_bet
+            player.current_player_bet = bet_amount
+            self.main_pot += actual_bet
+            player.total_bet += actual_bet
+            self.current_maximum_bet = bet_amount
+            self.number_raise_this_game_phase += 1
+            self.last_raiser = player.seat_position
+        
+            print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
+        
         elif action == PlayerAction.RAISE:
             print(f"{player.name} raise.")
             # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
@@ -837,19 +961,19 @@ class PokerGame:
                 min_raise = self.big_blind
             else:
                 min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
-
+        
             # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
             if bet_amount is None or (bet_amount < min_raise and action != PlayerAction.ALL_IN):
                 bet_amount = min_raise
-
+        
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
             if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
                     f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
                     f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
-
-            # Traitement du raise
+        
+            # Traitement du raise standard
             actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
             player.stack -= actual_bet
             player.current_player_bet = bet_amount
@@ -858,9 +982,9 @@ class PokerGame:
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
             self.last_raiser = player.seat_position
-
+        
             print(f"{player.name} a raise {bet_amount}BB")
-
+        
         elif action == PlayerAction.ALL_IN:
             print(f"{player.name} all-in.")
             # Si aucune valeur n'est passée pour bet_amount, on assigne automatiquement tout le stack
@@ -883,13 +1007,25 @@ class PokerGame:
             player.total_bet += bet_amount  # On ajoute le all-in à la mise totale du joueur
             player.is_all_in = True  # On indique que le joueur est all-in
             print(f"{player.name} a all-in {bet_amount}BB")
-
+        
         player.has_acted = True
         self.check_phase_completion()
-
-        # Update action history with formatted action text
+        
+        # Mise à jour de l'historique des actions du joueur
         action_text = f"{action.value}"
-        if action in [PlayerAction.RAISE, PlayerAction.ALL_IN]:
+        if action in [PlayerAction.RAISE, PlayerAction.ALL_IN] or action in {
+            PlayerAction.RAISE_25_POT,
+            PlayerAction.RAISE_33_POT,
+            PlayerAction.RAISE_50_POT,
+            PlayerAction.RAISE_66_POT,
+            PlayerAction.RAISE_75_POT,
+            PlayerAction.RAISE_100_POT,
+            PlayerAction.RAISE_125_POT,
+            PlayerAction.RAISE_150_POT,
+            PlayerAction.RAISE_175_POT,
+            PlayerAction.RAISE_2X_POT,
+            PlayerAction.RAISE_3X_POT
+        }:
             action_text += f" {bet_amount}BB"
         elif action == PlayerAction.CALL:
             call_amount = self.current_maximum_bet - player.current_player_bet
@@ -900,7 +1036,7 @@ class PokerGame:
         # Keep only last 5 actions per player
         if len(self.pygame_action_history[player.name]) > 5:
             self.pygame_action_history[player.name].pop(0)
-
+        
         return action
 
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
