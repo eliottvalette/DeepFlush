@@ -75,8 +75,23 @@ class PlayerAction(Enum):
     FOLD = "fold"
     CHECK = "check"
     CALL = "call"
-    RAISE = "raise"
+    # -----------------------------------------------------
+    RAISE = "raise" # Raise minimum (2x la mise précédente)
+    RAISE_25_POT = "raise-25%"     # Raise de 25% du pot
+    RAISE_33_POT = "raise-33%"     # Raise de 33% du pot
+    RAISE_50_POT = "raise-50%"     # Raise de 50% du pot
+    RAISE_66_POT = "raise-66%"     # Raise de 66% du pot
+    RAISE_75_POT = "raise-75%"     # Raise de 75% du pot
+    RAISE_100_POT = "raise-100%"   # Raise égal au pot
+    RAISE_125_POT = "raise-125%"   # Raise de 125% du pot
+    RAISE_150_POT = "raise-150%"   # Raise de 150% du pot
+    RAISE_175_POT = "raise-175%"   # Raise de 175% du pot
+    RAISE_2X_POT = "raise-200%"    # Raise de 2x le pot
+    RAISE_3X_POT = "raise-300%"    # Raise de 3x le pot
+    # -----------------------------------------------------
     ALL_IN = "all-in"
+
+    # 16 actions possibles
 
 class GamePhase(Enum):
     """
