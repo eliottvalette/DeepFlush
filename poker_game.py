@@ -1442,6 +1442,94 @@ class PokerGame:
         state = torch.tensor(state, dtype=torch.float32)
         return state
     
+    def get_state_2(self):
+        """
+        
+        Returns:
+            torch.Tensor
+        """
+        current_player = self.players[self.current_player_seat]
+
+        # Correspondance des couleurs avec des nombres ♠, ♥, ♦, ♣
+        suit_map = {"♠": 0, "♥": 1, "♦": 2, "♣": 3}
+
+        # 1. ------ Informations sur la phase de jeu ------ [0-4]
+        info_phase = torch.zeros(5)
+        phase_values = {GamePhase.PREFLOP: 0, GamePhase.FLOP: 1, GamePhase.TURN: 2, GamePhase.RIVER: 3, GamePhase.SHOWDOWN: 4}
+        # On récupère directement l'indice correspondant à la phase courante
+        phase_idx = phase_values[self.current_phase]
+        # Puis, on place 1 à la bonne position dans state (indices 0 à 4)
+        info_phase[phase_idx] = 1
+
+        # 2. ------ Informations sur la position et le stack du current_player ------ [5-12]
+        info_stack = torch.zeros(7)
+        max_stack = max(player.stack for player in self.players)
+        # Normalisation du stack du joueur courant et affectation directe
+        info_stack[0] = current_player.stack / max_stack
+        # One-hot encoding pour la position du joueur courant
+        info_stack[1 + current_player.role_position] = 1
+
+        # 3. ------ Cartes Personnelles ------ [13-46]
+        # Remplir directement state pour les 5 cartes communes (2 x 17 = 34 éléments)
+        info_cards = torch.zeros(34)
+        for i, card in enumerate(current_player.cards):
+            base_idx = i * 17
+            # One-hot encoding pour la valeur (indices 0 à 12 pour 2-14)
+            info_cards[base_idx + (card.value - 2)] = 1
+            # One-hot encoding pour la couleur (indices 13 à 16)
+            info_cards[base_idx + 13 + suit_map[card.suit]] = 1 # + 13 pour être après la valeur de la carte
+
+        
+        # 4. ------ Cartes communes ------ [47-132]
+        info_community_cards = torch.zeros(85)
+        # Remplir directement state pour les 5 cartes communes (5 x 17 = 85 éléments)
+        for i, card in enumerate(self.community_cards):
+            base_idx = i * 17
+            # One-hot encoding pour la valeur (indices 0 à 12 pour 2-14)
+            info_community_cards[base_idx + (card.value - 2)] = 1
+            # One-hot encoding pour la couleur (indices 13 à 16)
+            info_community_cards[base_idx + 13 + suit_map[card.suit]] = 1
+
+
+        # 5. ------ Informations sur la mise actuelle ------ [133]
+        actual_bet = torch.tensor(self.current_maximum_bet / self.starting_stack)
+
+        # 6. ------ Informations sur les stacks et la position des joueurs des joueurs restants ------ [134-176]
+        info_players = torch.zeros(42)
+        for i, player in enumerate(self.players):
+            # Calculer l'index de base pour ce joueur dans le vecteur d'état
+            base_idx = i * 7  # 7 dimensions par joueur (1 pour stack + 6 pour position)
+            
+            # si c'est le current_player alors on met 0 pour le stack et la position
+            if player == current_player:
+                info_players[base_idx] = 0  # Stack à 0
+                for j in range(base_idx + 1, base_idx + 7):  # Reset position encoding
+                    info_players[j] = 0
+            # si le joueur est inactif ou folded alors on met -1 pour le stack et la position
+            elif not player.is_active or player.has_folded:
+                info_players[base_idx] = -1  # Stack à -1
+                for j in range(base_idx + 1, base_idx + 7):  # Reset position encoding
+                    info_players[j] = -1
+            else:
+                # Normaliser le stack du joueur
+                info_players[base_idx] = player.stack / max_stack
+                
+                # Encoder la position en one-hot (6 positions possibles)
+                position_idx = base_idx + 1 + player.role_position
+                info_players[position_idx] = 1
+
+        # 7. ------ Actions disponibles ------ [177-182]
+        info_actions = torch.zeros(6)
+        for action in PlayerAction:
+            if action in self.action_buttons and self.action_buttons[action].enabled:
+                info_actions[action.value] = 1
+            else:
+                info_actions[action.value] = -1
+
+        state = torch.cat((info_phase, info_stack, info_cards, info_community_cards, actual_bet, info_players, info_actions))
+
+        return state
+    
     def get_final_state(self, previous_state, final_stacks):
         """
         Reconstruit l'Etat final de la main en fonction de l'état précédent et du stack final.
