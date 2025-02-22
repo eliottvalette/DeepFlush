@@ -112,7 +112,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             data_collector.add_state(state_info)
 
             # Stocker l'expérience
-            current_player.agent.temp_remember(
+            current_player.agent.remember(
                 state_seq = player_state_seq.copy(), 
                 target_vector = target_vector, 
                 valid_action_mask = action_mask

@@ -1,4 +1,3 @@
-# poker_MCCFR.py
 import numpy as np
 import random as rd
 import torch
@@ -14,7 +13,7 @@ class MCCFRTrainer:
     """
     
     def __init__(self, env: PokerGame, num_simulations: int = 100):
-        self.game = env
+        self.non_optimized_game = env
         self.num_simulations = num_simulations
 
     def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
@@ -22,16 +21,71 @@ class MCCFRTrainer:
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
         self.payoff_per_trajectory_action = defaultdict(float)
-        self.replicated_game = PokerGameOptimized(self.game)
-
+        self.replicated_game = PokerGameOptimized(self.non_optimized_game)
+        simple_game_state = self.non_optimized_game.get_simple_state()
         for _ in range(self.num_simulations):
+            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(simple_game_state)
             for trajectory_action in valid_actions:
-                payoff = self.replicated_game.play_trajectory(trajectory_action)
+                payoff = self.replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations # Moyenne des payoffs
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
         return target_vector, self.payoff_per_trajectory_action
+
+    def extract_cards(self, state_vector: np.ndarray) -> List[Tuple[int, str]]:
+        """
+        Extrait les cartes sous forme de tuples (valeur, couleur) à partir d'un vecteur d'état.
+        """
+        cards = []
+        for i in range(0, len(state_vector), 5):  # Chaque carte est codée sur 5 indices
+            if state_vector[i] == -1:
+                continue  # Carte non définie
+            
+            value = int(state_vector[i] * 14 + 2)  # Dénormalisation de la valeur
+            suit = ["♠", "♥", "♦", "♣"][np.argmax(state_vector[i+1:i+5])]
+            cards.append((value, suit))
+        
+        return cards
+    
+    def get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
+        """
+        Retourne la liste des cartes restantes dans le deck.
+        
+        Args:
+            player_cards: Liste des cartes du joueur
+            community_cards: Liste des cartes communes
+            
+        Returns:
+            List[Tuple[int, str]]: Liste des cartes restantes dans le deck
+        """
+        # Create full deck
+        suits = ["♠", "♥", "♦", "♣"]
+        values = range(2, 15)  # 2 to 14 (Ace)
+        deck = [(value, suit) for value in values for suit in suits]
+        
+        # Remove cards that are already in play
+        remaining_deck = [card for card in deck if card not in known_cards]
+        
+        return remaining_deck
+    
+    def get_opponent_hands_and_community_cards(self, state_info: Dict):
+        """
+        Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes.
+        """
+        known_cards = state_info['player_cards'] + state_info['community_cards']
+        remaining_deck = self.get_remaining_deck(known_cards)
+
+        num_opponents = state_info['num_active_players'] - 1
+        missing_community_cards = 5 - len(state_info["community_cards"])
+
+        # Échantillonnage des cartes restantes
+        drawn_cards = rd.sample(remaining_deck, missing_community_cards + 2 * num_opponents)
+        
+        community_cards = drawn_cards[:missing_community_cards]
+        opponent_hands = [drawn_cards[missing_community_cards + i*2: missing_community_cards + i*2+2] for i in range(num_opponents)]
+
+        return opponent_hands, community_cards
 
     def get_self_strategy(self, self_agent, self_state, valid_actions: List[PlayerAction]) -> np.ndarray:
         """
