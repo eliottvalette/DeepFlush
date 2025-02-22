@@ -667,7 +667,7 @@ class PokerGame:
                 if not player.has_folded and not player.is_all_in:
                     player.has_acted = False  # Réinitialisation du flag
         
-        # Set first player after dealer button
+        # Set first player after dealer button # TODO : Quand la Turn se termine sur le joueur 3 on donne la parole au premier a sa gauche et au lieu de le donner au premier actif a la gauche de la sb, sb inclue
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
         while (not self.players[self.current_player_seat].is_active or 
                self.players[self.current_player_seat].has_folded or 
@@ -1546,26 +1546,32 @@ class PokerGame:
         community_cards = [(card.value, card.suit) for card in self.community_cards]
         
         players_info = []
-        for p in self.players:
+        player_that_can_still_act = [p for p in self.players if not (p.has_folded or p.is_all_in or not p.is_active)]
+        for p in player_that_can_still_act:
             players_info.append({
                 'name': p.name,
                 'stack': p.stack,
-                'current_bet': p.current_player_bet,
+                'current_player_bet': p.current_player_bet,
+                'is_active' : p.is_active,
                 'has_folded': p.has_folded,
                 'is_all_in': p.is_all_in,
-                'role_position': p.role_position
+                'role_position': p.role_position,
+                'has_acted': p.has_acted
             })
         
         simple_state = {
             'hero_cards': hero_cards,
             'hero_name': current_player.name,
+            'hero_index': current_player.seat_position,
             'community_cards': community_cards,
             'phase': self.current_phase.value,  # Par exemple "preflop", "flop", etc.
             'pot': self.main_pot,
             'current_max_bet': self.current_maximum_bet,
             'players_info': players_info,
             'button_seat': self.button_seat_position,
-            'num_active_players': len([p for p in self.players if p.is_active])
+            'num_active_players': len(player_that_can_still_act),
+            'big_blind': self.big_blind,
+            'small_blind': self.small_blind
         }
         
         return simple_state
