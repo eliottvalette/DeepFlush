@@ -8,7 +8,7 @@ class PokerGameOptimized:
     def __init__(self, game: PokerGame):
         """
         Initialise la simulation optimisée à partir de l'état simplifié du jeu classique.
-        On s’appuie sur get_simple_state() pour récupérer les informations essentielles.
+        On s'appuie sur get_simple_state() pour récupérer les informations essentielles.
         """
         self.simple_state = game.get_simple_state()
         self.current_phase = self.simple_state['phase']  # ex: GamePhase.PREFLOP
@@ -345,23 +345,32 @@ class PokerGameOptimized:
                 payoffs[name] = -contribution
         return payoffs
 
-    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[Tuple[int, str]], rd_missing_community_cards: List[Tuple[int, str]]) -> float:
+    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]]) -> float:
         """
-        Simule une trajectoire en faisant jouer la suite de la main (en choisissant aléatoirement
-        parmi les actions valides) jusqu'au showdown, puis évalue le payoff pour le joueur cible (hero).
+        Simule une trajectoire en faisant jouer la suite de la main jusqu'au showdown,
+        puis évalue le payoff pour le joueur cible (hero).
         
         Args:
-            trajectory_action (PlayerAction): L'action initiale à appliquer pour le hero.
-            rd_opponents_cards (List[Tuple[int, str]]): Les mains aléatoires (tirées) pour les adversaires.
-            rd_missing_community_cards (List[Tuple[int, str]]): Les cartes manquantes pour compléter le board.
+            trajectory_action (PlayerAction): L'action initiale à appliquer pour le hero
+            rd_opponents_cards (List[List[Tuple[int, str]]]): Liste des mains aléatoires pour chaque adversaire
+            rd_missing_community_cards (List[Tuple[int, str]]): Les cartes manquantes pour compléter le board
         
         Returns:
-            float: Le payoff simulé pour le hero.
+            float: Le payoff simulé pour le hero
         """
-        # Simuler la suite de la main.
-        instant_win = self.simulate_hand(trajectory_action, rd_opponents_cards, rd_missing_community_cards)
-        # À l'issue du showdown, évaluer et calculer le payoff.
+        # Assigner les cartes tirées aux adversaires
+        for i, player_info in enumerate(self.players_info[1:], 1):  # Skip hero
+            if not player_info['has_folded']:
+                player_idx = i - 1  # Index dans rd_opponents_cards
+                if player_idx < len(rd_opponents_cards):
+                    player_info['cards'] = rd_opponents_cards[player_idx]
+
+        # Simuler la suite de la main
+        instant_win = self.simulate_hand(trajectory_action, rd_missing_community_cards)
+        
+        # À l'issue du showdown, évaluer et calculer le payoff
         payoffs = self.evaluate_showdown(instant_win)
-        # On suppose que le hero est le premier joueur (players_info[0]).
+        
+        # Le hero est le premier joueur (players_info[0])
         hero_name = self.players_info[0]['name']
         return payoffs.get(hero_name, 0.0)
