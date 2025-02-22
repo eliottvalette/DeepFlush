@@ -1527,6 +1527,48 @@ class PokerGame:
         final_state = torch.tensor(final_state, dtype=torch.float32)
         
         return final_state    
+    
+    def get_simple_state(self) -> Dict:
+        """
+        Extrait un état de jeu simplifié sous forme de dictionnaire contenant les informations brutes nécessaires :
+        - Les cartes privées du joueur courant (hero)
+        - Les cartes communes déjà révélées
+        - La phase actuelle du jeu (en chaîne, par exemple "preflop", "flop", etc.)
+        - Les informations sur chaque joueur (nom, stack, mise actuelle, statut)
+        - Le pot principal et la mise maximale actuelle
+        - La position du bouton et le nombre de joueurs actifs
+
+        Returns:
+            Dict: État simplifié du jeu
+        """
+        current_player = self.players[self.current_player_seat]
+        hero_cards = [(card.value, card.suit) for card in current_player.cards]
+        community_cards = [(card.value, card.suit) for card in self.community_cards]
+        
+        players_info = []
+        for p in self.players:
+            players_info.append({
+                'name': p.name,
+                'stack': p.stack,
+                'current_bet': p.current_player_bet,
+                'has_folded': p.has_folded,
+                'is_all_in': p.is_all_in,
+                'role_position': p.role_position
+            })
+        
+        simple_state = {
+            'hero_cards': hero_cards,
+            'community_cards': community_cards,
+            'phase': self.current_phase.value,  # Par exemple "preflop", "flop", etc.
+            'pot': self.main_pot,
+            'current_max_bet': self.current_maximum_bet,
+            'players_info': players_info,
+            'button_seat': self.button_seat_position,
+            'num_active_players': len([p for p in self.players if p.is_active])
+        }
+        
+        return simple_state
+
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
         """

@@ -84,13 +84,12 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         # On récupere la sequence d'entat du joueur actuel
         player_state_seq = state_seq[current_player.name]
-        
-        # Génération du vecteur de probabilités cible avec MCCFR
-        target_vector, payoffs = mccfr_trainer.compute_expected_payoffs(player_state_seq[-1], valid_actions)
 
         # Prédiction avec une inférence de classique du model
         action_chosen, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions)
 
+        # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
+        target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions)
         
         # Exécuter l'action dans l'environnement
         next_state, _ = env.step(action_chosen)
@@ -208,7 +207,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(env.players[0])
+    mccfr_trainer = MCCFRTrainer(game = env, num_simulations = 100)
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon
