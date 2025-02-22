@@ -1558,6 +1558,7 @@ class PokerGame:
         
         simple_state = {
             'hero_cards': hero_cards,
+            'hero_name': current_player.name,
             'community_cards': community_cards,
             'phase': self.current_phase.value,  # Par exemple "preflop", "flop", etc.
             'pot': self.main_pot,

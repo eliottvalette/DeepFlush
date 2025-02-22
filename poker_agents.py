@@ -125,11 +125,11 @@ class PokerAgent:
         reverse_action_map = {v: k for k, v in action_map.items()}
         return reverse_action_map[chosen_index], valid_action_mask, action_probs
 
-    def remember(self, temp_state_seq, target_vector, valid_action_mask):
+    def remember(self, state_seq, target_vector, valid_action_mask):
         """
         Stocke une transition dans la mémoire de replay, cette transition sera utilisée pour l'entrainement du model
         """
-        self.memory.append((temp_state_seq, target_vector, valid_action_mask))
+        self.memory.append((state_seq, target_vector, valid_action_mask))
 
     def train_model(self):
         """

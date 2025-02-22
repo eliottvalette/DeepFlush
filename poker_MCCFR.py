@@ -12,8 +12,8 @@ class MCCFRTrainer:
     pour l'apprentissage de stratégies GTO au poker.
     """
     
-    def __init__(self, env: PokerGame, num_simulations: int = 100):
-        self.non_optimized_game = env
+    def __init__(self, game: PokerGame, num_simulations: int = 10):
+        self.non_optimized_game = game
         self.num_simulations = num_simulations
 
     def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
@@ -30,6 +30,11 @@ class MCCFRTrainer:
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations # Moyenne des payoffs
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
+
+        print('----------------------------------')
+        print('target_vector :', target_vector)
+        print('self.payoff_per_trajectory_action :', self.payoff_per_trajectory_action)
+        print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action
 
@@ -73,7 +78,7 @@ class MCCFRTrainer:
         """
         Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes.
         """
-        known_cards = state_info['player_cards'] + state_info['community_cards']
+        known_cards = state_info['hero_cards'] + state_info['community_cards']
         remaining_deck = self.get_remaining_deck(known_cards)
 
         num_opponents = state_info['num_active_players'] - 1
