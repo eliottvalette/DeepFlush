@@ -21,6 +21,37 @@ class PokerGameOptimized:
         self.contributions = {player['name']: player['current_player_bet'] for player in self.players_info}
         self.bet_unit = self.current_maximum_bet if self.current_maximum_bet > 0 else 1
         self.number_raise_this_game_phase = 0
+    
+        # Ajout des attributs manquants
+        self.button_seat_position = self.simple_state['button_seat_position']
+        self.current_player_seat = self.simple_state['current_player_seat']
+        self.num_players = len(self.players_info)
+        self.players = [Player(None, info['name'], info['player_stack'], info['seat_position']) 
+                       for info in self.players_info]
+
+        # Initialisation du deck avec les cartes connues
+        known_cards = self.hero_cards + self.community_cards
+        self.deck = self._get_remaining_deck(known_cards)
+
+    def _get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
+        """
+        Retourne la liste des cartes restantes dans le deck.
+        
+        Args:
+            known_cards: Liste des cartes déjà visibles (cartes du héros + cartes communes)
+            
+        Returns:
+            List[Tuple[int, str]]: Liste des cartes restantes dans le deck
+        """
+        # Create full deck
+        suits = ["♠", "♥", "♦", "♣"]
+        values = range(2, 15)  # 2 to 14 (Ace)
+        deck = [(value, suit) for value in values for suit in suits]
+        
+        # Remove cards that are already in play
+        remaining_deck = [card for card in deck if card not in known_cards]
+        
+        return remaining_deck
 
     def get_valid_actions(self, player_info: Dict) -> List[PlayerAction]: # TODO : comparer avec _update_button_states
         """
@@ -135,27 +166,50 @@ class PokerGameOptimized:
 
     def betting_round(self, hero_trajectory_action: PlayerAction) -> None:
         """
-        Simule un round de pari dans lequel chaque joueur actif agit une fois.
+        Simule un round de pari dans lequel chaque joueur actif agit jusqu'à ce que le tour soit terminé.
         Pour le joueur cible (hero), on force l'action passée en paramètre ;
         pour les autres, l'action est choisie aléatoirement parmi les actions valides.
-        La mise à jour du pot et des contributions est effectuée.
+        Le round continue jusqu'à ce que tous les joueurs aient égalisé la mise maximale ou soient all-in/fold.
         """
+        # Réinitialiser has_acted pour tous les joueurs actifs au début du round
         for player_info in self.players_info:
-            # Si le joueur est déjà foldé ou all‑in, on ne fait rien.
-            if player_info['has_folded'] or player_info['is_all_in']:
-                continue
-            valid = self.get_valid_actions(player_info)
-            if not valid: # Aucune action valid on passe au suivant (le joueur a fold ou est all-in)
-                continue
+            if not (player_info['has_folded'] or player_info['is_all_in']):
+                player_info['has_acted'] = False
 
-            # On considère que le hero est le premier joueur de players_info.
-            is_hero = (player_info['name'] == self.simple_state['hero_name'])
-            if is_hero:
-                chosen_action = rd.choice(valid) # TODO : Infer from Hero model
-            else:
-                chosen_action = rd.choice(valid) # TODO : Infer from Hero model and add noise
-            self.simulate_action(player_info, chosen_action)
-    
+        # Continuer tant que le round n'est pas terminé
+        while True:
+            # Vérifier si le round est terminé
+            phase_completed = True
+            in_game_players = [p for p in self.players_info if not (p['has_folded'] or p['is_all_in'])]
+            
+            for player_info in in_game_players:
+                # Si le joueur n'a pas encore agi dans la phase, le round n'est pas terminé
+                if not player_info['has_acted']:
+                    phase_completed = False
+                    break
+                # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le round n'est pas terminé
+                if player_info['current_player_bet'] < self.current_maximum_bet and not player_info['is_all_in']:
+                    phase_completed = False
+                    break
+
+            if phase_completed:
+                break
+
+            # Faire agir le joueur courant
+            player_info = self.players_info[0]  # Le hero est toujours le premier joueur
+            if not (player_info['has_folded'] or player_info['is_all_in']):
+                valid = self.get_valid_actions(player_info)
+                if valid:
+                    is_hero = (player_info['name'] == self.simple_state['hero_name'])
+                    if is_hero:
+                        chosen_action = hero_trajectory_action
+                    else:
+                        chosen_action = rd.choice(valid)
+                    self.simulate_action(player_info, chosen_action)
+
+            # Passer au joueur suivant
+            self.players_info = self.players_info[1:] + [self.players_info[0]]
+
     def check_phase_completion(self) :
         """
         Vérifie si le tour d'enchères actuel est terminé et gère la progression du jeu.
@@ -280,38 +334,63 @@ class PokerGameOptimized:
                 self.advance_phase(rd_missing_community_cards)
         return instant_win
 
-    def evaluate_showdown(self) -> Dict[str, float]:
+    def evaluate_showdown(self, instant_win: bool, rd_opponents_cards: List[List[Tuple[int, str]]]) -> Dict[str, float]:
         """
         À l'issue du showdown, évalue les mains de tous les joueurs encore en lice
         et répartit le pot entre les gagnants.
         
-        Pour cela, on recrée des instances de Player (de la classe du jeu classique)
-        en assignant au hero ses cartes connues et aux adversaires des mains aléatoires
-        (tirées du deck restant).
-        Le payoff de chaque joueur est calculé comme : (part du pot remportée) - (contribution).
+        Args:
+            instant_win (bool): True si un seul joueur reste en jeu (les autres ont fold)
+            rd_opponents_cards: Liste des mains aléatoires pour chaque adversaire
         
-        Retourne un dictionnaire {nom_du_joueur: payoff}.
+        Returns:
+            Dict[str, float]: Dictionnaire {nom_du_joueur: payoff}
         """
+        # En cas de victoire instantanée, le dernier joueur en lice remporte tout le pot
+        if instant_win:
+            # Trouver le seul joueur qui n'a pas fold
+            winner = next(info for info in self.players_info if not info['has_folded'])
+            payoffs = {}
+            for info in self.players_info:
+                name = info['name']
+                contribution = self.contributions.get(name, 0)
+                if name == winner['name']:
+                    payoffs[name] = self.pot - contribution
+                else:
+                    payoffs[name] = -contribution
+            return payoffs
+
         # Pour évaluer, on crée une liste de joueurs simulés.
         simulated_players = []
+        opponent_idx = 0
+        
         # On considère que le hero est le premier joueur de players_info.
         for i, info in enumerate(self.players_info):
             if info['has_folded']:
                 continue  # Les joueurs foldés n'entrent pas en showdown
+            
             # Création d'une instance de Player pour l'évaluation.
             sim_player = Player(agent=None, name=info['name'], player_stack=info['player_stack'], seat_position=i)
+            
             if i == 0:
                 # Pour le hero, on affecte les cartes connues.
                 sim_player.cards = [Card(value, suit) for value, suit in self.hero_cards]
             else:
-                # Pour les adversaires, si aucune main n'est assignée, on attribue 2 cartes aléatoires
-                # parmi le deck complet en retirant les cartes déjà visibles.
-                full_deck = [(v, s) for v in range(2, 15) for s in ["♠", "♥", "♦", "♣"]]
-                known = self.hero_cards + self.community_cards
-                remaining = [card for card in full_deck if card not in known]
-                opp_cards = rd.sample(remaining, 2)
-                sim_player.cards = [Card(value, suit) for value, suit in opp_cards]
+                # Pour les adversaires, on utilise les cartes tirées aléatoirement
+                if opponent_idx < len(rd_opponents_cards):
+                    opp_cards = rd_opponents_cards[opponent_idx]
+                    sim_player.cards = [Card(value, suit) for value, suit in opp_cards]
+                    opponent_idx += 1
+                else:
+                    # Fallback au cas où il n'y aurait pas assez de mains adverses
+                    full_deck = [(v, s) for v in range(2, 15) for s in ["♠", "♥", "♦", "♣"]]
+                    known = self.hero_cards + self.community_cards
+                    remaining = [card for card in full_deck if card not in known]
+                    opp_cards = rd.sample(remaining, 2)
+                    sim_player.cards = [Card(value, suit) for value, suit in opp_cards]
+                
             simulated_players.append(sim_player)
+
         # Pour évaluer, nous utilisons la méthode evaluate_final_hand du jeu classique.
         game_dummy = PokerGame([])  # On crée un "dummy" dont on fixera le board
         game_dummy.community_cards = [Card(value, suit) for value, suit in self.community_cards]
@@ -322,6 +401,7 @@ class PokerGameOptimized:
             except Exception as e:
                 eval_result = (HandRank.HIGH_CARD, [0])
             hand_evals[player.name] = eval_result
+
         # Détermination des gagnants : on compare (rang de main, puis kickers)
         best_eval = None
         winners = []
@@ -332,6 +412,7 @@ class PokerGameOptimized:
                 winners = [name]
             elif key == best_eval:
                 winners.append(name)
+
         # Calcul du payoff pour chaque joueur : payoff = (part du pot si gagnant) - contribution
         payoffs = {}
         num_winners = len(winners)
@@ -343,6 +424,7 @@ class PokerGameOptimized:
                 payoffs[name] = share - contribution
             else:
                 payoffs[name] = -contribution
+
         return payoffs
 
     def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]]) -> float:
@@ -369,7 +451,7 @@ class PokerGameOptimized:
         instant_win = self.simulate_hand(trajectory_action, rd_missing_community_cards)
         
         # À l'issue du showdown, évaluer et calculer le payoff
-        payoffs = self.evaluate_showdown(instant_win)
+        payoffs = self.evaluate_showdown(instant_win, rd_opponents_cards)
         
         # Le hero est le premier joueur (players_info[0])
         hero_name = self.players_info[0]['name']

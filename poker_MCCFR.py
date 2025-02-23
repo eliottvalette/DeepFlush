@@ -37,21 +37,6 @@ class MCCFRTrainer:
         print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action
-
-    def extract_cards(self, state_vector: np.ndarray) -> List[Tuple[int, str]]:
-        """
-        Extrait les cartes sous forme de tuples (valeur, couleur) à partir d'un vecteur d'état.
-        """
-        cards = []
-        for i in range(0, len(state_vector), 5):  # Chaque carte est codée sur 5 indices
-            if state_vector[i] == -1:
-                continue  # Carte non définie
-            
-            value = int(state_vector[i] * 14 + 2)  # Dénormalisation de la valeur
-            suit = ["♠", "♥", "♦", "♣"][np.argmax(state_vector[i+1:i+5])]
-            cards.append((value, suit))
-        
-        return cards
     
     def get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
@@ -82,15 +67,15 @@ class MCCFRTrainer:
         remaining_deck = self.get_remaining_deck(known_cards)
 
         num_opponents = state_info['num_active_players'] - 1
-        missing_community_cards = 5 - len(state_info["community_cards"])
+        nb_missing_community_cards = 5 - len(state_info["community_cards"])
 
         # Échantillonnage des cartes restantes
-        drawn_cards = rd.sample(remaining_deck, missing_community_cards + 2 * num_opponents)
+        drawn_cards = rd.sample(remaining_deck, nb_missing_community_cards + 2 * num_opponents)
         
-        community_cards = drawn_cards[:missing_community_cards]
-        opponent_hands = [drawn_cards[missing_community_cards + i*2: missing_community_cards + i*2+2] for i in range(num_opponents)]
+        missing_community_cards = drawn_cards[:nb_missing_community_cards]
+        opponent_hands = [drawn_cards[nb_missing_community_cards + i*2: nb_missing_community_cards + i*2+2] for i in range(num_opponents)]
 
-        return opponent_hands, community_cards
+        return opponent_hands, missing_community_cards
 
     def get_self_strategy(self, self_agent, self_state, valid_actions: List[PlayerAction]) -> np.ndarray:
         """

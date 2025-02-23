@@ -1540,35 +1540,48 @@ class PokerGame:
 
         Returns:
             Dict: État simplifié du jeu
+            Les joueurs sont ordonnés selon leurs positions : SB, BB, UTG, HJ, CO, BTN
         """
         current_player = self.players[self.current_player_seat]
         hero_cards = [(card.value, card.suit) for card in current_player.cards]
         community_cards = [(card.value, card.suit) for card in self.community_cards]
         
-        players_info = []
+        # Récupérer les joueurs qui peuvent encore agir
         player_that_can_still_act = [p for p in self.players if not (p.has_folded or p.is_all_in or not p.is_active)]
+        
+        # Créer une liste temporaire avec tous les joueurs et leurs positions
+        players_with_positions = []
         for p in player_that_can_still_act:
-            players_info.append({
+            players_with_positions.append({
                 'name': p.name,
                 'stack': p.stack,
                 'current_player_bet': p.current_player_bet,
-                'is_active' : p.is_active,
+                'is_active': p.is_active,
                 'has_folded': p.has_folded,
                 'is_all_in': p.is_all_in,
-                'role_position': p.role_position,
-                'has_acted': p.has_acted
+                'role_position': p.role_position,  # 0=SB, 1=BB, 2=UTG, 3=HJ, 4=CO, 5=BTN
+                'has_acted': p.has_acted,
+                'seat_position': p.seat_position
             })
+        
+        # Trier les joueurs par position (SB=0, BB=1, UTG=2, etc.)
+        players_info = sorted(players_with_positions, key=lambda x: x['role_position'])
+        
+        # Retirer la seat_position du dictionnaire final car elle n'est pas nécessaire
+        for p in players_info:
+            del p['seat_position']
         
         simple_state = {
             'hero_cards': hero_cards,
             'hero_name': current_player.name,
             'hero_index': current_player.seat_position,
             'community_cards': community_cards,
-            'phase': self.current_phase.value,  # Par exemple "preflop", "flop", etc.
+            'phase': self.current_phase.value,
             'pot': self.main_pot,
-            'current_max_bet': self.current_maximum_bet,
-            'players_info': players_info,
-            'button_seat': self.button_seat_position,
+            'current_maximum_bet': self.current_maximum_bet,
+            'players_info': players_info, 
+            'button_seat_position': self.button_seat_position,
+            'current_player_seat': self.current_player_seat,
             'num_active_players': len(player_that_can_still_act),
             'big_blind': self.big_blind,
             'small_blind': self.small_blind
