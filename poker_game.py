@@ -6,10 +6,14 @@ import torch
 import pygame
 import random as rd
 from enum import Enum
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import pygame.font
 from collections import Counter
 import numpy as np
+from dataclasses import dataclass
+import json
+import datetime
+from dataclasses import asdict
 
 SCREEN_WIDTH = 1400
 SCREEN_HEIGHT = 900
@@ -192,6 +196,45 @@ class SidePot:
         self.contributions_dict = {} # Dictionnaire des contributions de chaque joueur dans le side pot
         self.sum_of_contributions = 0 # Montant total dans le side pot
 
+@dataclass
+class ActionRecord:
+    """
+    Stocke les informations d'une action prise par un joueur
+    """
+    phase: GamePhase
+    state_vector: torch.Tensor
+    player: str  # nom du joueur
+    position: int  # position du joueur (0-5)
+    action_taken: PlayerAction
+
+# Nouvelle fonction d'encodage personnalisée pour JSON
+def custom_json_encoder(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.tolist()  # Conversion du Tensor en liste
+    if isinstance(obj, Enum):
+        return obj.name  # On stocke le nom de l'enum
+    if hasattr(obj, '__dict__'):
+        return obj.__dict__
+    return str(obj)
+
+# Fonction pour sauvegarder l'historique d'une main dans un fichier JSON
+def save_hand_history(actions, hand_number):
+    """
+    Sauvegarde une liste d'ActionRecord dans un fichier JSON.
+    
+    Paramètres:
+      - actions: liste d'instances d'ActionRecord.
+      - hand_number: identifiant ou numéro de la main (pour nommer le fichier).
+    """
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"hand_{hand_number}_{timestamp}.json"
+    with open(filename, 'w', encoding='utf-8') as f:
+        # Utilisation de dataclasses.asdict pour convertir chaque ActionRecord en dict
+        json.dump([asdict(action) for action in actions],
+                  f,
+                  default=custom_json_encoder,
+                  indent=4)
+    print(f"Hand history sauvegardée dans {filename}")
 
 class PokerGame:
     """
@@ -254,6 +297,9 @@ class PokerGame:
         self.pygame_winner_display_duration = 2000  # 2 secondes en millisecondes
         # --------------------
 
+        # Ajouter cette ligne pour stocker l'historique des actions de la main courante
+        self.current_hand_history: List[ActionRecord] = []
+
     def reset(self):
         """
         Réinitialise complètement l'état du jeu pour une nouvelle partie.
@@ -305,11 +351,11 @@ class PokerGame:
 
     def start_new_hand(self):
         """
-        Distribue une nouvelle main sans réinitialiser la partie.
-        
-        Returns:
-            L'état initial du jeu après distribution.
+        Démarre une nouvelle main et réinitialise l'historique.
         """
+        # Nettoyer l'historique de la main précédente
+        self.current_hand_history.clear()
+        
         print('Called start_new_hand')
         # Réinitialiser les variables d'état du jeu
         self.main_pot = 0
@@ -826,6 +872,22 @@ class PokerGame:
         return buttons
 
     def process_action(self, player: Player, action: PlayerAction, bet_amount: Optional[int] = None):
+        """
+        Traite l'action d'un joueur et l'enregistre dans l'historique.
+        """
+        # Enregistrer l'état avant l'action
+        current_state = self.get_state()
+        
+        # Créer un enregistrement de l'action
+        action_record = ActionRecord(
+            phase=self.current_phase,
+            state_vector=current_state.clone().detach(),  # Créer une copie détachée du tenseur
+            player=player.name,
+            position=player.role_position,
+            action_taken=action,
+        )
+        self.current_hand_history.append(action_record)
+
         """
         Traite l'action d'un joueur, met à jour l'état du jeu et gère la progression du tour.
 
@@ -1953,6 +2015,31 @@ class PokerGame:
             pygame.display.flip()
         
         pygame.quit()
+
+    def get_hand_history(self) -> List[ActionRecord]:
+        """
+        Retourne l'historique complet de la main courante.
+        
+        Returns:
+            List[ActionRecord]: Liste des actions enregistrées pour la main courante
+        """
+        return self.current_hand_history
+
+    def print_hand_history(self):
+        """
+        Affiche l'historique de la main courante de manière formatée.
+        """
+        print("\n=== Historique de la main courante ===")
+        for i, record in enumerate(self.current_hand_history, 1):
+            print(f"\nAction {i}:")
+            print(f"Phase: {record.phase.value}")
+            print(f"Joueur: {record.player}")
+            print(f"Position: {record.position}")
+            print(f"Action: {record.action_taken.value}")
+            if record.bet_amount is not None:
+                print(f"Montant: {record.bet_amount}BB")
+            print(f"Timestamp: {record.timestamp}")
+        print("\n=====================================")
 
 class HumanPlayer(Player):
     def __init__(self, agent, name, stack, seat_position):

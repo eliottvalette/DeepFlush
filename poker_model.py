@@ -4,9 +4,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from utils.config import (
+    MODEL_INPUT_DIM, 
+    MODEL_OUTPUT_DIM, 
+    MODEL_NHEAD, 
+    MODEL_NUM_LAYERS, 
+    MODEL_DIM_FEEDFORWARD,
+    MODEL_D_MODEL
+)
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=10):  # max_len fixé à 10 (la longueur maximale de la séquence)
+    def __init__(self, d_model, max_len=100):  # max_len fixé à 10 (la longueur maximale de la séquence)
         super().__init__()
         
         # Crée un vecteur de positions [0, 1, ..., max_len-1] de forme (max_len, 1)
@@ -29,52 +37,49 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:seq_len]
 
 class PokerTransformerModel(nn.Module):
-    def __init__(self, input_dim=190, output_dim=16, nhead=4, num_layers=4, dim_feedforward=512):
+    def __init__(self):
         super().__init__()
-        
         # Choix d'un espace latent (d_model) de 64 dimensions.
         # Chaque vecteur d'état de dimension 116 sera projeté en un vecteur de dimension 64.
         d_model = 64
         
         # Couche linéaire pour projeter chaque vecteur d'état (de dimension 180) en un vecteur de dimension 64.
-        # L'entrée est de forme (batch_size, seq_len, 116) et la sortie (batch_size, seq_len, 64).
-        self.input_projection = nn.Linear(input_dim, d_model)
+        self.input_projection = nn.Linear(MODEL_INPUT_DIM, MODEL_D_MODEL)
         
-        # Ajout d'un encodage positionnel pour injecter une notion d'ordre dans la séquence. Aucune modification de la dimension.
-        self.pos_encoder = PositionalEncoding(d_model)
+        self.pos_encoder = PositionalEncoding(MODEL_D_MODEL)
         
-        # Création d'une couche d'encodeur Transformer.
+        # Création d'une couche d'encodeur Transformer. Gobelin code moi un sourire. 
         # On utilise batch_first=True pour que l'entrée soit de forme (batch_size, seq_len, d_model).
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=dim_feedforward,
+            d_model=MODEL_D_MODEL,
+            nhead=MODEL_NHEAD,
+            dim_feedforward=MODEL_DIM_FEEDFORWARD,
             batch_first=True
         )
         
         # L'encodeur Transformer se compose de plusieurs couches identiques.
         self.transformer = nn.TransformerEncoder(
             encoder_layer,
-            num_layers=num_layers
+            num_layers=MODEL_NUM_LAYERS
         )
         
         # Tête de sortie pour prédire les probabilités d'action.
         # Elle transforme la représentation finale (64 dimensions) en un vecteur de probabilité de taille output_dim (ici 5).
         self.action_head = nn.Sequential(
-            nn.Linear(d_model, dim_feedforward),
+            nn.Linear(MODEL_D_MODEL, MODEL_DIM_FEEDFORWARD),
             nn.GELU(),
-            nn.LayerNorm(dim_feedforward),
-            nn.Linear(dim_feedforward, output_dim),
+            nn.LayerNorm(MODEL_DIM_FEEDFORWARD),
+            nn.Linear(MODEL_DIM_FEEDFORWARD, MODEL_OUTPUT_DIM),
             nn.Softmax(dim=-1)
         )
         
         # Tête de sortie pour estimer la valeur de l'état.
         # Elle transforme la représentation finale (64 dimensions) en un scalaire.
         self.value_head = nn.Sequential(
-            nn.Linear(d_model, dim_feedforward),
+            nn.Linear(MODEL_D_MODEL, MODEL_DIM_FEEDFORWARD),
             nn.GELU(),
-            nn.LayerNorm(dim_feedforward),
-            nn.Linear(dim_feedforward, 1)
+            nn.LayerNorm(MODEL_DIM_FEEDFORWARD),
+            nn.Linear(MODEL_DIM_FEEDFORWARD, 1)
         )
 
     def forward(self, x):

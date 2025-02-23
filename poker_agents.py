@@ -42,8 +42,8 @@ class PokerAgent:
         self.entropy_coeff = entropy_coeff
         self.value_loss_coeff = value_loss_coeff
 
-        # Utilisation du modèle Transformer qui attend une séquence d'inputs
-        self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
+        # Utilisation du modèle Transformer
+        self.model = PokerTransformerModel().to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = deque(maxlen=10000)  # Buffer de replay
         self.temp_memory = [] # Buffer temporaire pour les transitions de l'agent, avant update en backpropagation de la final reward

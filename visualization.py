@@ -151,7 +151,8 @@ class DataCollector:
                 "stack": current_stack_norm * 100,
                 "cards": player_cards
             },
-            "available_actions": available_actions
+            "available_actions": available_actions,
+            "relative_positions": state_vector[6:12]
         }
 
         # On remplace le vector d'état par la version simplifiée
@@ -752,21 +753,19 @@ class Visualizer:
                 
                 first_state = player_states[0]
                 state_vector = first_state["state_vector"]
-                player_cards = state_vector["player_cards"]
+                player_cards = state_vector["current_player"]["cards"]
                 
                 # Récupérer la première et deuxième carte
                 card1 = player_cards[0]
-                card1_value = int(round(card1["value"] * 14 + 2))  # Denormalise la valeur de la première carte
-                card1_suit = card1["suit"].index(1) if 1 in card1["suit"] else -1
+                card1_value = card1["value"]
                 card2 = player_cards[1]
-                card2_value = int(round(card2["value"] * 14 + 2))  # Denormalise la valeur de la deuxième carte
-                card2_suit = card2["suit"].index(1) if 1 in card2["suit"] else -1
+                card2_value = card2["value"]
                 
                 if card1_value < 2 or card2_value < 2:
                     continue
                     
                 try:
-                    # Convertir en indices 0-12 (2->0, A->12)
+                    # Convertir la valeur en indices: 2 devient 0, ..., A devient 12
                     card1_idx = card1_value - 2
                     card2_idx = card2_value - 2
                     
@@ -774,7 +773,7 @@ class Visualizer:
                         # Utiliser le winner déterminé précédemment
                         won = (player == winner)
                         
-                        is_suited = (card1_suit == card2_suit)
+                        is_suited = (card1["suit"] == card2["suit"])
                         
                         if card1_idx != card2_idx:
                             if is_suited:
@@ -884,24 +883,21 @@ class Visualizer:
                 pos_name = positions_list[pos_index]
                 
                 # Extraire les cartes du joueur
-                player_cards = state["state_vector"]["player_cards"]
+                player_cards = state["state_vector"]["current_player"]["cards"]
                 if len(player_cards) != 2:
                     continue
                 
-                # Convertir les cartes en indices
-                card1 = player_cards[0]
-                card2 = player_cards[1]
-                # Dénormaliser les valeurs des cartes
-                card1_value = int(round(card1["value"] * 14 + 2))
-                card2_value = int(round(card2["value"] * 14 + 2))
+                # Extraire les valeurs des cartes directement (les valeurs sont déjà entre 2 et 14)
+                card1_value = player_cards[0]["value"]
+                card2_value = player_cards[1]["value"]
                 
-                # Convertir en indices 0-12 (A=0, K=1, etc.)
+                # Convertir en indices pour la heatmap:
+                # On souhaite que A (14) corresponde à l'indice 0 et 2 corresponde à 12.
                 i1 = 14 - card1_value
                 i2 = 14 - card2_value
                 
                 # Déterminer si suited
-                is_suited = (card1["suit"].index(1) if 1 in card1["suit"] else -1) == \
-                           (card2["suit"].index(1) if 1 in card2["suit"] else -1)
+                is_suited = (player_cards[0]["suit"] == player_cards[1]["suit"])
                 if is_suited:
                     if i1 > i2:
                         i1, i2 = i2, i1
