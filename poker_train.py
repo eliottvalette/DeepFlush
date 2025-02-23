@@ -57,9 +57,9 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
-    initial_state = env.get_state()  # état initial (vecteur de dimension 116)
+    initial_state = env.get_state()  # état initial (vecteur de dimension 180)
 
-    # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
+    # Chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
         state_seq[player.name].append(initial_state)
 
@@ -82,7 +82,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
 
-        # On récupere la sequence d'entat du joueur actuel
+        # On récupere la sequence d'état du joueur actuel
         player_state_seq = state_seq[current_player.name]
         
         # Prédiction de l'action à partir du model en lui passant la sequence des états précédents

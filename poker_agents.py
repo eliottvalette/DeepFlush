@@ -93,7 +93,18 @@ class PokerAgent:
             PlayerAction.CHECK: 1,
             PlayerAction.CALL: 2,
             PlayerAction.RAISE: 3,
-            PlayerAction.ALL_IN: 4
+            PlayerAction.RAISE_25_POT: 4,
+            PlayerAction.RAISE_33_POT: 5,
+            PlayerAction.RAISE_50_POT: 6,
+            PlayerAction.RAISE_66_POT: 7,
+            PlayerAction.RAISE_75_POT: 8,
+            PlayerAction.RAISE_100_POT: 9,
+            PlayerAction.RAISE_125_POT: 10,
+            PlayerAction.RAISE_150_POT: 11,
+            PlayerAction.RAISE_175_POT: 12,
+            PlayerAction.RAISE_2X_POT: 13,
+            PlayerAction.RAISE_3X_POT: 14,
+            PlayerAction.ALL_IN: 15
         }
         valid_indices = [action_map[a] for a in valid_actions]
 
@@ -146,7 +157,18 @@ class PokerAgent:
             PlayerAction.CHECK: 1,
             PlayerAction.CALL: 2,
             PlayerAction.RAISE: 3,
-            PlayerAction.ALL_IN: 4,
+            PlayerAction.RAISE_25_POT: 4,
+            PlayerAction.RAISE_33_POT: 5,
+            PlayerAction.RAISE_50_POT: 6,
+            PlayerAction.RAISE_66_POT: 7,
+            PlayerAction.RAISE_75_POT: 8,
+            PlayerAction.RAISE_100_POT: 9,
+            PlayerAction.RAISE_125_POT: 10,
+            PlayerAction.RAISE_150_POT: 11,
+            PlayerAction.RAISE_175_POT: 12,
+            PlayerAction.RAISE_2X_POT: 13,
+            PlayerAction.RAISE_3X_POT: 14,
+            PlayerAction.ALL_IN: 15,
             None: 0 #  L'action None est mappée au même indice que l'action fold (indice 0). L'action None est utilisée pour traiter le Showdown sans action, sans que cela n'ait d'impact négatif sur l'apprentissage global car elle n'est pas prise en compte dans le calcul des pertes.
         }
         numerical_action = action_map[action]
@@ -267,4 +289,4 @@ class PokerAgent:
 
         except Exception as e:
             print(f"Erreur pendant l'entraînement: {str(e)}")
-            raise e
+            raise RuntimeError(f"Erreur pendant l'entraînement: {str(e)}")

@@ -29,14 +29,14 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:seq_len]
 
 class PokerTransformerModel(nn.Module):
-    def __init__(self, input_dim=116, output_dim=5, nhead=4, num_layers=4, dim_feedforward=512):
+    def __init__(self, input_dim=190, output_dim=16, nhead=4, num_layers=4, dim_feedforward=512):
         super().__init__()
         
         # Choix d'un espace latent (d_model) de 64 dimensions.
         # Chaque vecteur d'état de dimension 116 sera projeté en un vecteur de dimension 64.
         d_model = 64
         
-        # Couche linéaire pour projeter chaque vecteur d'état (de dimension 116) en un vecteur de dimension 64.
+        # Couche linéaire pour projeter chaque vecteur d'état (de dimension 180) en un vecteur de dimension 64.
         # L'entrée est de forme (batch_size, seq_len, 116) et la sortie (batch_size, seq_len, 64).
         self.input_projection = nn.Linear(input_dim, d_model)
         

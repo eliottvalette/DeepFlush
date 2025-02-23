@@ -55,74 +55,106 @@ class DataCollector:
     
     def add_state(self, state_info):
         """
-        Ajoute un état à l'épisode courant avec le vecteur d'état subdivisé.
+        Ajoute un état à l'épisode courant avec le vecteur d'état subdivisé,
+        basé sur la nouvelle structure de l'état.
+
+        Structure de state_vector (indices) :
+          0-4    : Phase de jeu (one-hot : PREFLOP, FLOP, TURN, RIVER, SHOWDOWN)
+          5-11   : Infos du joueur courant (stack normalisé et position one-hot)
+          12-45  : Cartes personnelles (2 cartes, 17 dims/chacune => 34 dims)
+          46-130 : Cartes communes (5 cartes, 17 dims/chacune => 85 dims)
+          131    : Mise actuelle (normalisée par starting_stack)
+          132-173: Infos des joueurs (6 joueurs, 7 dims/chacun => 42 dims)
+          174-189: Actions disponibles (16 dims)
         """
         state_vector = state_info["state_vector"]
-        
-        # Extraire le hand rank du vecteur d'état (indice 35-44 pour le one-hot encoding du rang)
-        hand_rank_vector = state_vector[35:45]
-        hand_rank = hand_rank_vector.index(1) if 1 in hand_rank_vector else 0
-        
-        # Subdiviser le vecteur d'état (basé sur la nouvelle structure)
+        # Si state_vector est un tensor, le convertir en liste
+        if hasattr(state_vector, "tolist"):
+            state_vector = state_vector.tolist()
+
+        # 1. Décodage de la phase de jeu (indices 0 à 4)
+        phases = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"]
+        phase_onehot = state_vector[0:5]
+        phase_idx = phase_onehot.index(1) if 1 in phase_onehot else -1
+        game_phase = phases[phase_idx] if phase_idx != -1 else "Inconnu"
+
+        # 2. Informations du joueur courant (indices 5 à 11)
+        current_stack_norm = state_vector[5]
+        pos_onehot = state_vector[6:12]
+        positions = ["SB", "BB", "UTG", "HJ", "CO", "BTN"]
+        pos_idx = pos_onehot.index(1) if 1 in pos_onehot else -1
+        current_position = positions[pos_idx] if pos_idx != -1 else "Inconnu"
+
+        # 3. Décodage des cartes personnelles (indices 12 à 45 : 2 cartes de 17 dimensions chacune)
+        def decode_card(segment):
+            # segment est une liste de 17 éléments : 13 pour la valeur, 4 pour la couleur.
+            value_part = segment[:13]
+            suit_part = segment[13:]
+            value_idx = value_part.index(1) if 1 in value_part else -1
+            card_value = value_idx + 2 if value_idx != -1 else None
+            suit_symbols = ["♠", "♥", "♦", "♣"]
+            suit_idx = suit_part.index(1) if 1 in suit_part else -1
+            card_suit = suit_symbols[suit_idx] if suit_idx != -1 else None
+            return {"value": card_value, "suit": card_suit}
+
+        player_cards = []
+        for i in range(2):
+            base = 12 + i * 17
+            card_segment = state_vector[base:base+17]
+            player_cards.append(decode_card(card_segment))
+
+        # 4. Décodage des cartes communes (indices 46 à 130 : 5 cartes de 17 dimensions chacune)
+        community_cards = []
+        for i in range(5):
+            base = 46 + i * 17
+            card_segment = state_vector[base:base+17]
+            # Si la partie valeur ne contient aucun 1, la carte est absente.
+            if 1 in card_segment[:13]:
+                community_cards.append(decode_card(card_segment))
+            else:
+                community_cards.append(None)
+
+        # 5. Récupération de la mise actuelle (indice 131)
+        current_max_bet = state_vector[131]
+
+        # 6. Infos sur les joueurs (indices 132 à 173 : 6 joueurs * 7 dims)
+        players_info = []
+        for i in range(6):
+            base = 132 + i * 7
+            player_stack_norm = state_vector[base]
+            pos_vector = state_vector[base+1:base+7]
+            p_idx = pos_vector.index(1) if 1 in pos_vector else -1
+            player_position = positions[p_idx] if p_idx != -1 else "Inconnu"
+            players_info.append({
+                "stack": player_stack_norm * 100,  # dénormalisation (ajuster le facteur si nécessaire)
+                "position": player_position
+            })
+
+        # 7. Actions disponibles (indices 174 à 189)
+        available_actions = state_vector[174:190]
+
         subdivided_full_state = {
-            "player_cards": [
-                {
-                    "value": state_vector[0],  # Valeur normalisée
-                    "suit": state_vector[1:5]  # One-hot encoding de la couleur
-                },
-                {
-                    "value": state_vector[5],  # Valeur normalisée
-                    "suit": state_vector[6:10]  # One-hot encoding de la couleur
-                }
-            ],
-            "community_cards": [
-                {
-                    "value": state_vector[10 + i*5],  # Valeur normalisée
-                    "suit": state_vector[11 + i*5:15 + i*5]  # One-hot encoding de la couleur
-                } for i in range(5)
-            ],
-            "hand_info": {
-                "rank": hand_rank,
-                "kicker": state_vector[45],  # Valeur du kicker normalisée
-                "normalized_rank": state_vector[46]  # Rang normalisé
+            "game_phase": game_phase,
+            "current_player": {
+                "stack": current_stack_norm * 100,  # dénormalisé
+                "position": current_position,
+                "cards": player_cards
             },
-            "game_phase": state_vector[47:52],  # One-hot encoding de la phase
-            "current_max_bet": state_vector[52],  # Mise maximale normalisée
-            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
-            "current_bets": [bet * 100 for bet in state_vector[59:65]],  # Mises actuelles normalisées
-            "player_activity": state_vector[65:71],  # État des joueurs (actif/inactif)
-            "relative_positions": state_vector[71:77],  # Position relative one-hot
-            "available_actions": state_vector[77:82],  # Actions disponibles
-            "previous_actions": [
-                state_vector[82+i*5:87+i*5] for i in range(6)  # One-hot encoding des actions précédentes
-            ],
-            "strategic_info": {
-                "preflop_win_prob": state_vector[112],  # Probabilité de victoire préflop
-                "pot_odds": state_vector[113]  # Cotes du pot
-            },
-            "hand_draw_potential": {
-                "straight_draw": state_vector[114],  # Potentiel de quinte
-                "flush_draw": state_vector[115]  # Potentiel de couleur
-            }
+            "community_cards": community_cards,
+            "current_max_bet": current_max_bet,
+            "players": players_info,
+            "available_actions": available_actions
         }
 
         subdivided_simple_state = {
-            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
-            "current_bets": [bet * 100 for bet in state_vector[59:65]],  # Mises actuelles normalisées
-            "player_cards": [
-                {
-                    "value": state_vector[0],  # Valeur normalisée
-                    "suit": state_vector[1:5]  # One-hot encoding de la couleur
-                },
-                {
-                    "value": state_vector[5],  # Valeur normalisée
-                    "suit": state_vector[6:10]  # One-hot encoding de la couleur
-                }
-            ],
-            "relative_positions": state_vector[71:77],  # Position relative one-hot
+            "current_player": {
+                "stack": current_stack_norm * 100,
+                "cards": player_cards
+            },
+            "available_actions": available_actions
         }
 
-        # Mettre à jour state_info avec le vecteur d'état subdivisé
+        # On remplace le vector d'état par la version simplifiée
         state_info["state_vector"] = subdivided_simple_state
         self.current_episode_states.append(state_info)
     
@@ -313,6 +345,9 @@ class Visualizer:
             for state in episode:
                 if state["action"]:
                     action = state["action"].lower()
+                    # Map any raise variants (e.g. raise-25%, raise-125%, etc.) to a generic "raise"
+                    if action.startswith("raise"):
+                        action = "raise"
                     action_freq[state["player"]][action] += 1
         
         x = np.arange(len(agents))
@@ -361,6 +396,9 @@ class Visualizer:
             for state in episode:
                 if state["action"] and state["phase"].lower() != 'showdown':
                     action = state["action"].lower()
+                    # Map any raise variants (e.g. "raise-125%") to a generic "raise"
+                    if action.startswith("raise"):
+                        action = "raise"
                     phase = state["phase"].lower()
                     phase_action_freq[state["player"]][phase][action] += 1
 
