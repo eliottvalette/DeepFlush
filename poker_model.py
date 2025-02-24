@@ -14,7 +14,7 @@ from utils.config import (
 )
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=100):  # max_len fixé à 10 (la longueur maximale de la séquence)
+    def __init__(self, d_model, max_len=100):  # max_len fixé à 100 (la longueur maximale de la séquence)
         super().__init__()
         
         # Crée un vecteur de positions [0, 1, ..., max_len-1] de forme (max_len, 1)
