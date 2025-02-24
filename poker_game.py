@@ -202,15 +202,25 @@ class PokerGame:
         Stocke les informations d'une action prise par un joueur.
         Fait partie intégrante du jeu de poker.
         """
-        def __init__(self, phase: GamePhase, player: str, position: int, 
-                     stack_of_player_before_the_action: int, action_taken: PlayerAction, 
-                     stack_of_player_after_the_action: int, bet_amount: float = -1):
+        def __init__(self, 
+                     phase: GamePhase, 
+                     player: str, 
+                     position: int, 
+                     stack_of_player_before_the_action: int, 
+                     pot_before_the_action: int, 
+                     action_taken: PlayerAction, 
+                     stack_of_player_after_the_action: int, 
+                     pot_after_the_action: int, 
+                     bet_amount: float = -1):
+            
             self.phase = phase
             self.player = player  # nom du joueur
             self.position = position  # position du joueur (0-5)
             self.stack_of_player_before_the_action = stack_of_player_before_the_action
+            self.pot_before_the_action = pot_before_the_action
             self.action_taken = action_taken
             self.stack_of_player_after_the_action = stack_of_player_after_the_action
+            self.pot_after_the_action = pot_after_the_action
             self.bet_amount = bet_amount  # -1 si fold, sinon le montant misé
 
     def __init__(self, agents):
@@ -852,7 +862,11 @@ class PokerGame:
         # Enregistrer l'état avant l'action
         current_state = self.get_state_hero()
 
+
+        # Variables pour enregistrer l'état avant l'action pour l'historique
+        action_phase = self.current_phase
         start_stack = player.stack
+        pot_before_the_action = self.main_pot
 
         """
         Traite l'action d'un joueur, met à jour l'état du jeu et gère la progression du tour.
@@ -1038,6 +1052,9 @@ class PokerGame:
             player.total_bet += bet_amount  # On ajoute le all-in à la mise totale du joueur
             player.is_all_in = True  # On indique que le joueur est all-in
             print(f"{player.name} a all-in {bet_amount}BB")
+
+
+        pot_after_the_action = self.main_pot
         
         player.has_acted = True
         self.check_phase_completion()
@@ -1059,8 +1076,7 @@ class PokerGame:
         }:
             action_text += f" {bet_amount}BB"
         elif action == PlayerAction.CALL:
-            call_amount = self.current_maximum_bet - player.current_player_bet
-            action_text += f" {call_amount}BB"
+            action_text += f" {history_amount}BB"  # Utiliser history_amount au lieu de call_amount qui n'est pas accessible ici
         
         # Add action to player's history
         self.pygame_action_history[player.name].append(action_text)
@@ -1078,12 +1094,14 @@ class PokerGame:
             amount = bet_amount
         # Créer un enregistrement de l'action en utilisant la classe interne
         action_record = self.ActionRecord(
-            phase=self.current_phase,
+            phase=action_phase,                  
             player=player.name,
             position=player.role_position,
             stack_of_player_before_the_action=start_stack,
+            pot_before_the_action=pot_before_the_action,
             action_taken=action,
             stack_of_player_after_the_action=player.stack,
+            pot_after_the_action=pot_after_the_action,
             bet_amount=amount
         )
         self.current_hand_history.append(action_record)
@@ -1617,10 +1635,10 @@ class PokerGame:
 
         history = self.get_hand_history()
         if not history:
-            return torch.zeros(31)  # Retourne un tenseur vide si pas d'historique
+            return torch.zeros(33)  # Retourne un tenseur vide si pas d'historique
 
-        # 30 lignes : 5 (phase) + 6 (position) + 16 (action) + 2 (stack) + 1 (stack change)
-        history_tensor = torch.zeros(31, len(history))
+        # 30 lignes : 5 (phase) + 6 (position) + 16 (action) + 2 (stack) + 2 (pot) + 1 (stack change)
+        history_tensor = torch.zeros(33, len(history))
 
         # Mapping des phases pour one-hot encoding
         phase_map = {
@@ -1673,9 +1691,15 @@ class PokerGame:
             history_tensor[28, i] = stack_idx
             history_tensor[27, i] = stack_idx_after
 
-            # Stack change (1 dimension, indice 30)
+            # Calcul du changement de pot (2 dimension, indice 30 à 31)
+            pot_idx = action.pot_before_the_action / self.starting_stack
+            pot_idx_after = action.pot_after_the_action / self.starting_stack
+            history_tensor[30, i] = pot_idx
+            history_tensor[31, i] = pot_idx_after
+
+            # Stack change (1 dimension, indice 32)
             stack_change = stack_idx_after - stack_idx
-            history_tensor[30, i] = stack_change
+            history_tensor[32, i] = stack_change
 
         return history_tensor
         
@@ -2139,10 +2163,12 @@ class PokerGame:
             print(f"Phase: {record.phase.value}")
             print(f"Joueur: {record.player}")
             print(f"Position: {record.position}")
-            print(f"Stack avant l'action: {record.stack_of_player_before_the_action}BB")
-            print(f"Stack après l'action: {record.stack_of_player_after_the_action}BB")
             print(f"Action: {record.action_taken.value}")
             print(f"Montant misé: {record.bet_amount if record.bet_amount != -1 else 'FOLD'}BB")
+            print(f"Stack avant l'action: {record.stack_of_player_before_the_action}BB")
+            print(f"Stack après l'action: {record.stack_of_player_after_the_action}BB")
+            print(f"Pot avant l'action: {record.pot_before_the_action}BB")
+            print(f"Pot après l'action: {record.pot_after_the_action}BB")
         print("\n=====================================")
 
 class HumanPlayer(Player):
