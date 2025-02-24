@@ -11,9 +11,6 @@ import pygame.font
 from collections import Counter
 import numpy as np
 from dataclasses import dataclass
-import json
-import datetime
-from dataclasses import asdict
 
 SCREEN_WIDTH = 1400
 SCREEN_HEIGHT = 900
@@ -196,50 +193,23 @@ class SidePot:
         self.contributions_dict = {} # Dictionnaire des contributions de chaque joueur dans le side pot
         self.sum_of_contributions = 0 # Montant total dans le side pot
 
-@dataclass
-class ActionRecord:
-    """
-    Stocke les informations d'une action prise par un joueur
-    """
-    phase: GamePhase
-    state_vector: torch.Tensor
-    player: str  # nom du joueur
-    position: int  # position du joueur (0-5)
-    action_taken: PlayerAction
-
-# Nouvelle fonction d'encodage personnalisée pour JSON
-def custom_json_encoder(obj):
-    if isinstance(obj, torch.Tensor):
-        return obj.tolist()  # Conversion du Tensor en liste
-    if isinstance(obj, Enum):
-        return obj.name  # On stocke le nom de l'enum
-    if hasattr(obj, '__dict__'):
-        return obj.__dict__
-    return str(obj)
-
-# Fonction pour sauvegarder l'historique d'une main dans un fichier JSON
-def save_hand_history(actions, hand_number):
-    """
-    Sauvegarde une liste d'ActionRecord dans un fichier JSON.
-    
-    Paramètres:
-      - actions: liste d'instances d'ActionRecord.
-      - hand_number: identifiant ou numéro de la main (pour nommer le fichier).
-    """
-    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"hand_{hand_number}_{timestamp}.json"
-    with open(filename, 'w', encoding='utf-8') as f:
-        # Utilisation de dataclasses.asdict pour convertir chaque ActionRecord en dict
-        json.dump([asdict(action) for action in actions],
-                  f,
-                  default=custom_json_encoder,
-                  indent=4)
-    print(f"Hand history sauvegardée dans {filename}")
-
 class PokerGame:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
+    class ActionRecord:
+        """
+        Stocke les informations d'une action prise par un joueur.
+        Fait partie intégrante du jeu de poker.
+        """
+        def __init__(self, phase: GamePhase, player: str, position: int, stack_of_player_before_the_action: int, action_taken: PlayerAction, stack_of_player_after_the_action: int):
+            self.phase = phase
+            self.player = player  # nom du joueur
+            self.position = position  # position du joueur (0-5)
+            self.stack_of_player_before_the_action = stack_of_player_before_the_action
+            self.action_taken = action_taken
+            self.stack_of_player_after_the_action = stack_of_player_after_the_action
+
     def __init__(self, agents):
         """
         Initialise la partie de poker avec les joueurs et les blindes.
@@ -298,7 +268,7 @@ class PokerGame:
         # --------------------
 
         # Ajouter cette ligne pour stocker l'historique des actions de la main courante
-        self.current_hand_history: List[ActionRecord] = []
+        self.current_hand_history: List[PokerGame.ActionRecord] = []
 
     def reset(self):
         """
@@ -347,7 +317,7 @@ class PokerGame:
         self.start_new_hand()
         self._update_button_states()
         
-        return self.get_state()
+        return self.get_state_hero()
 
     def start_new_hand(self):
         """
@@ -470,7 +440,7 @@ class PokerGame:
             else :
                 print(f"{p.name}: seat={p.seat_position}, role=(inactive), stack={p.stack}")
 
-        return self.get_state()
+        return self.get_state_hero()
 
     def _initialize_players(self, agents) -> List[Player]:
         """
@@ -876,17 +846,9 @@ class PokerGame:
         Traite l'action d'un joueur et l'enregistre dans l'historique.
         """
         # Enregistrer l'état avant l'action
-        current_state = self.get_state()
-        
-        # Créer un enregistrement de l'action
-        action_record = ActionRecord(
-            phase=self.current_phase,
-            state_vector=current_state.clone().detach(),  # Créer une copie détachée du tenseur
-            player=player.name,
-            position=player.role_position,
-            action_taken=action,
-        )
-        self.current_hand_history.append(action_record)
+        current_state = self.get_state_hero()
+
+        start_stack = player.stack
 
         """
         Traite l'action d'un joueur, met à jour l'état du jeu et gère la progression du tour.
@@ -1099,6 +1061,18 @@ class PokerGame:
         # Keep only last 5 actions per player
         if len(self.pygame_action_history[player.name]) > 5:
             self.pygame_action_history[player.name].pop(0)
+
+
+        # Créer un enregistrement de l'action en utilisant la classe interne
+        action_record = self.ActionRecord(
+            phase=self.current_phase,
+            player=player.name,
+            position=player.role_position,
+            stack_of_player_before_the_action=start_stack,
+            action_taken=action,
+            stack_of_player_after_the_action=player.stack,
+        )
+        self.current_hand_history.append(action_record)
         
         return action
 
@@ -1215,6 +1189,7 @@ class PokerGame:
         """
         Gère la phase de showdown en tenant compte correctement des side pots.
         """
+        print(self.print_hand_history())
         print("\n=== DÉBUT SHOWDOWN ===")
         self.current_phase = GamePhase.SHOWDOWN
         # On considère ici TOUS les joueurs qui ont contribué (même s'ils ont foldé)
@@ -1440,11 +1415,49 @@ class PokerGame:
         return side_pots
 
     
-    def get_state(self):
+    def get_state_hero(self):
         """
+        Retourne l'état du jeu du point de vue du joueur courant sous forme d'un tenseur.
         
+        Le tenseur d'état contient 190 dimensions réparties comme suit :
+
+        1. Phase de jeu [0-4] :
+            - One-hot encoding sur 5 dimensions (PREFLOP, FLOP, TURN, RIVER, SHOWDOWN)
+        
+        2. Stack et position du joueur courant [5-11] :
+            - Stack normalisé (divisé par le stack initial) [5]
+            - Position one-hot sur 6 dimensions (SB, BB, UTG, HJ, CO, BTN) [6-11]
+        
+        3. Cartes personnelles [12-45] :
+            - 2 cartes × 17 dimensions par carte = 34 dimensions
+            - Pour chaque carte :
+                - Valeur one-hot (2-14) sur 13 dimensions
+                - Couleur one-hot (♠,♥,♦,♣) sur 4 dimensions
+        
+        4. Cartes communes [46-130] :
+            - 5 cartes × 17 dimensions par carte = 85 dimensions
+            - Pour chaque carte :
+                - Valeur one-hot (2-14) sur 13 dimensions
+                - Couleur one-hot (♠,♥,♦,♣) sur 4 dimensions
+        
+        5. Mise maximale actuelle [131] :
+            - Valeur normalisée (divisée par le stack initial)
+        
+        6. Informations sur les autres joueurs [132-173] :
+            - 6 joueurs × 7 dimensions = 42 dimensions
+            - Pour chaque joueur :
+                - Stack normalisé [0]
+                - Position one-hot sur 6 dimensions [1-6]
+                - Si joueur inactif/fold : -1 sur toutes les dimensions
+                - Si joueur courant : 0 sur toutes les dimensions
+        
+        7. Actions disponibles [174-189] :
+            - 16 dimensions (une par action possible)
+            - 1 si l'action est disponible
+            - -1 si l'action est indisponible
+
         Returns:
-            torch.Tensor
+            torch.Tensor: Tenseur de dimension 190 représentant l'état complet du jeu
         """
         current_player = self.players[self.current_player_seat]
 
@@ -1526,33 +1539,24 @@ class PokerGame:
         state = torch.cat((info_phase, info_stack, info_cards, info_community_cards, actual_bet, info_players, info_actions))
         return state
 
-    def get_final_state(self, previous_state, final_stacks):
+    def get_final_state_hero(self, previous_state, final_stacks):
         """
-        Reconstruit l'Etat final de la main pour get_state_2.
+        Reconstruit l'Etat final de la main pour get_state_hero.
 
-        Cette méthode procède de la même manière que get_final_state,
-        mais en s'adaptant à la structure de get_state_2 qui est composée de :
-        
-          - info_phase  (5 dimensions, indices 0-4)
-          - info_stack  (7 dimensions, indices 5-11)
-          - info_cards  (34 dimensions, indices 12-45)
-          - info_community_cards (85 dimensions, indices 46-130)
-          - actual_bet  (1 dimension, indice 131)
-          - info_players (42 dimensions, indices 132-173) -> 7 dims par joueur (la première correspond au stack)
-          - info_actions (15 dimensions, indices 174-188)
+        Cette méthode prend l'état précédent et les stacks finaux pour construire un état 
+        représentant la fin de la main. Les modifications suivantes sont appliquées :
 
-        Les modifications appliquées sont :
-          1. Mettre à jour la phase de jeu en SHOWDOWN : [0, 0, 0, 0, 1].
-          2. Mettre l'actual_bet (indice 131) à 0.
-          3. Mettre à jour, dans info_players, le stack de chaque joueur avec sa valeur finale (la première des 7 dimensions).
-          4. Désactiver toutes les actions disponibles en assignant -1 à info_actions.
+        1. Phase de jeu : Mise à jour vers SHOWDOWN [0, 0, 0, 0, 1]
+        2. Mise actuelle : Remise à zéro car la main est terminée
+        3. Stacks des joueurs : Mise à jour avec les valeurs finales (normalisées par le stack initial)
+        4. Actions disponibles : Toutes désactivées (-1) car la main est terminée
 
         Args:
-            previous_state (torch.Tensor): Etat du jeu obtenu via get_state_2.
-            final_stacks (dict): Dictionnaire final des stacks des joueurs.
+            previous_state (torch.Tensor): État précédent du jeu obtenu via get_state_hero
+            final_stacks (dict): Dictionnaire {nom_joueur: stack_final} contenant les stacks finaux
 
         Returns:
-            torch.Tensor: Etat final modifié pour la fin de la main (version get_state_2).
+            torch.Tensor: Etat final modifié pour la fin de la main (version get_state).
         """
         final_state = previous_state.clone()
 
@@ -1571,7 +1575,90 @@ class PokerGame:
         # 4. Désactiver toutes les actions disponibles (info_actions aux indices 174 à 189)
         final_state[174:189] = 0
 
-        return final_state    
+        return final_state
+
+    def get_tokenized_history(self) -> torch.Tensor:
+        """
+        Convertit l'historique des actions de la main courante en une représentation tensorielle.
+        
+        Cette méthode crée un tenseur de dimensions (30, N) où :
+        - 30 est le nombre de caractéristiques pour chaque action
+        - N est le nombre d'actions dans l'historique
+        
+        Les 30 caractéristiques sont réparties comme suit :
+        - [0:5]   : Phase du jeu (one-hot) [PREFLOP, FLOP, TURN, RIVER, SHOWDOWN]
+        - [5:11]  : Position du joueur (one-hot) [SB, BB, UTG, HJ, CO, BTN]
+        - [11:27] : Action prise (one-hot) [FOLD, CHECK, CALL, RAISE, ALL_IN, RAISE_25_POT, ..., RAISE_3X_POT]
+        - [27:29] : Stack du joueur [avant l'action, après l'action] (normalisé par le stack initial)
+        - [29]    : Variation du stack (différence entre avant et après l'action)
+
+        Returns:
+            torch.Tensor: Un tenseur de dimensions (30, N) si l'historique existe,
+                         ou un tenseur de zéros de dimension (30,) si l'historique est vide.
+                         N est le nombre d'actions dans l'historique.
+        """
+
+        history = self.get_hand_history()
+        if not history:
+            return torch.zeros(30)  # Retourne un tenseur vide si pas d'historique
+
+        # 30 lignes : 5 (phase) + 6 (position) + 16 (action) + 2 (stack) + 1 (stack change)
+        history_tensor = torch.zeros(30, len(history))
+
+        # Mapping des phases pour one-hot encoding
+        phase_map = {
+            GamePhase.PREFLOP: 0,
+            GamePhase.FLOP: 1, 
+            GamePhase.TURN: 2,
+            GamePhase.RIVER: 3,
+            GamePhase.SHOWDOWN: 4
+        }
+
+        # Mapping des actions pour encoding
+        action_map = {
+            PlayerAction.FOLD: 0,
+            PlayerAction.CHECK: 1,
+            PlayerAction.CALL: 2,
+            PlayerAction.RAISE: 3,
+            PlayerAction.ALL_IN: 4,
+            PlayerAction.RAISE_25_POT: 5,
+            PlayerAction.RAISE_33_POT: 6,
+            PlayerAction.RAISE_50_POT: 7,
+            PlayerAction.RAISE_66_POT: 8,
+            PlayerAction.RAISE_75_POT: 9,
+            PlayerAction.RAISE_100_POT: 10,
+            PlayerAction.RAISE_125_POT: 11,
+            PlayerAction.RAISE_150_POT: 12,
+            PlayerAction.RAISE_175_POT: 13,
+            PlayerAction.RAISE_2X_POT: 14,
+            PlayerAction.RAISE_3X_POT: 15
+        }
+
+        for i, action in enumerate(history):
+            # One-hot encoding pour la phase (5 dimensions, indices 0 à 4)
+            phase_idx = phase_map[action.phase]
+            history_tensor[phase_idx, i] = 1
+
+            # One-hot encoding de la position du joueur (6 dimensions, indices 5 à 10)
+            position_idx = action.position
+            history_tensor[position_idx + 5, i] = 1
+
+            # One-hot encoding pour l'action (16 dimensions, indices 11 à 26)
+            action_idx = action_map[action.action_taken]
+            history_tensor[action_idx + 11, i] = 1
+
+            # Calcul du changement de stack (2 dimension, indice 27 à 28)
+            stack_idx = action.stack_of_player_before_the_action / self.starting_stack
+            stack_idx_after = action.stack_of_player_after_the_action / self.starting_stack
+            history_tensor[27, i] = stack_idx
+            history_tensor[28, i] = stack_idx_after
+
+            # Stack change (1 dimension, indice 29)
+            stack_change = stack_idx_after - stack_idx
+            history_tensor[29, i] = stack_change
+
+        return history_tensor
+        
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
         """
@@ -1587,12 +1674,9 @@ class PokerGame:
         bet_amount = None
         reward = 0.0
 
-
-            
-
         # Traiter l'action (met à jour l'état du jeu)
         action = self.process_action(current_player, action)
-        next_state = self.get_state()
+        next_state = self.get_state_hero()
 
         return next_state, reward
 
@@ -1914,7 +1998,7 @@ class PokerGame:
                     if event.key == pygame.K_c:
                         print(self.players)
                     if event.key == pygame.K_s:
-                        state = self.get_state()
+                        state = self.get_state_hero()
                         print('\n=== État actuel du jeu ===')
                         
                         # Affichage complet du state pour vérifier toutes les informations (par ex. si les cartes sont suited ou non)
@@ -2035,10 +2119,9 @@ class PokerGame:
             print(f"Phase: {record.phase.value}")
             print(f"Joueur: {record.player}")
             print(f"Position: {record.position}")
+            print(f"Stack avant l'action: {record.stack_of_player_before_the_action}BB")
+            print(f"Stack après l'action: {record.stack_of_player_after_the_action}BB")
             print(f"Action: {record.action_taken.value}")
-            if record.bet_amount is not None:
-                print(f"Montant: {record.bet_amount}BB")
-            print(f"Timestamp: {record.timestamp}")
         print("\n=====================================")
 
 class HumanPlayer(Player):
@@ -2051,6 +2134,7 @@ class HumanPlayer(Player):
 if __name__ == "__main__":
     human_players_list = []
     for i in range(6):
+        # Ici, le premier argument (agent) est None
         human_players_list.append(HumanPlayer(None, f"Player_{i}", 100, i))
     game = PokerGame(human_players_list)
     game.reset()

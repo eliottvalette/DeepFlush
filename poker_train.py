@@ -7,7 +7,7 @@ import pygame
 import torch
 from visualization import DataCollector
 from poker_agents import PokerAgent
-from poker_game import PokerGame, GamePhase, PlayerAction
+from poker_game import PokerGame, GamePhase, PlayerAction, ActionRecord
 from typing import List, Tuple
 import json
 from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL
@@ -57,7 +57,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
-    initial_state = env.get_state()  # état initial (vecteur de dimension 180)
+    initial_state = env.get_state_hero()  # état initial (vecteur de dimension 180)
 
     # Chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
@@ -125,7 +125,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
             previous_player_state_seq = state_seq[current_player.name].copy()
             penultimate_state = previous_player_state_seq[-1]
-            final_state = env.get_final_state(penultimate_state, env.final_stacks)
+            final_state = env.get_final_state_hero(penultimate_state, env.final_stacks)
             actions_taken[env.players[env.current_player_seat].name].append(action_chosen)
 
             # On ajoute le nouvel état à la fin de la séquence (car dans ce cas, c'est un state issu d'une action)
@@ -201,7 +201,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # Récupération de l'état final
         player_state_seq = state_seq[player.name]
         penultimate_state = player_state_seq[-1]
-        final_state = env.get_final_state(penultimate_state, env.final_stacks)
+        final_state = env.get_final_state_hero(penultimate_state, env.final_stacks)
         # Stocker l'expérience finale pour la collecte des métriques
         current_player_name = player.name
         state_info = {
