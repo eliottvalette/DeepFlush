@@ -90,10 +90,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         if env.current_phase != GamePhase.PREFLOP: 
             # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
-            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions)
-        
+            simple_state = env.get_simple_state()
+            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, simple_state)
         else:
-            target_vector = [0.2, 0.2, 0.2, 0.2, 0.2] # A modifier
+            # Use uniform distribution for preflop and showdown
+            target_vector = [1.0/len(valid_actions)] * len(PlayerAction)
 
         # Exécuter l'action dans l'environnement
         next_state, _ = env.step(action_chosen)
@@ -211,7 +212,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(game = env, num_simulations = 100)
+    mccfr_trainer = MCCFRTrainer(num_simulations = 100)
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon

@@ -6,12 +6,12 @@ from typing import List, Tuple, Dict
 from collections import Counter
 
 class PokerGameOptimized:
-    def __init__(self, game: PokerGame):
+    def __init__(self, simple_state):
         """
         Initialise la simulation optimisée à partir de l'état simplifié du jeu classique.
         On s'appuie sur get_simple_state() pour récupérer les informations essentielles.
         """
-        self.simple_state = game.get_simple_state()
+        self.simple_state = simple_state
         self.current_phase = self.simple_state['phase']
         self.pot = self.simple_state['pot']
         self.current_maximum_bet = self.simple_state['current_maximum_bet']
@@ -30,6 +30,10 @@ class PokerGameOptimized:
 
         # Ajouter un index pour suivre le joueur actuel
         self.current_player_idx = self.simple_state['hero_index']
+
+        # rd_opponents_cards et rd_missing_community_cards initialisés à vide
+        self.rd_opponents_cards = []
+        self.rd_missing_community_cards = []
 
     def _get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
@@ -166,37 +170,24 @@ class PokerGameOptimized:
         player_info['has_acted'] = True
 
     def betting_round(self, hero_trajectory_action: PlayerAction) -> None:
-        """
-        Simule un round de pari complet.
-        """
         print("\n--- Début betting_round ---")
         print(f"Phase: {self.current_phase}")
         print(f"Index joueur actuel: {self.current_player_idx}")
         
-        # Réinitialiser has_acted
+        # Réinitialiser has_acted pour les joueurs actifs non all-in
         for player_info in self.players_info:
             if not (player_info['has_folded'] or player_info['is_all_in']):
                 player_info['has_acted'] = False
         
         iteration = 0
-        while iteration < 50:  # Add reasonable max iterations
+        while iteration < 50:
             print(f"\nItération {iteration} de betting_round")
             
             # Vérifier si le round est terminé
-            phase_completed = True
-            in_game_players = [p for p in self.players_info if not (p['has_folded'] or p['is_all_in'])]
+            in_game_players = [p for p in self.players_info if not p['has_folded']]
             print(f"Joueurs en jeu: {[p['name'] for p in in_game_players]}")
-            
-            for player_info in in_game_players:
-                if not player_info['has_acted'] or (
-                    player_info['current_player_bet'] < self.current_maximum_bet and not player_info['is_all_in']
-                ):
-                    phase_completed = False
-                    break
-            
-            if phase_completed:
-                print("Round de paris terminé")
-                break
+            if not in_game_players:
+                raise ValueError("WARNING: Aucun joueur en jeu!")
             
             # Faire agir le joueur courant
             player_info = self.players_info[self.current_player_idx]
@@ -208,12 +199,10 @@ class PokerGameOptimized:
             if not (player_info['has_folded'] or player_info['is_all_in']):
                 valid_actions = self.get_valid_actions(player_info)
                 print(f"Actions valides: {[a.value for a in valid_actions]}")
-                
                 if valid_actions:
                     is_hero = (player_info['name'] == self.simple_state['hero_name'])
                     if is_hero:
                         chosen_action = hero_trajectory_action
-                        # Validate hero's action is valid
                         if chosen_action not in valid_actions:
                             print(f"Warning: Hero's chosen action {chosen_action} not valid, choosing random valid action")
                             chosen_action = rd.choice(valid_actions)
@@ -221,6 +210,12 @@ class PokerGameOptimized:
                         chosen_action = rd.choice(valid_actions)
                     print(f"Action choisie: {chosen_action}")
                     self.simulate_action(player_info, chosen_action)
+            
+            # ***** NEW: Check if the betting round should end *****
+            phase_completed, _ = self.check_phase_completion()
+            if phase_completed:
+                print("Betting round completed, breaking out of loop.")
+                break
             
             # Passer au joueur suivant
             self.current_player_idx = (self.current_player_idx + 1) % self.num_players
@@ -237,8 +232,7 @@ class PokerGameOptimized:
             for p in self.players_info:
                 print(f"Player {p['name']}: bet={p['current_player_bet']}, folded={p['has_folded']}, all_in={p['is_all_in']}, has_acted={p['has_acted']}")
             raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans betting_round!")
-        
-        print("--- Fin betting_round ---\n")
+
 
     def check_phase_completion(self):
         """
@@ -278,30 +272,30 @@ class PokerGameOptimized:
         
         return phase_completed, False
 
-    def advance_phase(self, rd_missing_community_cards: List[Tuple[int, str]]) -> None:
+    def advance_phase(self) -> None:
         """
         Fait évoluer la phase du jeu en complétant le board selon la phase.
         """
         print("\n--- Début advance_phase ---")
         print(f"Phase actuelle: {self.current_phase}")
         print(f"Cartes communes actuelles: {self.community_cards}")
-        print(f"Cartes à ajouter: {rd_missing_community_cards}")
+        print(f"Cartes à ajouter: {self.rd_missing_community_cards}")
 
         # Progression des phases et distribution des cartes
         if self.current_phase == GamePhase.PREFLOP:
             # Au flop, on ajoute 3 cartes
-            self.community_cards.extend(rd_missing_community_cards[:3])
-            del rd_missing_community_cards[:3]
+            self.community_cards.extend(self.rd_missing_community_cards[:3])
+            del self.rd_missing_community_cards[:3]
             self.current_phase = GamePhase.FLOP
         elif self.current_phase == GamePhase.FLOP:
             # Au turn, on ajoute 1 carte
-            self.community_cards.append(rd_missing_community_cards[0])
-            del rd_missing_community_cards[0]
+            self.community_cards.append(self.rd_missing_community_cards[0])
+            del self.rd_missing_community_cards[0]
             self.current_phase = GamePhase.TURN
         elif self.current_phase == GamePhase.TURN:
             # À la river, on ajoute 1 carte
-            self.community_cards.append(rd_missing_community_cards[0])
-            del rd_missing_community_cards[0]
+            self.community_cards.append(self.rd_missing_community_cards[0])
+            del self.rd_missing_community_cards[0]
             self.current_phase = GamePhase.RIVER
         elif self.current_phase == GamePhase.RIVER:
             self.current_phase = GamePhase.SHOWDOWN
@@ -330,13 +324,13 @@ class PokerGameOptimized:
 
         print("--- Fin advance_phase ---\n")
 
-    def simulate_hand(self, hero_trajectory_action: PlayerAction, rd_missing_community_cards: List[Tuple[int, str]]) -> None:
+    def simulate_hand(self, hero_trajectory_action: PlayerAction, valid_actions: List[PlayerAction]) -> None:
         """
         Simule la suite de la main depuis l'état actuel jusqu'au showdown.
         """
         print("\n=== Début simulate_hand ===")
         print(f"Phase initiale: {self.current_phase}")
-        print(f"Action héros: {hero_trajectory_action}")
+        print(f"Action de la trajectoire: {hero_trajectory_action} parmi les actions à parcourir {[action.value for action in valid_actions]}")
         
         # Ne pas simuler si déjà au showdown
         if self.current_phase == GamePhase.SHOWDOWN:
@@ -363,7 +357,7 @@ class PokerGameOptimized:
                 break
             elif phase_completed:
                 print(f"Phase {self.current_phase} terminée - passage à la phase suivante")
-                self.advance_phase(rd_missing_community_cards)
+                self.advance_phase()
                 print(f"Nouvelle phase: {self.current_phase}")
                 current_hero_action = None
             
@@ -374,13 +368,12 @@ class PokerGameOptimized:
         print("=== Fin simulate_hand ===\n")
         return instant_win
 
-    def evaluate_showdown(self, instant_win: bool, rd_opponents_cards: List[List[Tuple[int, str]]]) -> Dict[str, float]:
+    def evaluate_showdown(self, instant_win: bool) -> Dict[str, float]:
         """
         Évalue les mains des joueurs et distribue le pot.
         
         Args:
             instant_win (bool): True si un seul joueur reste en jeu (les autres ont fold)
-            rd_opponents_cards (List[List[Tuple[int, str]]]): Liste des mains aléatoires pour chaque adversaire
             
         Returns:
             Dict[str, float]: Dictionnaire {nom_joueur: gain/perte}
@@ -424,7 +417,7 @@ class PokerGameOptimized:
             if player_info['name'] == self.simple_state['hero_name']:
                 player_data['cards'] = self.hero_cards
             else:
-                player_data['cards'] = rd_opponents_cards[opponent_idx]
+                player_data['cards'] = self.rd_opponents_cards[opponent_idx]
                 opponent_idx += 1
                 
             active_players.append(player_data)
@@ -460,19 +453,22 @@ class PokerGameOptimized:
 
         return payoffs
 
-    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]]) -> float:
+    def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]], valid_actions: List[PlayerAction]) -> float:
         """
         Simule une trajectoire complète et retourne le payoff pour le héros.
         """
-        # Si déjà au showdown, retourner 0 (pas de simulation possible)
+        self.rd_missing_community_cards = rd_missing_community_cards.copy()
+        self.rd_opponents_cards = rd_opponents_cards.copy()
+
+        # Si déjà au showdown, on relève une erreur
         if self.current_phase == GamePhase.SHOWDOWN:
-            return 0.0
+            raise ValueError("Erreur: Déjà au showdown - pas de simulation possible")
         
         # Simuler la main
-        instant_win = self.simulate_hand(trajectory_action, rd_missing_community_cards)
+        instant_win = self.simulate_hand(trajectory_action, valid_actions)
         
         # À l'issue du showdown, évaluer et calculer le payoff
-        payoffs = self.evaluate_showdown(instant_win, rd_opponents_cards)
+        payoffs = self.evaluate_showdown(instant_win)
         return payoffs[self.simple_state['hero_name']]
 
     def _evaluate_hand(self, cards: List[Tuple[int, str]]) -> Tuple[HandRank, List[int]]:

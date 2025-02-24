@@ -12,25 +12,26 @@ class MCCFRTrainer:
     pour l'apprentissage de stratégies GTO au poker.
     """
     
-    def __init__(self, game: PokerGame, num_simulations: int = 10):
-        self.non_optimized_game = game
+    def __init__(self, num_simulations: int = 10):
         self.num_simulations = num_simulations
 
-    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
+    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], simple_game_state) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
         self.payoff_per_trajectory_action = defaultdict(float)
-        self.replicated_game = PokerGameOptimized(self.non_optimized_game)
-        simple_game_state = self.non_optimized_game.get_simple_state()
+        
         for _ in range(self.num_simulations):
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(simple_game_state)
             for trajectory_action in valid_actions:
-                payoff = self.replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards)
-                self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations # Moyenne des payoffs
+                # Créer une nouvelle instance pour chaque trajectoire
+                replicated_game = PokerGameOptimized(simple_game_state)
+                payoff = replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
+                self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
+
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
-
+        
         print('----------------------------------')
         print('target_vector :', target_vector)
         print('self.payoff_per_trajectory_action :', self.payoff_per_trajectory_action)
