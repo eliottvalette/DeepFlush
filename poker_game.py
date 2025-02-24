@@ -524,7 +524,7 @@ class PokerGame:
             self.main_pot += self.small_blind  # Le pot est augmenté de la SB
             self.players[sb_seat_position].total_bet = self.small_blind
             self.players[sb_seat_position].current_player_bet = self.small_blind
-            self.players[sb_seat_position].has_acted = True
+            self.players[sb_seat_position].has_acted = True 
 
         self.current_maximum_bet = self.small_blind
         self._next_player()
@@ -542,7 +542,8 @@ class PokerGame:
             self.main_pot += self.big_blind  # Le pot est augmenté de la BB
             self.players[bb_seat_position].total_bet = self.big_blind
             self.players[bb_seat_position].current_player_bet = self.big_blind
-            self.players[bb_seat_position].has_acted = True
+            # Modification : ne pas marquer la BB comme ayant déjà agi au preflop comme ça si tout le monde a juste call, elle peut checker pour voir le flop ou raise
+            self.players[bb_seat_position].has_acted = False
         
         self.current_maximum_bet = self.big_blind
         self._next_player()
