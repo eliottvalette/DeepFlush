@@ -88,9 +88,13 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # Prédiction avec une inférence de classique du model
         action_chosen, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions)
 
-        # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
-        target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions)
+        if env.current_phase != GamePhase.PREFLOP: 
+            # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
+            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions)
         
+        else:
+            target_vector = [0.2, 0.2, 0.2, 0.2, 0.2] # A modifier
+
         # Exécuter l'action dans l'environnement
         next_state, _ = env.step(action_chosen)
         

@@ -3,6 +3,7 @@ from poker_game import PlayerAction, PokerGame, HandRank, Card, Player, GamePhas
 import random as rd
 import numpy as np
 from typing import List, Tuple, Dict
+from collections import Counter
 
 class PokerGameOptimized:
     def __init__(self, game: PokerGame):
@@ -11,27 +12,24 @@ class PokerGameOptimized:
         On s'appuie sur get_simple_state() pour récupérer les informations essentielles.
         """
         self.simple_state = game.get_simple_state()
-        self.current_phase = self.simple_state['phase']  # ex: GamePhase.PREFLOP
+        self.current_phase = self.simple_state['phase']
         self.pot = self.simple_state['pot']
         self.current_maximum_bet = self.simple_state['current_maximum_bet']
         self.hero_cards = self.simple_state['hero_cards']
         self.community_cards = self.simple_state['community_cards'].copy()
-        self.players_info = self.simple_state['players_info']  # liste de dicts pour chaque joueur
+        self.players_info = self.simple_state['players_info']
         self.num_active_players = self.simple_state['num_active_players']
         self.contributions = {player['name']: player['current_player_bet'] for player in self.players_info}
         self.bet_unit = self.current_maximum_bet if self.current_maximum_bet > 0 else 1
         self.number_raise_this_game_phase = 0
-    
+
         # Ajout des attributs manquants
         self.button_seat_position = self.simple_state['button_seat_position']
         self.current_player_seat = self.simple_state['current_player_seat']
         self.num_players = len(self.players_info)
-        self.players = [Player(None, info['name'], info['player_stack'], info['seat_position']) 
-                       for info in self.players_info]
 
-        # Initialisation du deck avec les cartes connues
-        known_cards = self.hero_cards + self.community_cards
-        self.deck = self._get_remaining_deck(known_cards)
+        # Ajouter un index pour suivre le joueur actuel
+        self.current_player_idx = self.simple_state['hero_index']
 
     def _get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
@@ -123,7 +121,10 @@ class PokerGameOptimized:
             player_info['has_folded'] = True
 
         elif action == PlayerAction.CHECK:
-            # Aucune modification.
+            # Add validation to prevent invalid CHECK actions
+            if player_info['current_player_bet'] < self.current_maximum_bet:
+                raise ValueError(f"Invalid CHECK action - player must match current bet of {self.current_maximum_bet}")
+            # No modification for check
             pass
 
         elif action == PlayerAction.CALL:
@@ -166,261 +167,293 @@ class PokerGameOptimized:
 
     def betting_round(self, hero_trajectory_action: PlayerAction) -> None:
         """
-        Simule un round de pari dans lequel chaque joueur actif agit jusqu'à ce que le tour soit terminé.
-        Pour le joueur cible (hero), on force l'action passée en paramètre ;
-        pour les autres, l'action est choisie aléatoirement parmi les actions valides.
-        Le round continue jusqu'à ce que tous les joueurs aient égalisé la mise maximale ou soient all-in/fold.
+        Simule un round de pari complet.
         """
-        # Réinitialiser has_acted pour tous les joueurs actifs au début du round
+        print("\n--- Début betting_round ---")
+        print(f"Phase: {self.current_phase}")
+        print(f"Index joueur actuel: {self.current_player_idx}")
+        
+        # Réinitialiser has_acted
         for player_info in self.players_info:
             if not (player_info['has_folded'] or player_info['is_all_in']):
                 player_info['has_acted'] = False
-
-        # Continuer tant que le round n'est pas terminé
-        while True:
+        
+        iteration = 0
+        while iteration < 50:  # Add reasonable max iterations
+            print(f"\nItération {iteration} de betting_round")
+            
             # Vérifier si le round est terminé
             phase_completed = True
             in_game_players = [p for p in self.players_info if not (p['has_folded'] or p['is_all_in'])]
+            print(f"Joueurs en jeu: {[p['name'] for p in in_game_players]}")
             
             for player_info in in_game_players:
-                # Si le joueur n'a pas encore agi dans la phase, le round n'est pas terminé
-                if not player_info['has_acted']:
+                if not player_info['has_acted'] or (
+                    player_info['current_player_bet'] < self.current_maximum_bet and not player_info['is_all_in']
+                ):
                     phase_completed = False
                     break
-                # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le round n'est pas terminé
-                if player_info['current_player_bet'] < self.current_maximum_bet and not player_info['is_all_in']:
-                    phase_completed = False
-                    break
-
+            
             if phase_completed:
+                print("Round de paris terminé")
                 break
-
+            
             # Faire agir le joueur courant
-            player_info = self.players_info[0]  # Le hero est toujours le premier joueur
+            player_info = self.players_info[self.current_player_idx]
+            print(f"Joueur actuel: {player_info['name']}")
+            print(f"A déjà agi: {player_info['has_acted']}")
+            print(f"Mise actuelle: {player_info['current_player_bet']}")
+            print(f"Mise maximale: {self.current_maximum_bet}")
+            
             if not (player_info['has_folded'] or player_info['is_all_in']):
-                valid = self.get_valid_actions(player_info)
-                if valid:
+                valid_actions = self.get_valid_actions(player_info)
+                print(f"Actions valides: {[a.value for a in valid_actions]}")
+                
+                if valid_actions:
                     is_hero = (player_info['name'] == self.simple_state['hero_name'])
                     if is_hero:
                         chosen_action = hero_trajectory_action
+                        # Validate hero's action is valid
+                        if chosen_action not in valid_actions:
+                            print(f"Warning: Hero's chosen action {chosen_action} not valid, choosing random valid action")
+                            chosen_action = rd.choice(valid_actions)
                     else:
-                        chosen_action = rd.choice(valid)
+                        chosen_action = rd.choice(valid_actions)
+                    print(f"Action choisie: {chosen_action}")
                     self.simulate_action(player_info, chosen_action)
-
+            
             # Passer au joueur suivant
-            self.players_info = self.players_info[1:] + [self.players_info[0]]
+            self.current_player_idx = (self.current_player_idx + 1) % self.num_players
+            print(f"Prochain index: {self.current_player_idx}")
+            
+            iteration += 1
 
-    def check_phase_completion(self) :
-        """
-        Vérifie si le tour d'enchères actuel est terminé et gère la progression du jeu.
+        if iteration >= 50:
+            print("WARNING: Maximum iterations reached in betting round")
+            print("Current game state:")
+            print(f"Phase: {self.current_phase}")
+            print(f"Current max bet: {self.current_maximum_bet}")
+            print("Players info:")
+            for p in self.players_info:
+                print(f"Player {p['name']}: bet={p['current_player_bet']}, folded={p['has_folded']}, all_in={p['is_all_in']}, has_acted={p['has_acted']}")
+            raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans betting_round!")
         
-        Le tour est terminé quand :
-        1. Tous les joueurs actifs ont agi
-        2. Tous les joueurs ont égalisé la mise maximale (ou sont all-in)
-        3. Cas particuliers : un seul joueur reste, tous all-in, ou BB preflop
+        print("--- Fin betting_round ---\n")
+
+    def check_phase_completion(self):
         """
-        
+        Vérifie si le tour d'enchères est terminé.
+        """
         # Récupérer les joueurs actifs et all-in
         in_game_players = [player_info for player_info in self.players_info if not (player_info['has_folded'])]
-        all_in_players = [player_info for player_info in self.players_info if player_info['is_all_in']]
-
-        # Vérifier s'il ne reste qu'un seul joueur actif
+        
+        # Si plus personne n'est en jeu, signaler une erreur
+        if len(in_game_players) == 0:
+            raise ValueError(f"Erreur: Aucun joueur restant a la phase {self.current_phase.value}")
+        
+        # Si un seul joueur reste, c'est une victoire instantanée
         if len(in_game_players) == 1:
-            phase_completed = True
-            instant_win = True
-            return phase_completed, instant_win
-
-        # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
-        if (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
-            while len(self.community_cards) < 5:
-                self.community_cards.append(self.deck.pop())
-            phase_completed = True
-            instant_win = False
-            return phase_completed, instant_win
+            return True, True
         
         for player_info in in_game_players:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player_info['has_acted']:
-                phase_completed = False
-                instant_win = False
-                return phase_completed, instant_win
+                return False, False
 
             # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le tour n'est pas terminé
             if player_info['current_player_bet'] < self.current_maximum_bet and not player_info['is_all_in']:
-                phase_completed = False
-                instant_win = False
-                return phase_completed, instant_win
+                return False, False
         
         # Atteindre cette partie du code signifie que la phase est terminée
         phase_completed = True
         if self.current_phase == GamePhase.RIVER:
             print("River complete - going to showdown")
-            instant_win = False
-            return phase_completed, instant_win
+            return phase_completed, False
 
-        # Nouvelle vérification : si un seul joueur non all-in reste, déclencher le showdown
-        # Si un seul joueur non all-in reste, déclencher le showdown car il ne va pas jouer seul.
-        # Cette situation arrive lorsque qu'un joueur raise un montant supérieur au stack de ses adversaires. Dès lors, les autres joueurs peuvent soit call, soit all-in. 
-        # Or s'ils all-in, le joueur qui a raise est le seul actif, non all-in, non foldé restant. 
-        # Dès lors, il n'y a pas de sens à continuer la partie, donc on va au showdown.
+        # Vérifier le cas spécial d'un seul joueur non all-in
         non_all_in_players = [player_info for player_info in self.players_info if not player_info['is_all_in']]
         if len(non_all_in_players) == 1 and len(in_game_players) > 1:
             print("Moving to showdown (only one non all-in player remains)")
-            while len(self.community_cards) < 5:
-                self.community_cards.append(self.deck.pop())
-            instant_win = False
-            return phase_completed, instant_win
+            return phase_completed, False
+        
+        return phase_completed, False
 
     def advance_phase(self, rd_missing_community_cards: List[Tuple[int, str]]) -> None:
         """
         Fait évoluer la phase du jeu en complétant le board selon la phase.
-        Par exemple, de preflop au flop (ajout de 3 cartes), puis turn et river.
         """
-        # Normal phase progression
-        if self.current_phase == GamePhase.PREFLOP:
-            self.current_phase = GamePhase.FLOP
-        elif self.current_phase == GamePhase.FLOP:
-            self.current_phase = GamePhase.TURN
-        elif self.current_phase == GamePhase.TURN:
-            self.current_phase = GamePhase.RIVER
-        
-        # Increment round number when moving to a new phase
-        self.number_raise_this_game_phase = 0
+        print("\n--- Début advance_phase ---")
+        print(f"Phase actuelle: {self.current_phase}")
+        print(f"Cartes communes actuelles: {self.community_cards}")
+        print(f"Cartes à ajouter: {rd_missing_community_cards}")
 
+        # Progression des phases et distribution des cartes
         if self.current_phase == GamePhase.PREFLOP:
-            needed = 3 - len(self.community_cards)
-            if needed > 0:
-                self.community_cards.extend(rd_missing_community_cards[:needed])
+            # Au flop, on ajoute 3 cartes
+            self.community_cards.extend(rd_missing_community_cards[:3])
+            del rd_missing_community_cards[:3]
             self.current_phase = GamePhase.FLOP
         elif self.current_phase == GamePhase.FLOP:
-            if len(self.community_cards) < 4:
-                self.community_cards.extend(rd_missing_community_cards[:1])
+            # Au turn, on ajoute 1 carte
+            self.community_cards.append(rd_missing_community_cards[0])
+            del rd_missing_community_cards[0]
             self.current_phase = GamePhase.TURN
         elif self.current_phase == GamePhase.TURN:
-            if len(self.community_cards) < 5:
-                self.community_cards.extend(rd_missing_community_cards[:1])
+            # À la river, on ajoute 1 carte
+            self.community_cards.append(rd_missing_community_cards[0])
+            del rd_missing_community_cards[0]
             self.current_phase = GamePhase.RIVER
         elif self.current_phase == GamePhase.RIVER:
             self.current_phase = GamePhase.SHOWDOWN
 
+        print(f"Nouvelle phase: {self.current_phase}")
+        print(f"Nouvelles cartes communes: {self.community_cards}")
 
         # Réinitialiser les mises pour la nouvelle phase
         self.current_maximum_bet = 0
         for player_info in self.players_info:
             player_info['current_player_bet'] = 0
             if not player_info["has_folded"] and not player_info["is_all_in"]:
-                player_info["has_acted"] = False  # Réinitialisation du flag
+                player_info["has_acted"] = False
+
+        # Réinitialiser le compteur de raises pour la nouvelle phase
+        self.number_raise_this_game_phase = 0
         
-        # Set first player after dealer button
-        self.current_player_seat = (self.button_seat_position + 1) % self.num_players
-        while (not self.players[self.current_player_seat].is_active or 
-               self.players[self.current_player_seat].has_folded or 
-               self.players[self.current_player_seat].is_all_in):
-            self.current_player_seat = (self.current_player_seat + 1) % self.num_players
+        # Trouver le premier joueur actif après la SB pour les phases post-flop
+        if self.current_phase != GamePhase.PREFLOP:
+            # Commencer par l'index 0 (SB) et chercher le premier joueur actif
+            for i in range(self.num_players):
+                player = self.players_info[i]
+                if not (player['has_folded'] or player['is_all_in']):
+                    self.current_player_idx = i
+                    break
+
+        print("--- Fin advance_phase ---\n")
 
     def simulate_hand(self, hero_trajectory_action: PlayerAction, rd_missing_community_cards: List[Tuple[int, str]]) -> None:
         """
         Simule la suite de la main depuis l'état actuel jusqu'au showdown.
-        À chaque round de pari, le hero (premier joueur) utilisera l'action fournie (pour la première itération)
-        puis pour les rounds suivants les actions seront tirées aléatoirement.
         """
+        print("\n=== Début simulate_hand ===")
+        print(f"Phase initiale: {self.current_phase}")
+        print(f"Action héros: {hero_trajectory_action}")
+        
+        # Ne pas simuler si déjà au showdown
+        if self.current_phase == GamePhase.SHOWDOWN:
+            print("Déjà au showdown - pas de simulation nécessaire")
+            return False
+        
         current_hero_action = hero_trajectory_action
+        iteration = 0
+        instant_win = False
         while self.current_phase != GamePhase.SHOWDOWN:
+            print(f"\nItération {iteration} de simulate_hand")
+            print(f"Phase actuelle: {self.current_phase}")
+            print("Appel de betting_round...")
+            
             self.betting_round(current_hero_action)
+            print("betting_round terminé")
+            
+            print("Vérification de la phase...")
             phase_completed, instant_win = self.check_phase_completion()
-            if instant_win :
+            print(f"Phase completed: {phase_completed}, Instant win: {instant_win}")
+            
+            if instant_win or len([p for p in self.players_info if not p['has_folded']]) <= 1:
+                print("Instant win détecté - sortie de la boucle")
                 break
             elif phase_completed:
+                print(f"Phase {self.current_phase} terminée - passage à la phase suivante")
                 self.advance_phase(rd_missing_community_cards)
+                print(f"Nouvelle phase: {self.current_phase}")
+                current_hero_action = None
+            
+            iteration += 1
+            if iteration > 20:  # Garde-fou contre les boucles infinies
+                raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans la boucle principale de simulate_hand")
+        
+        print("=== Fin simulate_hand ===\n")
         return instant_win
 
     def evaluate_showdown(self, instant_win: bool, rd_opponents_cards: List[List[Tuple[int, str]]]) -> Dict[str, float]:
         """
-        À l'issue du showdown, évalue les mains de tous les joueurs encore en lice
-        et répartit le pot entre les gagnants.
+        Évalue les mains des joueurs et distribue le pot.
         
         Args:
             instant_win (bool): True si un seul joueur reste en jeu (les autres ont fold)
-            rd_opponents_cards: Liste des mains aléatoires pour chaque adversaire
-        
+            rd_opponents_cards (List[List[Tuple[int, str]]]): Liste des mains aléatoires pour chaque adversaire
+            
         Returns:
-            Dict[str, float]: Dictionnaire {nom_du_joueur: payoff}
+            Dict[str, float]: Dictionnaire {nom_joueur: gain/perte}
         """
-        # En cas de victoire instantanée, le dernier joueur en lice remporte tout le pot
-        if instant_win:
-            # Trouver le seul joueur qui n'a pas fold
-            winner = next(info for info in self.players_info if not info['has_folded'])
+        # Vérifier les joueurs restants
+        remaining_players = [info for info in self.players_info if not info['has_folded']]
+        
+        # Si personne n'est resté dans le coup, retourner des pertes pour tous
+        if len(remaining_players) == 0:
+            raise ValueError("Erreur: Aucun joueur restant au showdown!")
+        
+        # Victoire par fold
+        if len(remaining_players) == 1 or instant_win:
+            winner = remaining_players[0]
             payoffs = {}
             for info in self.players_info:
                 name = info['name']
                 contribution = self.contributions.get(name, 0)
                 if name == winner['name']:
-                    payoffs[name] = self.pot - contribution
+                    payoffs[name] = self.pot - contribution  # Gagne le pot moins sa contribution
                 else:
-                    payoffs[name] = -contribution
+                    payoffs[name] = -contribution  # Perd sa contribution
             return payoffs
 
-        # Pour évaluer, on crée une liste de joueurs simulés.
-        simulated_players = []
+        # Évaluation normale des mains
+        # Créer une liste des joueurs encore en jeu avec leurs cartes
+        active_players = []
         opponent_idx = 0
         
-        # On considère que le hero est le premier joueur de players_info.
-        for i, info in enumerate(self.players_info):
-            if info['has_folded']:
-                continue  # Les joueurs foldés n'entrent pas en showdown
+        for player_info in self.players_info:
+            if player_info['has_folded']:
+                continue
             
-            # Création d'une instance de Player pour l'évaluation.
-            sim_player = Player(agent=None, name=info['name'], player_stack=info['player_stack'], seat_position=i)
+            # Créer un dictionnaire avec les informations nécessaires pour l'évaluation
+            player_data = {
+                'name': player_info['name'],
+                'cards': []
+            }
             
-            if i == 0:
-                # Pour le hero, on affecte les cartes connues.
-                sim_player.cards = [Card(value, suit) for value, suit in self.hero_cards]
+            # Assigner les cartes selon qu'il s'agit du hero ou d'un adversaire
+            if player_info['name'] == self.simple_state['hero_name']:
+                player_data['cards'] = self.hero_cards
             else:
-                # Pour les adversaires, on utilise les cartes tirées aléatoirement
-                if opponent_idx < len(rd_opponents_cards):
-                    opp_cards = rd_opponents_cards[opponent_idx]
-                    sim_player.cards = [Card(value, suit) for value, suit in opp_cards]
-                    opponent_idx += 1
-                else:
-                    # Fallback au cas où il n'y aurait pas assez de mains adverses
-                    full_deck = [(v, s) for v in range(2, 15) for s in ["♠", "♥", "♦", "♣"]]
-                    known = self.hero_cards + self.community_cards
-                    remaining = [card for card in full_deck if card not in known]
-                    opp_cards = rd.sample(remaining, 2)
-                    sim_player.cards = [Card(value, suit) for value, suit in opp_cards]
+                player_data['cards'] = rd_opponents_cards[opponent_idx]
+                opponent_idx += 1
                 
-            simulated_players.append(sim_player)
+            active_players.append(player_data)
 
-        # Pour évaluer, nous utilisons la méthode evaluate_final_hand du jeu classique.
-        game_dummy = PokerGame([])  # On crée un "dummy" dont on fixera le board
-        game_dummy.community_cards = [Card(value, suit) for value, suit in self.community_cards]
-        hand_evals = {}
-        for player in simulated_players:
-            try:
-                eval_result = game_dummy.evaluate_final_hand(player)
-            except Exception as e:
-                eval_result = (HandRank.HIGH_CARD, [0])
-            hand_evals[player.name] = eval_result
+        # Évaluer la main de chaque joueur
+        hand_ranks = {}
+        for player_data in active_players:
+            hand_eval = self._evaluate_hand(player_data['cards'] + self.community_cards)
+            hand_ranks[player_data['name']] = hand_eval
 
-        # Détermination des gagnants : on compare (rang de main, puis kickers)
+        # Déterminer le(s) gagnant(s) en comparant les rangs puis les kickers
         best_eval = None
         winners = []
-        for name, eval_result in hand_evals.items():
-            key = (eval_result[0].value, tuple(eval_result[1]))
-            if best_eval is None or key > best_eval:
-                best_eval = key
+        for name, hand_eval in hand_ranks.items():
+            current_key = (hand_eval[0].value, tuple(hand_eval[1]))  # (HandRank.value, kickers)
+            if best_eval is None or current_key > best_eval:
+                best_eval = current_key
                 winners = [name]
-            elif key == best_eval:
+            elif current_key == best_eval:
                 winners.append(name)
-
-        # Calcul du payoff pour chaque joueur : payoff = (part du pot si gagnant) - contribution
+        
+        # Calculer les gains/pertes
         payoffs = {}
-        num_winners = len(winners)
-        for info in self.players_info:
-            name = info['name']
+        share = self.pot / len(winners)  # Partage équitable du pot entre les gagnants
+        
+        for player_info in self.players_info:
+            name = player_info['name']
             contribution = self.contributions.get(name, 0)
             if name in winners:
-                share = self.pot / num_winners
                 payoffs[name] = share - contribution
             else:
                 payoffs[name] = -contribution
@@ -429,30 +462,113 @@ class PokerGameOptimized:
 
     def play_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]]) -> float:
         """
-        Simule une trajectoire en faisant jouer la suite de la main jusqu'au showdown,
-        puis évalue le payoff pour le joueur cible (hero).
-        
-        Args:
-            trajectory_action (PlayerAction): L'action initiale à appliquer pour le hero
-            rd_opponents_cards (List[List[Tuple[int, str]]]): Liste des mains aléatoires pour chaque adversaire
-            rd_missing_community_cards (List[Tuple[int, str]]): Les cartes manquantes pour compléter le board
-        
-        Returns:
-            float: Le payoff simulé pour le hero
+        Simule une trajectoire complète et retourne le payoff pour le héros.
         """
-        # Assigner les cartes tirées aux adversaires
-        for i, player_info in enumerate(self.players_info[1:], 1):  # Skip hero
-            if not player_info['has_folded']:
-                player_idx = i - 1  # Index dans rd_opponents_cards
-                if player_idx < len(rd_opponents_cards):
-                    player_info['cards'] = rd_opponents_cards[player_idx]
-
-        # Simuler la suite de la main
+        # Si déjà au showdown, retourner 0 (pas de simulation possible)
+        if self.current_phase == GamePhase.SHOWDOWN:
+            return 0.0
+        
+        # Simuler la main
         instant_win = self.simulate_hand(trajectory_action, rd_missing_community_cards)
         
         # À l'issue du showdown, évaluer et calculer le payoff
         payoffs = self.evaluate_showdown(instant_win, rd_opponents_cards)
+        return payoffs[self.simple_state['hero_name']]
+
+    def _evaluate_hand(self, cards: List[Tuple[int, str]]) -> Tuple[HandRank, List[int]]:
+        """
+        Évalue la meilleure main possible d'un joueur.
         
-        # Le hero est le premier joueur (players_info[0])
-        hero_name = self.players_info[0]['name']
-        return payoffs.get(hero_name, 0.0)
+        Args:
+            cards: Liste de tuples (valeur, couleur) représentant les cartes
+            
+        Returns:
+            Tuple[HandRank, List[int]]: (rang de la main, liste des valeurs importantes)
+        """
+        if not cards:
+            raise ValueError("Cannot evaluate hand - no cards provided")
+        
+        # Extraire les valeurs et couleurs
+        values = [card[0] for card in cards]
+        suits = [card[1] for card in cards]
+        
+        # Vérifie si une couleur est possible (5+ cartes de même couleur)
+        suit_counts = Counter(suits)
+        flush_suit = next((suit for suit, count in suit_counts.items() if count >= 5), None)
+        
+        # Si une couleur est possible, on vérifie d'abord les mains les plus fortes
+        if flush_suit:
+            # Trie les cartes de la couleur par valeur décroissante
+            flush_cards = sorted([card[0] for card in cards if card[1] == flush_suit], reverse=True)
+            
+            # Vérifie si on a une quinte flush
+            for i in range(len(flush_cards) - 4):
+                if flush_cards[i] - flush_cards[i+4] == 4:
+                    # Si la plus haute carte est un As, c'est une quinte flush royale
+                    if flush_cards[i] == 14 and flush_cards[i+4] == 10:
+                        return (HandRank.ROYAL_FLUSH, [14])
+                    # Sinon c'est une quinte flush normale
+                    return (HandRank.STRAIGHT_FLUSH, [flush_cards[i]])
+            
+            # Vérifie la quinte flush basse (As-5)
+            if set([14,2,3,4,5]).issubset(set(flush_cards)):
+                return (HandRank.STRAIGHT_FLUSH, [5])
+        
+        # Compte les occurrences de chaque valeur
+        value_counts = Counter(values)
+        
+        # Vérifie le carré
+        if 4 in value_counts.values():
+            quads = [v for v, count in value_counts.items() if count == 4][0]
+            kicker = max(v for v in values if v != quads)
+            return (HandRank.FOUR_OF_A_KIND, [quads, kicker])
+        
+        # Vérifie le full house
+        if 3 in value_counts.values():
+            trips = sorted([v for v, count in value_counts.items() if count >= 3], reverse=True)
+            pairs = []
+            for value, count in value_counts.items():
+                if count >= 2:
+                    if count >= 3 and value != trips[0]:
+                        pairs.append(value)
+                    elif count == 2:
+                        pairs.append(value)
+            
+            if pairs:
+                return (HandRank.FULL_HOUSE, [trips[0], max(pairs)])
+        
+        # Vérifie la couleur simple
+        if flush_suit:
+            flush_values = sorted([card[0] for card in cards if card[1] == flush_suit], reverse=True)
+            return (HandRank.FLUSH, flush_values[:5])
+        
+        # Vérifie la quinte
+        unique_values = sorted(set(values), reverse=True)
+        for i in range(len(unique_values) - 4):
+            if unique_values[i] - unique_values[i+4] == 4:
+                return (HandRank.STRAIGHT, [unique_values[i]])
+        
+        # Vérifie la quinte basse (As-5)
+        if set([14,2,3,4,5]).issubset(set(values)):
+            return (HandRank.STRAIGHT, [5])
+        
+        # Vérifie le brelan
+        if 3 in value_counts.values():
+            trips = max(v for v, count in value_counts.items() if count >= 3)
+            kickers = sorted([v for v in values if v != trips], reverse=True)[:2]
+            return (HandRank.THREE_OF_A_KIND, [trips] + kickers)
+        
+        # Vérifie la double paire
+        pairs = sorted([v for v, count in value_counts.items() if count >= 2], reverse=True)
+        if len(pairs) >= 2:
+            kickers = [v for v in values if v not in pairs[:2]]
+            kicker = max(kickers) if kickers else 0
+            return (HandRank.TWO_PAIR, pairs[:2] + [kicker])
+        
+        # Vérifie la paire simple
+        if pairs:
+            kickers = sorted([v for v in values if v != pairs[0]], reverse=True)[:3]
+            return (HandRank.PAIR, [pairs[0]] + kickers)
+        
+        # Carte haute
+        return (HandRank.HIGH_CARD, sorted(values, reverse=True)[:5])

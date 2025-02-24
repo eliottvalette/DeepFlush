@@ -1554,7 +1554,7 @@ class PokerGame:
         for p in player_that_can_still_act:
             players_with_positions.append({
                 'name': p.name,
-                'stack': p.stack,
+                'player_stack': p.stack,
                 'current_player_bet': p.current_player_bet,
                 'is_active': p.is_active,
                 'has_folded': p.has_folded,
@@ -1566,17 +1566,18 @@ class PokerGame:
         
         # Trier les joueurs par position (SB=0, BB=1, UTG=2, etc.)
         players_info = sorted(players_with_positions, key=lambda x: x['role_position'])
-        
-        # Retirer la seat_position du dictionnaire final car elle n'est pas nécessaire
-        for p in players_info:
-            del p['seat_position']
+
+        # Récupérer l'index du joueur courant dans la liste des dictionnaires players_info
+        hero_index = next((i for i, p in enumerate(players_info) if p['name'] == current_player.name), None)
+        if hero_index is None:
+            raise ValueError("Le joueur courant n'est pas trouvé dans la liste des joueurs")
         
         simple_state = {
             'hero_cards': hero_cards,
             'hero_name': current_player.name,
-            'hero_index': current_player.seat_position,
+            'hero_index': hero_index,
             'community_cards': community_cards,
-            'phase': self.current_phase.value,
+            'phase': self.current_phase,
             'pot': self.main_pot,
             'current_maximum_bet': self.current_maximum_bet,
             'players_info': players_info, 
