@@ -1547,7 +1547,7 @@ class PokerGame:
         community_cards = [(card.value, card.suit) for card in self.community_cards]
         
         # Récupérer les joueurs qui peuvent encore agir
-        player_that_can_still_act = [p for p in self.players if not (p.has_folded or p.is_all_in or not p.is_active)]
+        player_that_can_still_act = [p for p in self.players if not (p.has_folded or not p.is_active)]
         
         # Créer une liste temporaire avec tous les joueurs et leurs positions
         players_with_positions = []
@@ -1573,16 +1573,14 @@ class PokerGame:
             raise ValueError("Le joueur courant n'est pas trouvé dans la liste des joueurs")
         
         simple_state = {
-            'hero_cards': hero_cards,
             'hero_name': current_player.name,
             'hero_index': hero_index,
+            'hero_cards': hero_cards,
             'community_cards': community_cards,
             'phase': self.current_phase,
             'pot': self.main_pot,
             'current_maximum_bet': self.current_maximum_bet,
             'players_info': players_info, 
-            'button_seat_position': self.button_seat_position,
-            'current_player_seat': self.current_player_seat,
             'num_active_players': len(player_that_can_still_act),
             'big_blind': self.big_blind,
             'small_blind': self.small_blind

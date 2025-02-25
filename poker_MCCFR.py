@@ -12,27 +12,30 @@ class MCCFRTrainer:
     pour l'apprentissage de stratégies GTO au poker.
     """
     
-    def __init__(self, num_simulations: int = 10):
+    def __init__(self, num_simulations: int):
         self.num_simulations = num_simulations
 
     def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], simple_game_state) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
-        self.payoff_per_trajectory_action = defaultdict(float)
+        # Initialiser a 0 pour toutes les actions de PlayerAction
+        self.payoff_per_trajectory_action = {action: 0 for action in PlayerAction}
         
-        for _ in range(self.num_simulations):
+        for simulation_index in range(self.num_simulations):
+            print(f"\nSimulation [{simulation_index + 1}/{self.num_simulations}]")
+            print(f"Hero name: {simple_game_state['hero_name']}")
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(simple_game_state)
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
-                replicated_game = PokerGameOptimized(simple_game_state)
+                replicated_game = PokerGameOptimized(simple_game_state.copy())
                 payoff = replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
-
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
         print('----------------------------------')
+        print('valid_actions :', valid_actions)
         print('target_vector :', target_vector)
         print('self.payoff_per_trajectory_action :', self.payoff_per_trajectory_action)
         print('----------------------------------')

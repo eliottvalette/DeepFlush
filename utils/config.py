@@ -3,7 +3,7 @@ import random as rd
 import numpy as np
 import torch
 
-EPISODES = 10_000
+EPISODES = 1
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9996

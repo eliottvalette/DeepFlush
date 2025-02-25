@@ -212,7 +212,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(num_simulations = 100)
+    mccfr_trainer = MCCFRTrainer(num_simulations = 20)
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon
