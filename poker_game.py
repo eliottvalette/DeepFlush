@@ -1105,9 +1105,6 @@ class PokerGame:
             bet_amount=amount
         )
         self.current_hand_history.append(action_record)
-
-        print(self.print_hand_history())
-        print(self.get_tokenized_history())
         
         return action
 
@@ -1224,7 +1221,6 @@ class PokerGame:
         """
         Gère la phase de showdown en tenant compte correctement des side pots.
         """
-        print(self.print_hand_history())
         print("\n=== DÉBUT SHOWDOWN ===")
         self.current_phase = GamePhase.SHOWDOWN
         # On considère ici TOUS les joueurs qui ont contribué (même s'ils ont foldé)
@@ -1716,12 +1712,38 @@ class PokerGame:
         """
         current_player = self.players[self.current_player_seat]
         bet_amount = None
-        reward = 0.0
 
         # Traiter l'action (met à jour l'état du jeu)
         action = self.process_action(current_player, action)
-        next_state = self.get_state_hero()
+        
+        # Nouvelle définition des récompenses immédiates :
+        if action == PlayerAction.FOLD:
+            reward = -0.05   # Pénalité légère pour se coucher
+        elif action == PlayerAction.CHECK:
+            reward = 0.0     # Neutre
+        elif action == PlayerAction.CALL:
+            reward = 0.0     # Neutre
+        elif action in {
+                PlayerAction.RAISE,
+                PlayerAction.RAISE_25_POT,
+                PlayerAction.RAISE_33_POT,
+                PlayerAction.RAISE_50_POT,
+                PlayerAction.RAISE_66_POT,
+                PlayerAction.RAISE_75_POT,
+                PlayerAction.RAISE_100_POT,
+                PlayerAction.RAISE_125_POT,
+                PlayerAction.RAISE_150_POT,
+                PlayerAction.RAISE_175_POT,
+                PlayerAction.RAISE_2X_POT,
+                PlayerAction.RAISE_3X_POT
+             }:
+            reward = -0.02   # Légère pénalité pour un raise (risque d'être trop agressif)
+        elif action == PlayerAction.ALL_IN:
+            reward = -0.05   # Pénalité similaire au fold pour un all-in (risque élevé)
+        else:
+            reward = 0.0
 
+        next_state = self.get_state_hero()
         return next_state, reward
 
 # ======================================================================

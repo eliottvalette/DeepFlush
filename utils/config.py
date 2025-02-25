@@ -4,19 +4,19 @@ import numpy as np
 import torch
 
 EPISODES = 10_000
-GAMMA = 0.9985
-ALPHA = 0.001
-EPS_DECAY = 0.9996
-START_EPS = 0.8
+GAMMA = 0.99
+ALPHA = 0.0003
+EPS_DECAY = 0.9999
+START_EPS = 0.9
 STATE_SIZE = 190
 
 # Hyperparamètres du modèle Transformer
-MODEL_INPUT_DIM = 190           # Dimension d'entrée pour le modèle
-MODEL_OUTPUT_DIM = 16           # Dimension de sortie pour le modèle (nombre d'actions)
-MODEL_NHEAD = 4                 # Nombre de têtes d'attention
-MODEL_NUM_LAYERS = 4            # Nombre de couches dans l'encodeur Transformer
-MODEL_DIM_FEEDFORWARD = 512     # Dimension de la couche feedforward
-MODEL_D_MODEL = 64              # Dimension latente (d_model) du Transformer
+MODEL_INPUT_DIM = 190           # Inchangé (dépend de la représentation d'état)
+MODEL_OUTPUT_DIM = 16           # Inchangé (nombre d'actions possibles)
+MODEL_NHEAD = 2                # Augmenté pour capturer plus de relations
+MODEL_NUM_LAYERS = 2           # Augmenté pour une meilleure capacité de modélisation
+MODEL_DIM_FEEDFORWARD = 256    # Augmenté pour plus de capacité
+MODEL_D_MODEL = 32            # Augmenté pour une meilleure représentation
 
 # Paramètres de visualisation
 RENDERING = False

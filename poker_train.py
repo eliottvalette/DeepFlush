@@ -7,7 +7,7 @@ import pygame
 import torch
 from visualization import DataCollector
 from poker_agents import PokerAgent
-from poker_game import PokerGame, GamePhase, PlayerAction, ActionRecord
+from poker_game import PokerGame, GamePhase, PlayerAction
 from typing import List, Tuple
 import json
 from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL
@@ -70,9 +70,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         "action": None,
         "stack_changes": env.net_stack_changes,
         "final_stacks": env.final_stacks,
-        "num_active_players": len(players_that_can_play),
         "state_vector": initial_state.tolist()
-        }
+    }
     data_collector.add_state(state_info)
     
     #### Boucle principale du jeu ####
@@ -103,9 +102,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 "action": action_chosen.value,
                 "stack_changes": env.net_stack_changes,
                 "final_stacks": env.final_stacks,
-                "num_active_players": len(players_that_can_play),
                 "state_vector": current_state.tolist()
-                }
+            }
             data_collector.add_state(state_info)
 
             # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
@@ -148,55 +146,45 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
-    # Attribution des récompenses finales
-    for player in env.players:
-        if env.net_stack_changes[player.name] > 0:
-            stack_change_normalized = env.net_stack_changes[player.name] / env.starting_stack
-            final_reward = (stack_change_normalized ** 0.5) * 5
-        elif env.net_stack_changes[player.name] < 0:
-            stack_change_normalized = env.net_stack_changes[player.name] / env.starting_stack
-            final_reward = -(abs(stack_change_normalized) ** 0.5) * 5
-            if env.final_stacks[player.name] <= 2:
-                final_reward -= 2
-        else:
-            final_reward = 0
+    discount_factor = 0.95  # Facteur de discount pour le reward shaping
 
-        # --- Pour l'entrainement du model ----
+    for player in env.players:
+        # Calcul du changement de pile normalisé
+        normalized_change = env.net_stack_changes[player.name] / env.starting_stack
+        # Utilisation de tanh pour lisser et plafonner la récompense finale entre -5 et +5
+        final_reward = 5 * np.tanh(normalized_change)
+        
         print('player', player.name)
         print('player.agent.temp_memory', len(player.agent.temp_memory))
-        # On va récupérer toutes les transitions temporaires de l'agent et on va update chacune des rewards, associées aux séquences d'états, grace a la final reward
         temp_memory = player.agent.temp_memory
-        for temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask in temp_memory: 
-            if final_reward <= 0 :
-                if numerical_action in [0, 1]: # Le joueur a perdu du stack et a fait un fold ou un check
-                    coef = 0.1
-                elif numerical_action == 2 : # Le joueur a perdu du stack et a fait un call
-                    coef = 0.6
-                else : # Le joueur a perdu du stack et a fait un raise ou un all in
-                    coef = 1
-            else :
-                if numerical_action in [0, 1]: # Le joueur a gagné du stack et a fait un fold ou un check
-                    coef = 0.1
-                elif numerical_action == 2 : # Le joueur a gagné du stack et a fait un call
-                    coef = 0.4
-                else : # Le joueur a gagné du stack et a fait un raise ou un all in
-                    coef = 1
-            
-            # Apply discount to final reward
-            updated_reward = reward + coef * final_reward 
+        num_transitions = len(temp_memory)
+
+        # Pour chaque transition dans la mémoire temporaire,
+        # on applique un discount exponentiel (le plus récent ayant plus d'importance) 
+        # et on utilise un coefficient de base dépendant du type d'action
+        for idx, (temp_state_seq, numerical_action, immediate_reward, next_state_seq, done, valid_action_mask) in enumerate(temp_memory):
+            discount = discount_factor ** (num_transitions - idx)
+            if numerical_action in [0, 1]:  # FOLD ou CHECK (actions passives)
+                base_coef = 0.2
+            elif numerical_action == 2:     # CALL
+                base_coef = 0.5
+            else:                           # RAISE, ALL_IN et actions pot-based
+                base_coef = 1.0
+
+            updated_reward = immediate_reward + base_coef * discount * final_reward
             player.agent.remember(
-                temp_state_seq = temp_state_seq,
-                numerical_action = numerical_action,
-                reward = updated_reward,
-                next_state_seq = next_state_seq,
-                done = done,
-                valid_action_mask = valid_action_mask,
+                temp_state_seq=temp_state_seq,
+                numerical_action=numerical_action,
+                reward=updated_reward,
+                next_state_seq=next_state_seq,
+                done=done,
+                valid_action_mask=valid_action_mask,
             )
-            cumulative_rewards[player.name] = updated_reward # On ne garde que la dernière reward
+            cumulative_rewards[player.name] = updated_reward  # On garde ici la dernière reward
 
         # On vide la mémoire temporaire
-        player.agent.temp_memory = [] 
-        
+        player.agent.temp_memory = []
+
         # ---- Pour la collecte et l'affichage des métriques ----
         # Récupération de l'état final
         player_state_seq = state_seq[player.name]
@@ -210,7 +198,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             "action": None,
             "stack_changes": env.net_stack_changes,
             "final_stacks": env.final_stacks,
-            "num_active_players": len(players_that_can_play),
             "state_vector": final_state.tolist()
         }
         data_collector.add_state(state_info)
@@ -253,7 +240,6 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
         render_every (int): Fréquence de mise à jour du rendu graphique
     """
     # Initialisation des historiques et de l'environnement
-    metrics_history = {}
     env = PokerGame(agent_list)
     
     # Configuration du collecteur de données
@@ -270,12 +256,9 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
-            reward_dict, metrics_list = run_episode(
+            reward_dict, _ = run_episode(
                 env, epsilon, rendering, episode, render_every, data_collector
             )
-            
-            # Enregistrer les métriques pour cet épisode en associant chaque métrique à une clé "agent"
-            metrics_history[str(episode)] = metrics_list
             
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
@@ -283,11 +266,10 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             for player in env.players:
                 print(f"Agent {player.name} reward: {reward_dict[player.name]:.2f}")
 
-        # Save models at end of training
-        if episode == episodes - 1:
-            save_models(env.players, episode)
-            print("Generating visualization...")
-            data_collector.force_visualization()
+        # À la fin de l'entraînement, sauvegarde des modèles et génération des visualisations.
+        save_models(env.players, episode)
+        print("Generating visualization...")
+        data_collector.force_visualization()
 
     except KeyboardInterrupt:
         print("\nTraining interrupted by user")
@@ -298,4 +280,3 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     finally:
         if rendering:
             pygame.quit()
-        save_metrics(metrics_history, data_collector.output_dir)

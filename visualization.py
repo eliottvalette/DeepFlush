@@ -28,8 +28,15 @@ class DataCollector:
         self.start_epsilon = start_epsilon
         self.epsilon_decay = epsilon_decay
         self.current_episode_states = []
-        self.batch_episode_states = [] # Contient un liste de current_episode_states qui seront ajouté toutes les save_interval dans le fichier json
-        self.batch_episode_metrics = [] # Contient les métriques d'entraînement pour chaque épisode
+        self.batch_episode_states = []  # Episodes à sauvegarder par batch
+        self.batch_episode_metrics = []  # Métriques d'entraînement pour chaque épisode
+        
+        # Définir les clés strictement nécessaires pour les plots.
+        self._allowed_state_keys = {"phase", "player", "action", "stack_changes", "final_stacks", "state_vector"}
+
+        # Stockage en mémoire pour éviter de relire/supprimer les fichiers à chaque sauvegarde.
+        self._all_states = {}
+        self._all_metrics = {}
         
         # Créer le répertoire pour les JSON s'il n'existe pas
         if not os.path.exists(output_dir):
@@ -54,110 +61,37 @@ class DataCollector:
         )
     
     def add_state(self, state_info):
-        """
-        Ajoute un état à l'épisode courant avec le vecteur d'état subdivisé,
-        basé sur la nouvelle structure de l'état.
-
-        Structure de state_vector (indices) :
-          0-4    : Phase de jeu (one-hot : PREFLOP, FLOP, TURN, RIVER, SHOWDOWN)
-          5-11   : Infos du joueur courant (stack normalisé et position one-hot)
-          12-45  : Cartes personnelles (2 cartes, 17 dims/chacune => 34 dims)
-          46-130 : Cartes communes (5 cartes, 17 dims/chacune => 85 dims)
-          131    : Mise actuelle (normalisée par starting_stack)
-          132-173: Infos des joueurs (6 joueurs, 7 dims/chacun => 42 dims)
-          174-189: Actions disponibles (16 dims)
-        """
-        state_vector = state_info["state_vector"]
-        # Si state_vector est un tensor, le convertir en liste
-        if hasattr(state_vector, "tolist"):
-            state_vector = state_vector.tolist()
-
-        # 1. Décodage de la phase de jeu (indices 0 à 4)
-        phases = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"]
-        phase_onehot = state_vector[0:5]
-        phase_idx = phase_onehot.index(1) if 1 in phase_onehot else -1
-        game_phase = phases[phase_idx] if phase_idx != -1 else "Inconnu"
-
-        # 2. Informations du joueur courant (indices 5 à 11)
-        current_stack_norm = state_vector[5]
-        pos_onehot = state_vector[6:12]
-        positions = ["SB", "BB", "UTG", "HJ", "CO", "BTN"]
-        pos_idx = pos_onehot.index(1) if 1 in pos_onehot else -1
-        current_position = positions[pos_idx] if pos_idx != -1 else "Inconnu"
-
-        # 3. Décodage des cartes personnelles (indices 12 à 45 : 2 cartes de 17 dimensions chacune)
+        # Optimisation : ne conserver que les informations strictement nécessaires pour les plots.
+        sv = state_info["state_vector"]
+        if hasattr(sv, "tolist"):
+            sv = sv.tolist()
+        
+        # Décodage minimal pour extraire uniquement les cartes personnelles
         def decode_card(segment):
-            # segment est une liste de 17 éléments : 13 pour la valeur, 4 pour la couleur.
             value_part = segment[:13]
-            suit_part = segment[13:]
-            value_idx = value_part.index(1) if 1 in value_part else -1
-            card_value = value_idx + 2 if value_idx != -1 else None
+            suit_part = segment[13:17]  # On ne considère que les 4 éléments pour la couleur
+            card_value = (value_part.index(1) + 2) if 1 in value_part else None
             suit_symbols = ["♠", "♥", "♦", "♣"]
-            suit_idx = suit_part.index(1) if 1 in suit_part else -1
-            card_suit = suit_symbols[suit_idx] if suit_idx != -1 else None
+            card_suit = suit_symbols[suit_part.index(1)] if 1 in suit_part else None
             return {"value": card_value, "suit": card_suit}
-
+        
         player_cards = []
         for i in range(2):
             base = 12 + i * 17
-            card_segment = state_vector[base:base+17]
+            card_segment = sv[base:base+17]
             player_cards.append(decode_card(card_segment))
-
-        # 4. Décodage des cartes communes (indices 46 à 130 : 5 cartes de 17 dimensions chacune)
-        community_cards = []
-        for i in range(5):
-            base = 46 + i * 17
-            card_segment = state_vector[base:base+17]
-            # Si la partie valeur ne contient aucun 1, la carte est absente.
-            if 1 in card_segment[:13]:
-                community_cards.append(decode_card(card_segment))
-            else:
-                community_cards.append(None)
-
-        # 5. Récupération de la mise actuelle (indice 131)
-        current_max_bet = state_vector[131]
-
-        # 6. Infos sur les joueurs (indices 132 à 173 : 6 joueurs * 7 dims)
-        players_info = []
-        for i in range(6):
-            base = 132 + i * 7
-            player_stack_norm = state_vector[base]
-            pos_vector = state_vector[base+1:base+7]
-            p_idx = pos_vector.index(1) if 1 in pos_vector else -1
-            player_position = positions[p_idx] if p_idx != -1 else "Inconnu"
-            players_info.append({
-                "stack": player_stack_norm * 100,  # dénormalisation (ajuster le facteur si nécessaire)
-                "position": player_position
-            })
-
-        # 7. Actions disponibles (indices 174 à 189)
-        available_actions = state_vector[174:190]
-
-        subdivided_full_state = {
-            "game_phase": game_phase,
-            "current_player": {
-                "stack": current_stack_norm * 100,  # dénormalisé
-                "position": current_position,
-                "cards": player_cards
-            },
-            "community_cards": community_cards,
-            "current_max_bet": current_max_bet,
-            "players": players_info,
-            "available_actions": available_actions
+        
+        # Conserver uniquement les informations utiles.
+        minimal_state_vector = {
+            "current_player": {"cards": player_cards},
+            "relative_positions": sv[6:12]
         }
-
-        subdivided_simple_state = {
-            "current_player": {
-                "stack": current_stack_norm * 100,
-                "cards": player_cards
-            },
-            "available_actions": available_actions,
-            "relative_positions": state_vector[6:12]
-        }
-
-        # On remplace le vector d'état par la version simplifiée
-        state_info["state_vector"] = subdivided_simple_state
-        self.current_episode_states.append(state_info)
+        state_info["state_vector"] = minimal_state_vector
+        
+        # Ne garder que les clefs autorisées.
+        pruned_state = {k: state_info[k] for k in self._allowed_state_keys if k in state_info}
+        
+        self.current_episode_states.append(pruned_state)
     
     def add_metrics(self, episode_metrics):
         """
@@ -166,6 +100,7 @@ class DataCollector:
         Args:
             episode_metrics (list): Liste des métriques pour chaque agent dans l'épisode
         """
+        # Stocke uniquement les métriques utiles aux plots
         self.batch_episode_metrics.append(episode_metrics)
     
     def save_episode(self, episode_num):
@@ -175,44 +110,27 @@ class DataCollector:
         Args:
             episode_num (int): Numéro de l'épisode
         """
-        # Add current episode to batch
+        # Ajoute l'épisode courant et ne conserve que les données utiles
         self.batch_episode_states.append(self.current_episode_states)
         
-        # Check if we've reached the save interval
+        # Vérifier si l'on a atteint l'intervalle de sauvegarde
         if len(self.batch_episode_states) >= self.save_interval:
-            # Sauvegarder les états
             states_filename = os.path.join(self.output_dir, "episodes_states.json")
-            if os.path.exists(states_filename):
-                with open(states_filename, 'r') as f:
-                    all_episodes = json.load(f)
-            else:
-                all_episodes = {}
+            metrics_filename = os.path.join(self.output_dir, "metrics_history.json")
             
-            # Ajouter tous les épisodes batchés aux données
+            # Mettre à jour les dictionnaires internes sans relire le disque
             for i, episode_states in enumerate(self.batch_episode_states):
                 episode_idx = episode_num - len(self.batch_episode_states) + i + 1
-                all_episodes[str(episode_idx)] = episode_states  # Convertir l'index en string
-            
-            # Sauvegarder les états
-            with open(states_filename, 'w') as f:
-                json.dump(all_episodes, f, indent=2)
-            
-            # Sauvegarder les métriques
-            metrics_filename = os.path.join(self.output_dir, "metrics_history.json")
-            if os.path.exists(metrics_filename):
-                with open(metrics_filename, 'r') as f:
-                    all_metrics = json.load(f)
-            else:
-                all_metrics = {}
-            
-            # Ajouter toutes les métriques batchées aux données
+                self._all_states[str(episode_idx)] = episode_states
             for i, episode_metrics in enumerate(self.batch_episode_metrics):
                 episode_idx = episode_num - len(self.batch_episode_metrics) + i + 1
-                all_metrics[str(episode_idx)] = episode_metrics  # Convertir l'index en string
+                self._all_metrics[str(episode_idx)] = episode_metrics
             
-            # Sauvegarder les métriques
+            # Sauvegarder l'ensemble des épisodes et métriques sur disque
+            with open(states_filename, 'w') as f:
+                json.dump(self._all_states, f, indent=2)
             with open(metrics_filename, 'w') as f:
-                json.dump(all_metrics, f, indent=2)
+                json.dump(self._all_metrics, f, indent=2)
             
             # Réinitialiser les batchs
             self.batch_episode_states = []
