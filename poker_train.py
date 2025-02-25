@@ -97,7 +97,10 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             target_vector = [1.0/len(valid_actions)] * len(PlayerAction)
 
         # Exécuter l'action dans l'environnement
-        next_state, _ = env.step(action_chosen)
+        next_state, reward = env.step(action_chosen)
+        
+        # Add the reward to cumulative rewards for the current player
+        cumulative_rewards[current_player.name] += reward
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         if env.current_phase != GamePhase.SHOWDOWN:
@@ -141,6 +144,12 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         
         # Rendu graphique si activé
         handle_rendering(env, rendering, episode, render_every)
+
+    # After the showdown, add stack changes to rewards
+    for player in env.players:
+        # Use net stack changes as the main component of reward
+        stack_change = env.net_stack_changes[player.name]
+        cumulative_rewards[player.name] += stack_change / 100.0  # Normalize by dividing by 100
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
     print("\n=== Résultats de l'épisode ===")
@@ -212,7 +221,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(num_simulations = 20)
+    mccfr_trainer = MCCFRTrainer(num_simulations = 5)
     try:
         for episode in range(episodes):
             # Décroissance d'epsilon

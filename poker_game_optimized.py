@@ -181,75 +181,89 @@ class PokerGameOptimized:
         player_info['has_acted'] = True
 
     def betting_round(self, hero_trajectory_action: PlayerAction) -> Tuple[bool, bool]:
-        print("\n--- Début betting_round ---")
-        print(f"Phase: {self.current_phase}")
+        print(f"\n--- Début betting_round - phase : {self.current_phase} ---")
         print(f"Index joueur actuel: {self.current_player_idx}")
         
         # Réinitialiser has_acted pour les joueurs actifs non all-in
         for player_info in self.players_info:
             if not (player_info['has_folded'] or player_info['is_all_in']):
                 player_info['has_acted'] = False
+
+        # Trouver le premier joueur actif
+        in_loop = 0
+        while self.players_info[self.current_player_idx]['has_folded'] or self.players_info[self.current_player_idx]['is_all_in']:
+            self.current_player_idx = (self.current_player_idx + 1) % self.num_players
+            in_loop += 1
+            if in_loop > 10:
+                print("Etat des joueurs avant le round :")
+                for p in self.players_info:
+                    print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
+                raise ValueError("ATTENTION: Boucle infinie dans betting_round! before betting_round while loop")
         
         iteration = 0
         while iteration < 20:
             # Vérifier si la phase est déja terminée
             phase_completed, instant_finish = self.check_phase_completion()
-            if phase_completed or instant_finish:
-                print("Phase terminée ou victoire instantanée - sortie de la boucle")
+            if phase_completed :
+                print(f"Phase terminée - sortie de la boucle")
+                break
+            if instant_finish:
+                print("Showdown instantané - sortie de la boucle")
                 break
             
             # Faire agir le joueur courant
             player_info = self.players_info[self.current_player_idx]
             print(f"Joueur actuel: {player_info['name']}")
-            print(f"A déjà agi: {player_info['has_acted']}")
-            print(f"Mise actuelle: {player_info['current_player_bet']}")
-            print(f"Mise maximale: {self.current_maximum_bet}")
+
+            valid_actions = self.get_valid_actions(player_info)
+            print(f"Actions valides: {[a.value for a in valid_actions]}")
+
+            if not valid_actions:
+                print("player_info :", player_info)
+                raise ValueError("WARNING: Aucune action valide pour le joueur courant!")
             
-            if not player_info['is_all_in']:
-                valid_actions = self.get_valid_actions(player_info)
-                print(f"Actions valides: {[a.value for a in valid_actions]}")
+            is_hero = (player_info['name'] == self.simple_state['hero_name'])
 
-                if not valid_actions:
-                    print("player_info :", player_info)
-                    raise ValueError("WARNING: Aucune action valide pour le joueur courant!")
-                
-                is_hero = (player_info['name'] == self.simple_state['hero_name'])
+            print('is_hero :', is_hero)
 
-                print('is_hero :', is_hero)
-                print('hero_trajectory_action :', hero_trajectory_action)
-                print('valid_actions :', valid_actions)
-
-                if is_hero:
-                    if self.hero_first_action:
-                        chosen_action = hero_trajectory_action
-                        self.hero_first_action = False
-                    else:
-                        chosen_action = rd.choice(valid_actions)
+            if is_hero:
+                if self.hero_first_action:
+                    chosen_action = hero_trajectory_action
+                    self.hero_first_action = False
                 else:
                     chosen_action = rd.choice(valid_actions)
-                print(f"Action choisie: {chosen_action}")
-                self.simulate_action(player_info, chosen_action)
+            else:
+                chosen_action = rd.choice(valid_actions)
 
-                # Vérifier si la phase est terminée
-                phase_completed, instant_finish = self.check_phase_completion()
-                if phase_completed or instant_finish:
-                    print("Phase terminée ou victoire instantanée - sortie de la boucle")
-                    break
+            print(f"Action choisie: {chosen_action}")
+            self.simulate_action(player_info, chosen_action)
 
-                # Passer au joueur suivant
-                in_loop = 0
+            # Vérifier si la phase est terminée
+            phase_completed, instant_finish = self.check_phase_completion()
+            if phase_completed :
+                print(f"Phase terminée - sortie de la boucle")
+                break
+            if instant_finish:
+                print("Showdown instantané - sortie de la boucle")
+                break
+
+            # Passer au joueur suivant
+            in_loop = 0
+            self.current_player_idx = (self.current_player_idx + 1) % self.num_players
+            while self.players_info[self.current_player_idx]['has_folded'] or self.players_info[self.current_player_idx]['is_all_in']:
                 self.current_player_idx = (self.current_player_idx + 1) % self.num_players
-                while self.players_info[self.current_player_idx]['has_folded'] or self.players_info[self.current_player_idx]['is_all_in']:
-                    self.current_player_idx = (self.current_player_idx + 1) % self.num_players
-                    in_loop += 1
-                    if in_loop > 10:
-                        print("Etat des joueurs avant le round :")
-                        for p in self.players_info:
-                            print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
-                        raise ValueError("ATTENTION: Boucle infinie dans betting_round!")
+                in_loop += 1
+                if in_loop > 10:
+                    print("Etat des joueurs avant le round :")
+                    for p in self.players_info:
+                        print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
+                    raise ValueError("ATTENTION: Boucle infinie dans betting_round!")
 
             iteration += 1
             if iteration >= 20:
+                print('current_player_idx :', self.current_player_idx)
+                for p in self.players_info:
+                            print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
                 raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans betting_round!")
 
         return phase_completed, instant_finish
@@ -271,12 +285,12 @@ class PokerGameOptimized:
         
         # Tout le monde a fold ou all-in
         if len(active_players) == 0:
-            print("Tout le monde a foldé ou all-in - victoire instantanée")
+            print("Tout le monde a foldé ou all-in - showdown instantané")
             return True, True
         
         # Si un seul joueur reste
         if len(non_folded_players) == 1:
-            print("Un seul joueur reste - victoire instantanée")
+            print("Un seul joueur reste - showdown instantané")
             return True, True
         
         # Vérifier que tous les joueurs ont agi et égalisé la mise maximale
@@ -305,7 +319,7 @@ class PokerGameOptimized:
         print("\n--- Début advance_phase ---")
         print(f"Phase actuelle: {self.current_phase}")
         print(f"Cartes communes actuelles: {self.community_cards}")
-        print(f"Cartes à ajouter: {self.rd_missing_community_cards}")
+        print(f"Cartes restantes à ajouter: {self.rd_missing_community_cards}")
 
         # Progression des phases et distribution des cartes
         if self.current_phase == GamePhase.PREFLOP:
@@ -362,7 +376,6 @@ class PokerGameOptimized:
         if 'phase' in json_safe_state:
             json_safe_state['phase'] = str(json_safe_state['phase'])
         
-        print(f"State initial: {json.dumps(json_safe_state, indent=4)}")
         print(f"Action de la trajectoire: {hero_trajectory_action} parmi les actions à parcourir {[action.value for action in valid_actions]}")
         
         # Ne pas simuler si déjà au showdown
@@ -370,26 +383,20 @@ class PokerGameOptimized:
             print("Déjà au showdown - pas de simulation nécessaire")
             return False
         
-        current_hero_action = hero_trajectory_action
         iteration = 0
         instant_finish = False
         while self.current_phase != GamePhase.SHOWDOWN:
-            print(f"\nItération {iteration} de simulate_hand")
-            print(f"Phase actuelle: {self.current_phase}")
-            print("Appel de betting_round...")
-            
-            phase_completed, instant_finish = self.betting_round(current_hero_action)
-            print("betting_round terminé")
-            print(f"Phase completed: {phase_completed}, Instant win: {instant_finish}")
+            print(f"\nItération {iteration} de simulate_hand")            
+            phase_completed, instant_finish = self.betting_round(hero_trajectory_action)
+            print(f"--- Phase completed: {phase_completed}, Instant win: {instant_finish} ---")
             
             if instant_finish :
-                print("Instant win détecté - sortie de la boucle")
+                print("Instant showdown détecté - sortie totale de la boucle")
                 break
             elif phase_completed:
                 print(f"Phase {self.current_phase} terminée - passage à la phase suivante")
                 self.advance_phase()
                 print(f"Nouvelle phase: {self.current_phase}")
-                current_hero_action = None
             else :
                 raise ValueError("ATTENTION: Phase non terminée dans la boucle principale de simulate_hand")
             

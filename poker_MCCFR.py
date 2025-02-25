@@ -1,6 +1,7 @@
 import numpy as np
 import random as rd
-import torch
+import copy
+import json
 from typing import List, Dict, Tuple
 from poker_game import PlayerAction, PokerGame
 from poker_game_optimized import PokerGameOptimized
@@ -28,7 +29,7 @@ class MCCFRTrainer:
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(simple_game_state)
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
-                replicated_game = PokerGameOptimized(simple_game_state.copy())
+                replicated_game = PokerGameOptimized(copy.deepcopy(simple_game_state))
                 payoff = replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
