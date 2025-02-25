@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from poker_model import PokerTransformerModel
+from poker_model import PokerModel
 from poker_game import PlayerAction
 from collections import deque
 import random
@@ -43,7 +43,7 @@ class PokerAgent:
         self.value_loss_coeff = value_loss_coeff
 
         # Utilisation du modèle Transformer
-        self.model = PokerTransformerModel().to(device)
+        self.model = PokerModel().to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = deque(maxlen=10000)  # Buffer de replay
         self.temp_memory = [] # Buffer temporaire pour les transitions de l'agent, avant update en backpropagation de la final reward
@@ -71,7 +71,7 @@ class PokerAgent:
     def get_action(self, state, epsilon, valid_actions):
         """
         Sélectionne une action selon la politique epsilon-greedy.
-        Ici, 'state' est une séquence de vecteurs (shape: [n, 116]).
+        Ici, 'state' est une séquence de vecteurs.
 
         Retourne l'action choisie et une éventuelle pénalité si l'action était invalide.
         """
