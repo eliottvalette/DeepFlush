@@ -68,7 +68,7 @@ class PokerAgent:
         except Exception as e:
             raise RuntimeError(f"Erreur lors du chargement du modèle: {str(e)}")
 
-    def get_action(self, state, epsilon, valid_actions):
+    def get_action(self, state, epsilon, valid_actions, game=None):
         """
         Sélectionne une action selon la politique epsilon-greedy.
         Ici, 'state' est une séquence de vecteurs.
@@ -119,18 +119,30 @@ class PokerAgent:
             return reverse_action_map[chosen_index], valid_action_mask
         
         else:
-            # Ajout d'une dimension batch : state est une liste de tensors, on utilise torch.stack pour obtenir la séquence sous forme d'un tensor 
+            # Obtenir l'historique des actions
+            history_tensor = None
+            if game is not None:
+                history_tensor = game.get_tokenized_history()
+                # Transposer et ajouter une dimension batch
+                history_tensor = history_tensor.transpose(0, 1).unsqueeze(0).to(self.device)
+            else:
+                # Si game n'est pas fourni, créer un tenseur d'historique vide
+                history_tensor = torch.zeros((1, 1, 33), device=self.device)
+            
+            # Ajout d'une dimension batch pour state
             state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
+            
             self.model.eval()
 
             with torch.no_grad():
-                # Le modèle retourne (action_probs, state_value)
-                action_probs, _ = self.model(state_tensor)
+                # Le modèle prend maintenant state_tensor et history_tensor
+                policy_logits, _ = self.model(state_tensor, history_tensor)
+                action_probs = torch.softmax(policy_logits, dim=-1)
+                
             masked_probs = action_probs * valid_action_mask
 
             if masked_probs.sum().item() == 0:
                 chosen_index = np.random.choice(valid_indices)
-
             else:
                 masked_probs = masked_probs / masked_probs.sum()
                 chosen_index = torch.argmax(masked_probs).item()
@@ -180,7 +192,7 @@ class PokerAgent:
         """
         self.memory.append((temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask))
 
-    def train_model(self):
+    def train_model(self, game=None):
         """
         Entraîne le modèle sur un batch de transitions.
         Les états sont des séquences (shape: [n, 116]).
@@ -243,23 +255,38 @@ class PokerAgent:
                     padded_next_states[i, :len(next_state_seq_tensor)] = next_state_seq_tensor
 
             # Conversion des autres données en tensors PyTorch
-            actionext_state_tensor = torch.LongTensor(actions).to(self.device)
+            actions_tensor = torch.LongTensor(actions).to(self.device)
             rewards_tensor = torch.FloatTensor(rewards).to(self.device)
             dones_tensor = torch.FloatTensor(dones).to(self.device)
 
+            # Créer des tenseurs d'historique vides (ou les récupérer du jeu si disponible)
+            batch_size = len(state_sequences)
+            history_tensor = torch.zeros((batch_size, 1, 33), device=self.device)
+            next_history_tensor = torch.zeros((batch_size, 1, 33), device=self.device)
+            
+            if game is not None:
+                # Si le jeu est fourni, récupérer l'historique réel
+                history = game.get_tokenized_history()
+                if history.dim() > 0:  # Vérifier que l'historique n'est pas vide
+                    # Transposer et répéter pour chaque élément du batch
+                    history = history.transpose(0, 1).unsqueeze(0)
+                    history_tensor = history.repeat(batch_size, 1, 1).to(self.device)
+                    next_history_tensor = history_tensor.clone()
+
             # Calculer les probabilités d'action et les valeurs d'état
-            action_probs, state_values = self.model(padded_states)
+            policy_logits, state_values = self.model(padded_states, history_tensor)
+            action_probs = torch.softmax(policy_logits, dim=-1)
             state_values = state_values.squeeze(-1)
 
             # Calcul des cibles TD et des avantages
             with torch.no_grad():
-                _, next_state_values = self.model(padded_next_states)
+                _, next_state_values = self.model(padded_next_states, next_history_tensor)
                 next_state_values = next_state_values.squeeze(-1)
             temporal_difference_targets = rewards_tensor + self.gamma * next_state_values * (1 - dones_tensor)
             advantages = temporal_difference_targets - state_values
 
             # Calcul des pertes
-            selected_action_probs = action_probs[torch.arange(len(actionext_state_tensor)), actionext_state_tensor]
+            selected_action_probs = action_probs[torch.arange(len(actions_tensor)), actions_tensor]
             policy_loss = -torch.mean(torch.log(selected_action_probs + 1e-10) * advantages.detach())
             value_loss = torch.mean((state_values - temporal_difference_targets.detach()) ** 2)
             entropy_loss = -torch.mean(torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1))
