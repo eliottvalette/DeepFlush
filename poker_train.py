@@ -97,10 +97,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             target_vector = [1.0/len(valid_actions)] * len(PlayerAction)
 
         # Exécuter l'action dans l'environnement
-        next_state, reward = env.step(action_chosen)
-        
-        # Add the reward to cumulative rewards for the current player
-        cumulative_rewards[current_player.name] += reward
+        next_state, _ = env.step(action_chosen)
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         if env.current_phase != GamePhase.SHOWDOWN:
@@ -145,14 +142,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # Rendu graphique si activé
         handle_rendering(env, rendering, episode, render_every)
 
-    # After the showdown, add stack changes to rewards
-    for player in env.players:
-        # Use net stack changes as the main component of reward
-        stack_change = env.net_stack_changes[player.name]
-        cumulative_rewards[player.name] += stack_change / 100.0  # Normalize by dividing by 100
-
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
-    print("\n=== Résultats de l'épisode ===")
+    print(f"\n=== Résultats de l'épisode [{episode + 1}/{EPISODES}] ===")
     # Attribution des récompenses finales
     for player in env.players:
         # ---- Pour la collecte et l'affichage des métriques ----
@@ -172,13 +163,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             "state_vector": final_state.tolist()
         }
         data_collector.add_state(state_info)
-
-    # Affichage des résultats
-    print("\nRécompenses finales:")
-    for player in env.players:
-        print(f"  {player.name}: {cumulative_rewards[player.name]:.3f}")
-    print(f"\nFin de l'épisode {episode}")
-    print(f"Randomness: {epsilon*100:.3f}%")
     
     # Entraînement et collecte des métriques
     metrics_list = []
@@ -238,8 +222,6 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
             print(f"Randomness: {epsilon*100:.3f}%")
-            for player in env.players:
-                print(f"Agent {player.name} reward: {reward_dict[player.name]:.2f}")
 
         # Save models at end of training
         if episode == episodes - 1:

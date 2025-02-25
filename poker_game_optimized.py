@@ -168,14 +168,19 @@ class PokerGameOptimized:
 
         elif action == PlayerAction.ALL_IN:
             print(f"{name} a all-in")
-            all_in_amount = player_stack
+            # Calculer le montant réel de l'all-in en tenant compte des mises déjà faites
+            remaining_stack = player_info['player_stack']
+            all_in_amount = remaining_stack
+            
             player_info['player_stack'] = 0
-            player_info['current_player_bet'] = current_player_bet + all_in_amount
+            player_info['current_player_bet'] += all_in_amount  # Ajouter à la mise existante
             self.contributions[name] += all_in_amount
             self.pot += all_in_amount
+            
             if player_info['current_player_bet'] > self.current_maximum_bet:
                 self.current_maximum_bet = player_info['current_player_bet']
             player_info['is_all_in'] = True
+            print(f"{name} a all-in {all_in_amount}BB (mise totale: {player_info['current_player_bet']}BB)")
         else :
             raise ValueError(f"Action invalide: {action}")
         player_info['has_acted'] = True
