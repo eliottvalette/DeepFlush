@@ -22,6 +22,7 @@ class PokerGameOptimized:
         self.contributions = {player['name']: player['current_player_bet'] for player in self.players_info}
         self.bet_unit = self.current_maximum_bet if self.current_maximum_bet > 0 else 1
         self.number_raise_this_game_phase = 0
+        self.hero_first_action = True
 
         # Ajout des attributs manquants
         self.button_seat_position = self.simple_state['button_seat_position']
@@ -169,7 +170,7 @@ class PokerGameOptimized:
 
         player_info['has_acted'] = True
 
-    def betting_round(self, hero_trajectory_action: PlayerAction) -> None:
+    def betting_round(self, hero_trajectory_action: PlayerAction) -> Tuple[bool, bool]:
         print("\n--- Début betting_round ---")
         print(f"Phase: {self.current_phase}")
         print(f"Index joueur actuel: {self.current_player_idx}")
@@ -180,14 +181,12 @@ class PokerGameOptimized:
                 player_info['has_acted'] = False
         
         iteration = 0
-        while iteration < 50:
-            print(f"\nItération {iteration} de betting_round")
-            
-            # Vérifier si le round est terminé
-            in_game_players = [p for p in self.players_info if not p['has_folded']]
-            print(f"Joueurs en jeu: {[p['name'] for p in in_game_players]}")
-            if not in_game_players:
-                raise ValueError("WARNING: Aucun joueur en jeu!")
+        while iteration < 20:
+            # Passer au joueur suivant
+            self.current_player_idx = (self.current_player_idx + 1) % self.num_players
+            while self.players_info[self.current_player_idx]['has_folded'] or self.players_info[self.current_player_idx]['is_all_in']:
+                self.current_player_idx = (self.current_player_idx + 1) % self.num_players
+
             
             # Faire agir le joueur courant
             player_info = self.players_info[self.current_player_idx]
@@ -196,49 +195,43 @@ class PokerGameOptimized:
             print(f"Mise actuelle: {player_info['current_player_bet']}")
             print(f"Mise maximale: {self.current_maximum_bet}")
             
-            if not (player_info['has_folded'] or player_info['is_all_in']):
+            if not player_info['is_all_in']:
                 valid_actions = self.get_valid_actions(player_info)
                 print(f"Actions valides: {[a.value for a in valid_actions]}")
-                if valid_actions:
-                    is_hero = (player_info['name'] == self.simple_state['hero_name'])
-                    if is_hero:
+
+                if not valid_actions:
+                    print("player_info :", player_info)
+                    raise ValueError("WARNING: Aucune action valide pour le joueur courant!")
+                
+                is_hero = (player_info['name'] == self.simple_state['hero_name'])
+                if is_hero :
+                    if self.hero_first_action:
                         chosen_action = hero_trajectory_action
-                        if chosen_action not in valid_actions:
-                            print(f"Warning: Hero's chosen action {chosen_action} not valid, choosing random valid action")
-                            chosen_action = rd.choice(valid_actions)
+                        self.hero_first_action = False
                     else:
                         chosen_action = rd.choice(valid_actions)
-                    print(f"Action choisie: {chosen_action}")
-                    self.simulate_action(player_info, chosen_action)
+                else:
+                    chosen_action = rd.choice(valid_actions)
+                print(f"Action choisie: {chosen_action}")
+                self.simulate_action(player_info, chosen_action)
             
-            # ***** NEW: Check if the betting round should end *****
-            phase_completed, _ = self.check_phase_completion()
-            if phase_completed:
-                print("Betting round completed, breaking out of loop.")
+            # Vérifier si le round est terminé
+            phase_completed, instant_win = self.check_phase_completion()
+            if phase_completed or instant_win:
+                print("Phase terminée ou victoire instantanée - sortie de la boucle")
                 break
-            
-            # Passer au joueur suivant
-            self.current_player_idx = (self.current_player_idx + 1) % self.num_players
-            print(f"Prochain index: {self.current_player_idx}")
-            
+                        
             iteration += 1
+            if iteration >= 20:
+                raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans betting_round!")
 
-        if iteration >= 50:
-            print("WARNING: Maximum iterations reached in betting round")
-            print("Current game state:")
-            print(f"Phase: {self.current_phase}")
-            print(f"Current max bet: {self.current_maximum_bet}")
-            print("Players info:")
-            for p in self.players_info:
-                print(f"Player {p['name']}: bet={p['current_player_bet']}, folded={p['has_folded']}, all_in={p['is_all_in']}, has_acted={p['has_acted']}")
-            raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans betting_round!")
-
+        return phase_completed, instant_win
 
     def check_phase_completion(self):
         """
         Vérifie si le tour d'enchères est terminé.
         """
-        # Récupérer les joueurs actifs et all-in
+        # Récupérer les joueurs actifs
         in_game_players = [player_info for player_info in self.players_info if not (player_info['has_folded'])]
         
         # Si plus personne n'est en jeu, signaler une erreur
@@ -249,6 +242,7 @@ class PokerGameOptimized:
         if len(in_game_players) == 1:
             return True, True
         
+        # Vérifier que tous les joueurs ont agi et égalisé la mise maximale
         for player_info in in_game_players:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player_info['has_acted']:
@@ -265,7 +259,7 @@ class PokerGameOptimized:
             return phase_completed, False
 
         # Vérifier le cas spécial d'un seul joueur non all-in
-        non_all_in_players = [player_info for player_info in self.players_info if not player_info['is_all_in']]
+        non_all_in_players = [p for p in in_game_players if not p['is_all_in']]
         if len(non_all_in_players) == 1 and len(in_game_players) > 1:
             print("Moving to showdown (only one non all-in player remains)")
             return phase_completed, False
@@ -340,19 +334,16 @@ class PokerGameOptimized:
         current_hero_action = hero_trajectory_action
         iteration = 0
         instant_win = False
-        while self.current_phase != GamePhase.SHOWDOWN:
+        while self.current_phase != GamePhase.SHOWDOWN :
             print(f"\nItération {iteration} de simulate_hand")
             print(f"Phase actuelle: {self.current_phase}")
             print("Appel de betting_round...")
             
-            self.betting_round(current_hero_action)
+            phase_completed, instant_win = self.betting_round(current_hero_action)
             print("betting_round terminé")
-            
-            print("Vérification de la phase...")
-            phase_completed, instant_win = self.check_phase_completion()
             print(f"Phase completed: {phase_completed}, Instant win: {instant_win}")
             
-            if instant_win or len([p for p in self.players_info if not p['has_folded']]) <= 1:
+            if instant_win :
                 print("Instant win détecté - sortie de la boucle")
                 break
             elif phase_completed:
@@ -360,11 +351,9 @@ class PokerGameOptimized:
                 self.advance_phase()
                 print(f"Nouvelle phase: {self.current_phase}")
                 current_hero_action = None
+            else :
+                raise ValueError("ATTENTION: Phase non terminée dans la boucle principale de simulate_hand")
             
-            iteration += 1
-            if iteration > 20:  # Garde-fou contre les boucles infinies
-                raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans la boucle principale de simulate_hand")
-        
         print("=== Fin simulate_hand ===\n")
         return instant_win
 
