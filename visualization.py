@@ -525,21 +525,28 @@ class Visualizer:
         """
         Génère des visualisations des métriques d'entraînement à partir du fichier metrics_history.json
         """
-        # Créer une figure avec 4 sous-graphiques
+        # Créer une figure avec 6 sous-graphiques (2x3)
         fig = plt.figure(figsize=(20, 15))
         
         # Définir une palette de couleurs pastel
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
         
-        # Extraire les agents uniques (maintenant basé sur l'index dans la liste des métriques)
+        # Extraire les agents uniques
         agents = PLAYERS
 
-        # Métriques spécifiques à tracer
-        metrics_to_plot = ['entropy_loss', 'value_loss', 'loss', 'std']
+        # Métriques spécifiques à tracer basées sur l'output de train_model
+        metrics_to_plot = [
+            ('policy_loss', 'Policy Loss'),
+            ('value_loss', 'Value Loss'),
+            ('total_loss', 'Total Loss'),
+            ('invalid_action_loss', 'Invalid Action Loss'),
+            ('mean_predicted_value', 'Mean Predicted Value'),
+            ('mean_target_value', 'Mean Target Value')
+        ]
 
         # Créer un subplot pour chaque métrique
-        for idx, metric_name in enumerate(metrics_to_plot):
-            ax = plt.subplot(2, 2, idx + 1)
+        for idx, (metric_name, display_name) in enumerate(metrics_to_plot):
+            ax = plt.subplot(2, 3, idx + 1)
             
             # Préparer les données pour chaque agent
             for agent_idx, agent in enumerate(agents):
@@ -547,7 +554,7 @@ class Visualizer:
                 values = []
                 
                 for episode_num, episode_metrics in metrics_data.items():
-                    if metric_name in episode_metrics[agent_idx]:  # Utiliser l'index de l'agent
+                    if metric_name in episode_metrics[agent_idx]:
                         episodes.append(int(episode_num))
                         values.append(float(episode_metrics[agent_idx][metric_name]))
                 
@@ -560,17 +567,9 @@ class Visualizer:
                            color=pastel_colors[agent_idx % len(pastel_colors)],
                            linewidth=2)
 
-            # Personnaliser les titres selon la métrique
-            title_mapping = {
-                'entropy_loss': 'Perte d\'entropie',
-                'value_loss': 'Perte de valeur',
-                'loss': 'Perte totale',
-                'std': 'Écart-type'
-            }
-            
-            ax.set_title(f'Evolution de {title_mapping.get(metric_name, metric_name)}')
+            ax.set_title(f'Evolution de {display_name}')
             ax.set_xlabel('Episode')
-            ax.set_ylabel(metric_name)
+            ax.set_ylabel(display_name)
             ax.legend()
             
             # Style du subplot
@@ -596,7 +595,7 @@ class Visualizer:
         })
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.viz_dir, 'Poker_metrics.jpg'), dpi=500, bbox_inches='tight')
+        plt.savefig(os.path.join(self.viz_dir, 'Poker_metrics.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()
 
     def plot_analytics(self, states_data, dpi=500):

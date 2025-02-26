@@ -683,7 +683,7 @@ class PokerGame:
                 if not player.has_folded and not player.is_all_in:
                     player.has_acted = False  # Réinitialisation du flag
         
-        # Set first player after dealer button
+        # Set first player after dealer button # TODO : Quand la Turn se termine sur le joueur 3 on donne la parole au premier a sa gauche et au lieu de le donner au premier actif a la gauche de la sb, sb inclue
         self.current_player_seat = (self.button_seat_position + 1) % self.num_players
         while (not self.players[self.current_player_seat].is_active or 
                self.players[self.current_player_seat].has_folded or 
@@ -1768,6 +1768,67 @@ class PokerGame:
         final_state = torch.tensor(final_state, dtype=torch.float32)
         
         return final_state    
+    
+    def get_simple_state(self) -> Dict:
+        """
+        Extrait un état de jeu simplifié sous forme de dictionnaire contenant les informations brutes nécessaires :
+        - Les cartes privées du joueur courant (hero)
+        - Les cartes communes déjà révélées
+        - La phase actuelle du jeu (en chaîne, par exemple "preflop", "flop", etc.)
+        - Les informations sur chaque joueur (nom, stack, mise actuelle, statut)
+        - Le pot principal et la mise maximale actuelle
+        - La position du bouton et le nombre de joueurs actifs
+
+        Returns:
+            Dict: État simplifié du jeu
+            Les joueurs sont ordonnés selon leurs positions : SB, BB, UTG, HJ, CO, BTN
+        """
+        current_player = self.players[self.current_player_seat]
+        hero_cards = [(card.value, card.suit) for card in current_player.cards]
+        community_cards = [(card.value, card.suit) for card in self.community_cards]
+        
+        # Récupérer les joueurs qui peuvent encore agir
+        player_that_can_still_act = [p for p in self.players if not (p.has_folded or not p.is_active)]
+        
+        # Créer une liste temporaire avec tous les joueurs et leurs positions
+        players_with_positions = []
+        for p in player_that_can_still_act:
+            players_with_positions.append({
+                'name': p.name,
+                'player_stack': p.stack,
+                'current_player_bet': p.current_player_bet,
+                'is_active': p.is_active,
+                'has_folded': p.has_folded,
+                'is_all_in': p.is_all_in,
+                'role_position': p.role_position,  # 0=SB, 1=BB, 2=UTG, 3=HJ, 4=CO, 5=BTN
+                'has_acted': p.has_acted,
+                'seat_position': p.seat_position
+            })
+        
+        # Trier les joueurs par position (SB=0, BB=1, UTG=2, etc.)
+        players_info = sorted(players_with_positions, key=lambda x: x['role_position'])
+
+        # Récupérer l'index du joueur courant dans la liste des dictionnaires players_info
+        hero_index = next((i for i, p in enumerate(players_info) if p['name'] == current_player.name), None)
+        if hero_index is None:
+            raise ValueError("Le joueur courant n'est pas trouvé dans la liste des joueurs")
+        
+        simple_state = {
+            'hero_name': current_player.name,
+            'hero_index': hero_index,
+            'hero_cards': hero_cards,
+            'community_cards': community_cards,
+            'phase': self.current_phase,
+            'pot': self.main_pot,
+            'current_maximum_bet': self.current_maximum_bet,
+            'players_info': players_info, 
+            'num_active_players': len(player_that_can_still_act),
+            'big_blind': self.big_blind,
+            'small_blind': self.small_blind
+        }
+        
+        return simple_state
+
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
         """

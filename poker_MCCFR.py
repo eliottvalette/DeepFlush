@@ -1,8 +1,10 @@
 import numpy as np
 import random as rd
-import torch
-from typing import List, Dict, Tuple, Optional
-from poker_game import PokerGame, PlayerAction, GamePhase, Player
+import copy
+import json
+from typing import List, Dict, Tuple
+from poker_game import PlayerAction, PokerGame
+from poker_game_optimized import PokerGameOptimized
 from collections import defaultdict
 
 class MCCFRTrainer:
@@ -11,120 +13,37 @@ class MCCFRTrainer:
     pour l'apprentissage de stratégies GTO au poker.
     """
     
-    def __init__(self, player : Player, num_simulations: int = 100000):
-        self.player = player
+    def __init__(self, num_simulations: int):
         self.num_simulations = num_simulations
 
-    def get_state_info(self, current_state) -> Dict:
+    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], simple_game_state) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
         """
-        Extrait les informations essentielles du vecteur d'état de manière dévectorisée.
-        
-        Args:
-            current_state: Le vecteur d'état du jeu
-            
-        Returns:
-            Dict: Dictionnaire contenant les informations clés du state
-
-        Example:
-        {
-            "player_id": 2,
-            "player_cards": [(10, "♠"), (12, "♦")],
-            "community_cards": [(11, "♠"), (13, "♦"), (14, "♣")],
-            "game_phase": "FLOP",
-            "valid_actions": ["FOLD", "CALL", "RAISE", "ALL_IN"],
-            "players_info": [
-                {
-                    "player_id": 0,
-                    "stack": 80,
-                    "current_bet": 20,
-                    "position": "SB"
-                },
-                {
-                    "player_id": 1,
-                    "stack": 80,
-                    "current_bet": 20,
-                    "position": "BB"
-                },
-                {
-                    "player_id": 2,
-                    "stack": 100,
-                    "current_bet": 0,
-                    "position": "UTG"
-                }
-            ],
-            "num_active_players": 3
-        }
+        Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
-        # Extraction des cartes du joueur
-        player_cards = []
-        for i in range(2):  # 2 cartes
-            base_idx = i * 5
-            if current_state[base_idx] != -1:  # Si la carte existe
-                value = int(current_state[base_idx] * 14 + 2)  # Dénormalisation de la valeur
-                suit_vector = current_state[base_idx+1:base_idx+5].tolist()
-                if 1 in suit_vector:
-                    suit = ["♠", "♥", "♦", "♣"][suit_vector.index(1)]
-                    player_cards.append((value, suit))
-
-        # Extraction des cartes communes
-        community_cards = []
-        for i in range(5):  # 5 cartes max
-            base_idx = 10 + (i * 5)
-            if current_state[base_idx] != -1:  # Si la carte existe
-                value = int(current_state[base_idx] * 14 + 2)
-                suit_vector = current_state[base_idx+1:base_idx+5].tolist()
-                if 1 in suit_vector:
-                    suit = ["♠", "♥", "♦", "♣"][suit_vector.index(1)]
-                    community_cards.append((value, suit))
-
-        # Extraction de la phase de jeu
-        phase_vector = current_state[47:52].tolist()
-        phase = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"][phase_vector.index(1)]
-
-        # Extraction des actions disponibles
-        valid_actions = []
-        action_names = ["FOLD", "CHECK", "CALL", "RAISE", "ALL_IN"]
-        for i, is_valid in enumerate(current_state[77:82]):
-            if is_valid == 1:
-                valid_actions.append(action_names[i])
-
-        # Extraction des informations sur les joueurs
-        players_info = []
-        positions = ["SB", "BB", "UTG", "HJ", "CO", "BTN"]
+        # Initialiser a 0 pour toutes les actions de PlayerAction
+        self.payoff_per_trajectory_action = {action: 0 for action in PlayerAction}
         
-        for i in range(6):
-            # Stack à l'index 53+i
-            stack = float(current_state[53+i])
-            # Mise actuelle à l'index 59+i
-            current_bet = float(current_state[59+i])
-            # État actif/inactif à l'index 65+i
-            is_active = current_state[65+i] == 1
-            
-            # Position relative (one-hot vector de 71 à 77)
-            position = None
-            if i == self.player.seat_position:  # Pour le joueur courant uniquement
-                pos_vector = current_state[71:77].tolist()
-                position = positions[pos_vector.index(1)]
-            
-            if is_active:  # On n'ajoute que les joueurs actifs
-                players_info.append({
-                    "player_id": i,
-                    "stack": stack,
-                    "current_bet": current_bet,
-                    "position": position
-                })
+        for simulation_index in range(self.num_simulations):
+            print(f"\nSimulation [{simulation_index + 1}/{self.num_simulations}]")
+            print(f"Hero name: {simple_game_state['hero_name']}")
+            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(simple_game_state)
+            for trajectory_action in valid_actions:
+                # Créer une nouvelle instance pour chaque trajectoire
+                replicated_game = PokerGameOptimized(copy.deepcopy(simple_game_state))
+                payoff = replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
+                self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
-        return {
-            "player_id": self.player.seat_position,
-            "player_cards": player_cards,
-            "community_cards": community_cards,
-            "game_phase": phase,
-            "valid_actions": valid_actions,
-            "players_info": players_info,
-            "num_active_players": len(players_info)
-            }
+        target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
+        
+        print('----------------------------------')
+        print('valid_actions :', valid_actions)
+        print('target_vector :', target_vector)
+        print('self.payoff_per_trajectory_action :', self.payoff_per_trajectory_action)
+        print('----------------------------------')
+        
+        return target_vector, self.payoff_per_trajectory_action
     
-    def get_remaining_deck(self, player_cards: List[Tuple[int, str]], community_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
+    def get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
         Retourne la liste des cartes restantes dans le deck.
         
@@ -141,49 +60,69 @@ class MCCFRTrainer:
         deck = [(value, suit) for value in values for suit in suits]
         
         # Remove cards that are already in play
-        used_cards = player_cards + community_cards
-        remaining_deck = [card for card in deck if card not in used_cards]
+        remaining_deck = [card for card in deck if card not in known_cards]
         
         return remaining_deck
     
-    def generate_random_opponent_hands(self, state_info: Dict):
+    def get_opponent_hands_and_community_cards(self, state_info: Dict):
         """
-        Génère des mains aléatoires pour les adversaires en évitant les cartes déjà visibles.
+        Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes.
         """
-        player_cards = state_info['player_cards']
-        community_cards = state_info['community_cards']
+        known_cards = state_info['hero_cards'] + state_info['community_cards']
+        remaining_deck = self.get_remaining_deck(known_cards)
+
         num_opponents = state_info['num_active_players'] - 1
-        
-        remaining_deck = self.get_remaining_deck(player_cards, community_cards)
+        nb_missing_community_cards = 5 - len(state_info["community_cards"])
 
-        opponent_hands = rd.sample(remaining_deck, 2*num_opponents)
+        # Échantillonnage des cartes restantes
+        drawn_cards = rd.sample(remaining_deck, nb_missing_community_cards + 2 * num_opponents)
         
-        return opponent_hands
-        
+        missing_community_cards = drawn_cards[:nb_missing_community_cards]
+        opponent_hands = [drawn_cards[nb_missing_community_cards + i*2: nb_missing_community_cards + i*2+2] for i in range(num_opponents)]
 
-    def simulate_future_game(self, current_state, valid_actions: List[PlayerAction]) -> float:
+        return opponent_hands, missing_community_cards
+
+    def get_self_strategy(self, self_agent, self_state, valid_actions: List[PlayerAction]) -> np.ndarray:
         """
-        Simule le futur d'une partie en parcourant les trajectoires des actions valides.
+        Retourne la stratégie du joueur pour l'état donné.
         """
-        state_info = self.get_state_info(current_state)
+        _, _, action_probs = self_agent.get_action(self_state, valid_actions)
+        return action_probs
 
-        self.payoff_per_trajectory_action = defaultdict(float)
-
-        for _ in range(self.num_simulations):
-            rd_opponents_cards = self.generate_random_opponent_hands(state_info)
-            rd_community_cards = ['cards_3', 'cards_4'] if state_info['game_phase'] == 'FLOP' else ['cards_3'] if state_info['game_phase'] == 'TURN' else []
-
-            for trajectory_action in valid_actions:
-                payoff = self.simulate_trajectory(trajectory_action, rd_opponents_cards, rd_community_cards)
-                self.payoff_per_trajectory_action[trajectory_action] += payoff
-        
-        return self.payoff_per_trajectory_action
-        
-    def simulate_trajectory(self, trajectory_action: PlayerAction, rd_opponents_cards: List[str], rd_community_cards: List[str]) -> float:    
+    def get_opponent_strategy(self, opponent_agent, opponent_state, valid_actions: List[PlayerAction]) -> np.ndarray:
         """
-        Simule une trajectoire en prenant les actions valides.
+        Retourne la stratégie de l'adversaire pour l'état donné.
         """
-        current_player = self.game.current_player
-        current_state = self.game.current_state
-        current_player_actions = []
+        _, _, action_probs = opponent_agent.get_action(opponent_state, valid_actions)
+        action_probs_noised = self.add_noise_to_policy(action_probs)
+        return action_probs_noised
+                              
+    def add_noise_to_policy(self, base_probs: np.ndarray, noise_level: float = 0.1) -> np.ndarray:
+        """
+        Applique du bruit sur la distribution de probabilités d'un adversaire pour éviter une prédiction déterministe.
+
+        Args:
+            base_probs (np.ndarray): Distribution de base
+            noise_level (float): Niveau de bruit appliqué
         
+        Returns:
+            np.ndarray: Nouvelle distribution bruitée
+        """
+        noise = np.random.dirichlet(np.ones_like(base_probs)) * noise_level
+        new_probs = base_probs * (1 - noise_level) + noise
+        return new_probs / new_probs.sum()  # Normalisation
+    
+    import numpy as np
+
+    def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> np.ndarray:
+        """
+        Calcule le vecteur de probabilité cible basé sur les regrets estimés.
+        """
+        max_payoff = max(payoffs.values())
+        positive_regrets = np.array([max(0, max_payoff - payoffs[action]) for action in PlayerAction])
+
+        if np.sum(positive_regrets) > 0:
+            return positive_regrets / np.sum(positive_regrets)
+        else:
+            return np.ones(len(PlayerAction)) / len(PlayerAction)  # Uniforme si regrets nuls
+

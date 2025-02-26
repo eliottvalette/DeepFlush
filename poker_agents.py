@@ -7,6 +7,7 @@ from collections import deque
 import random
 import numpy as np
 import os
+import torch.nn.functional as F
 
 class PokerAgent:
     """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
@@ -68,7 +69,7 @@ class PokerAgent:
         except Exception as e:
             raise RuntimeError(f"Erreur lors du chargement du modèle: {str(e)}")
 
-    def get_action(self, state, epsilon, valid_actions):
+    def get_action(self, state, valid_actions, epsilon=0.0):
         """
         Sélectionne une action selon la politique epsilon-greedy.
         Ici, 'state' est une séquence de vecteurs (shape: [n, 116]).
@@ -77,8 +78,6 @@ class PokerAgent:
         """
         if not isinstance(state, (list, np.ndarray)):
             raise TypeError(f"state doit être une liste ou un numpy array (reçu: {type(state)})")
-        if not 0 <= epsilon <= 1:
-            raise ValueError(f"epsilon doit être entre 0 et 1 (reçu: {epsilon})")
         if not valid_actions:
             raise ValueError("valid_actions ne peut pas être vide")
         
@@ -102,61 +101,34 @@ class PokerAgent:
         for idx in valid_indices:
             valid_action_mask[0, idx] = 1
 
-        if np.random.random() < epsilon:
-            chosen_index = np.random.choice(valid_indices)
-            reverse_action_map = {v: k for k, v in action_map.items()}
-            return reverse_action_map[chosen_index], valid_action_mask
-        
+        # Implement epsilon-greedy
+        if random.random() < epsilon:  # With probability epsilon, choose random action
+            chosen_index = random.choice(valid_indices)
+            # Create uniform distribution for reporting
+            action_probs = torch.zeros((1, self.action_size), device=self.device)
+            action_probs[0, valid_indices] = 1.0/len(valid_indices)
         else:
-            # Ajout d'une dimension batch : state est une liste de tensors, on utilise torch.stack pour obtenir la séquence sous forme d'un tensor 
+            # Use the model to choose action (existing code)
             state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
             self.model.eval()
-
             with torch.no_grad():
-                # Le modèle retourne (action_probs, state_value)
                 action_probs, _ = self.model(state_tensor)
             masked_probs = action_probs * valid_action_mask
-
+            
             if masked_probs.sum().item() == 0:
-                chosen_index = np.random.choice(valid_indices)
-
+                chosen_index = random.choice(valid_indices)
             else:
                 masked_probs = masked_probs / masked_probs.sum()
                 chosen_index = torch.argmax(masked_probs).item()
 
-            if chosen_index not in valid_indices:
-                # Forcer une action valide
-                chosen_index = np.random.choice(valid_indices)
+        reverse_action_map = {v: k for k, v in action_map.items()}
+        return reverse_action_map[chosen_index], valid_action_mask, action_probs
 
-            reverse_action_map = {v: k for k, v in action_map.items()}
-            return reverse_action_map[chosen_index], valid_action_mask
-        
-    def temp_remember(self, state_seq, action, reward, next_state_seq, done, valid_action_mask):
-        """
-        Stocke une transition dans la mémoire de replay
-        :param state_seq: Séquence d'états
-        :param action: Action effectuée
-        :param reward: Récompense reçue
-        :param next_state: État suivant
-        :param done: True si l'épisode est terminé
-        :param is_temp: True si la transition est temporaire (pour les transitions de l'agent, avant update en backpropagation de la final reward)
-        """
-        action_map = {
-            PlayerAction.FOLD: 0,
-            PlayerAction.CHECK: 1,
-            PlayerAction.CALL: 2,
-            PlayerAction.RAISE: 3,
-            PlayerAction.ALL_IN: 4,
-            None: 0 #  L'action None est mappée au même indice que l'action fold (indice 0). L'action None est utilisée pour traiter le Showdown sans action, sans que cela n'ait d'impact négatif sur l'apprentissage global car elle n'est pas prise en compte dans le calcul des pertes.
-        }
-        numerical_action = action_map[action]
-        self.temp_memory.append((state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask))
-
-    def remember(self, temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask):
+    def remember(self, state_seq, target_vector, valid_action_mask):
         """
         Stocke une transition dans la mémoire de replay, cette transition sera utilisée pour l'entrainement du model
         """
-        self.memory.append((temp_state_seq, numerical_action, reward, next_state_seq, done, valid_action_mask))
+        self.memory.append((state_seq, target_vector, valid_action_mask))
 
     def train_model(self):
         """
@@ -165,11 +137,19 @@ class PokerAgent:
         """
         if len(self.memory) < 32:
             print('Not enough data to train :', len(self.memory))
-            return {'agent':self.name, 'loss': 0, 'entropy': 0, 'value_loss': 0, 'std': 0, 'learning_rate': self.learning_rate}
+            return {
+                'policy_loss': np.nan,
+                'value_loss': np.nan,
+                'total_loss': np.nan,
+                'invalid_action_loss': np.nan,
+                'mean_predicted_value': np.nan,
+                'mean_target_value': np.nan,
+                'mean_action_prob': np.nan
+            }
 
         try:
             batch = random.sample(self.memory, 32)
-            state_sequences, actions, rewards, next_state_sequences, dones, valid_action_masks = zip(*batch)
+            state_sequences, target_vectors, valid_action_masks = zip(*batch)
 
             # Conversion et uniformisation des valid_action_masks en tensors
             valid_action_masks_tensor = torch.stack([
@@ -201,68 +181,43 @@ class PokerAgent:
                 # Remplir le tenseur padded_states avec la séquence
                 padded_states[i, :len(seq_tensor)] = seq_tensor
 
-            # Même chose pour les next_states
-            padded_next_states = torch.zeros((len(next_state_sequences), max_seq_len, self.state_size), device=self.device)
-            for i, next_state_sequence in enumerate(next_state_sequences):
-                if next_state_sequence is not None:
-                    if len(next_state_sequence) > max_seq_len:
-                        next_state_seq = next_state_sequence[-max_seq_len:]
-                    else:
-                        next_state_seq = next_state_sequence
-                    
-                    # Convertir directement en tensor PyTorch
-                    next_state_seq_tensor = torch.stack(next_state_seq).to(self.device)
-                    
-                    # Vérifier la forme de la séquence
-                    if len(next_state_seq_tensor.shape) == 1:
-                        next_state_seq_tensor = next_state_seq_tensor.reshape(1, -1)
-                    
-                    # Remplir le tenseur padded_next_states
-                    padded_next_states[i, :len(next_state_seq_tensor)] = next_state_seq_tensor
-
             # Conversion des autres données en tensors PyTorch
-            actionext_state_tensor = torch.LongTensor(actions).to(self.device)
-            rewards_tensor = torch.FloatTensor(rewards).to(self.device)
-            dones_tensor = torch.FloatTensor(dones).to(self.device)
+            target_vector_tensor = torch.FloatTensor(target_vectors).to(self.device)
 
             # Calculer les probabilités d'action et les valeurs d'état
             action_probs, state_values = self.model(padded_states)
             state_values = state_values.squeeze(-1)
 
-            # Calcul des cibles TD et des avantages
-            with torch.no_grad():
-                _, next_state_values = self.model(padded_next_states)
-                next_state_values = next_state_values.squeeze(-1)
-            temporal_difference_targets = rewards_tensor + self.gamma * next_state_values * (1 - dones_tensor)
-            advantages = temporal_difference_targets - state_values
+            # Calcul de la MSE entre les probabilités d'action et le vecteur cible
+            policy_loss = F.mse_loss(action_probs, target_vector_tensor)
+            
+            # Calcul de la perte de la valeur (partie critique)
+            # On utilise la valeur finale comme cible pour la valeur d'état
+            value_loss = F.mse_loss(state_values, target_vector_tensor.max(dim=1)[0])
 
-            # Calcul des pertes
-            selected_action_probs = action_probs[torch.arange(len(actionext_state_tensor)), actionext_state_tensor]
-            policy_loss = -torch.mean(torch.log(selected_action_probs + 1e-10) * advantages.detach())
-            value_loss = torch.mean((state_values - temporal_difference_targets.detach()) ** 2)
-            entropy_loss = -torch.mean(torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1))
+            # Calcul de la perte, Probs donnée aux actions invalides
+            invalid_action_probs = action_probs * (1 - valid_action_masks_tensor)
+            invalid_action_loss = F.mse_loss(invalid_action_probs, torch.zeros_like(invalid_action_probs))
+            
+            # Perte totale
+            total_loss = policy_loss + self.value_loss_coeff * value_loss + invalid_action_loss
 
-            # Ajout d'un terme de régularisation pour les actions invalides utilisant le masque des actions valides 0 pour action invalide, 1 pour action valide
-            invalid_action_penalty = torch.sum((1 - valid_action_masks_tensor) * action_probs) * 0.1
-
-            total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss + invalid_action_penalty
-
-            advantages_std = advantages.std().item()
-
+            # Optimisation
             self.optimizer.zero_grad()
             total_loss.backward()
-            nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
 
+            # Métriques pour le suivi
             metrics = {
-                'agent': self.name,
-                'entropy_loss': entropy_loss.item(),
+                'policy_loss': policy_loss.item(),
                 'value_loss': value_loss.item(),
-                'invalid_action_penalty': invalid_action_penalty.item(),
-                'std': advantages_std,
-                'learning_rate': self.learning_rate,
-                'loss': total_loss.item()
+                'total_loss': total_loss.item(),
+                'invalid_action_loss': invalid_action_loss.item(),
+                'mean_predicted_value': state_values.mean().item(),
+                'mean_target_value': target_vector_tensor.max(dim=1)[0].mean().item(),
+                'mean_action_prob': action_probs.mean().item()
             }
+
             return metrics
 
         except Exception as e:
