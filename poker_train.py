@@ -5,6 +5,8 @@ import numpy as np
 import random as rd
 import pygame
 import torch
+import time
+import copy
 from visualization import DataCollector
 from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction
@@ -86,15 +88,16 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         player_state_seq = state_seq[current_player.name]
 
         # Prédiction avec une inférence de classique du model
-        action_chosen, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions)
+        action_chosen, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions, epsilon)
 
         if env.current_phase != GamePhase.PREFLOP: 
             # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
-            simple_state = env.get_simple_state()
+            simple_state = copy.deepcopy(env.get_simple_state())
             target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, simple_state)
         else:
-            # Use uniform distribution for preflop and showdown
-            target_vector = [1.0/len(valid_actions)] * len(PlayerAction)
+            # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
+            simple_state = copy.deepcopy(env.get_simple_state())
+            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, simple_state)
 
         # Exécuter l'action dans l'environnement
         next_state, _ = env.step(action_chosen)
@@ -181,8 +184,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     return cumulative_rewards, metrics_list
 
-def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES, 
-                      rendering: bool = RENDERING, render_every: int = 1000):
+def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: bool, render_every: int):
     """
     Boucle principale d'entraînement des agents.
     
@@ -205,9 +207,11 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(num_simulations = 5)
+    mccfr_trainer = MCCFRTrainer(num_simulations = 10)
     try:
         for episode in range(episodes):
+            start_time = time.time()
+
             # Décroissance d'epsilon
             epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
@@ -222,7 +226,8 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int = EPISODES,
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
             print(f"Randomness: {epsilon*100:.3f}%")
-
+            print(f"Time taken: {time.time() - start_time:.2f} seconds")
+            
         # Save models at end of training
         if episode == episodes - 1:
             save_models(env.players, episode)

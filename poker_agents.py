@@ -69,7 +69,7 @@ class PokerAgent:
         except Exception as e:
             raise RuntimeError(f"Erreur lors du chargement du modèle: {str(e)}")
 
-    def get_action(self, state, valid_actions):
+    def get_action(self, state, valid_actions, epsilon=0.0):
         """
         Sélectionne une action selon la politique epsilon-greedy.
         Ici, 'state' est une séquence de vecteurs (shape: [n, 116]).
@@ -101,26 +101,25 @@ class PokerAgent:
         for idx in valid_indices:
             valid_action_mask[0, idx] = 1
 
-        
-        # Ajout d'une dimension batch : state est une liste de tensors, on utilise torch.stack pour obtenir la séquence sous forme d'un tensor 
-        state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
-        self.model.eval()
-
-        with torch.no_grad():
-            # Le modèle retourne (action_probs, state_value)
-            action_probs, _ = self.model(state_tensor)
-        masked_probs = action_probs * valid_action_mask
-
-        if masked_probs.sum().item() == 0:
-            chosen_index = np.random.choice(valid_indices)
-
+        # Implement epsilon-greedy
+        if random.random() < epsilon:  # With probability epsilon, choose random action
+            chosen_index = random.choice(valid_indices)
+            # Create uniform distribution for reporting
+            action_probs = torch.zeros((1, self.action_size), device=self.device)
+            action_probs[0, valid_indices] = 1.0/len(valid_indices)
         else:
-            masked_probs = masked_probs / masked_probs.sum()
-            chosen_index = torch.argmax(masked_probs).item()
-
-        if chosen_index not in valid_indices:
-            # Forcer une action valide
-            chosen_index = np.random.choice(valid_indices)
+            # Use the model to choose action (existing code)
+            state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
+            self.model.eval()
+            with torch.no_grad():
+                action_probs, _ = self.model(state_tensor)
+            masked_probs = action_probs * valid_action_mask
+            
+            if masked_probs.sum().item() == 0:
+                chosen_index = random.choice(valid_indices)
+            else:
+                masked_probs = masked_probs / masked_probs.sum()
+                chosen_index = torch.argmax(masked_probs).item()
 
         reverse_action_map = {v: k for k, v in action_map.items()}
         return reverse_action_map[chosen_index], valid_action_mask, action_probs
@@ -139,13 +138,13 @@ class PokerAgent:
         if len(self.memory) < 32:
             print('Not enough data to train :', len(self.memory))
             return {
-                'policy_loss': -1,
-                'value_loss': -1,
-                'total_loss': -1,
-                'invalid_action_loss': -1,
-                'mean_predicted_value': -1,
-                'mean_target_value': -1,
-                'mean_action_prob': -1
+                'policy_loss': np.nan,
+                'value_loss': np.nan,
+                'total_loss': np.nan,
+                'invalid_action_loss': np.nan,
+                'mean_predicted_value': np.nan,
+                'mean_target_value': np.nan,
+                'mean_action_prob': np.nan
             }
 
         try:
