@@ -1,6 +1,0 @@
-Eliott : 
-- Set up PokerGameOptimized
-- Set up MCCFRTrainer
-
-Mathias
-- Refaire la reward
