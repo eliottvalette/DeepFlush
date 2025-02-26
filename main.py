@@ -22,7 +22,7 @@ for i in range(6):
     agent = PokerAgent(
         state_size=STATE_SIZE,
         device=device,
-        action_size=5,
+        action_size=16,
         gamma=GAMMA,
         learning_rate=ALPHA,
         load_model=False,

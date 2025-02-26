@@ -116,8 +116,6 @@ class PokerGameOptimized:
         Pour simplifier, le montant de la mise est fixé à self.bet_unit (pour la relance).
         """
 
-        # TODO :  Ajouter des Raise Value Error
-
         name = player_info['name']
         current_player_bet = player_info['current_player_bet']
         player_stack = player_info['player_stack']
@@ -156,6 +154,58 @@ class PokerGameOptimized:
                 raise_amount = (self.current_maximum_bet - player_info['current_player_bet']) * 2
             total_bet = call_amount + raise_amount
             total_bet = min(total_bet, player_stack)
+            player_info['player_stack'] = player_stack - total_bet
+            player_info['current_player_bet'] = current_player_bet + total_bet
+            self.contributions[name] += total_bet
+            self.number_raise_this_game_phase += 1
+            self.pot += total_bet
+            if player_info['current_player_bet'] > self.current_maximum_bet:
+                self.current_maximum_bet = player_info['current_player_bet']
+            if player_info['player_stack'] == 0:
+                player_info['is_all_in'] = True
+
+        # Add handling for pot-based raise actions
+        elif action in {
+            PlayerAction.RAISE_25_POT,
+            PlayerAction.RAISE_33_POT,
+            PlayerAction.RAISE_50_POT,
+            PlayerAction.RAISE_66_POT,
+            PlayerAction.RAISE_75_POT,
+            PlayerAction.RAISE_100_POT,
+            PlayerAction.RAISE_125_POT,
+            PlayerAction.RAISE_150_POT,
+            PlayerAction.RAISE_175_POT,
+            PlayerAction.RAISE_2X_POT,
+            PlayerAction.RAISE_3X_POT
+        }:
+            print(f"{name} a raise (pot-based)")
+            # Map actions to their pot percentages
+            raise_percentages = {
+                PlayerAction.RAISE_25_POT: 0.25,
+                PlayerAction.RAISE_33_POT: 0.33,
+                PlayerAction.RAISE_50_POT: 0.50,
+                PlayerAction.RAISE_66_POT: 0.66,
+                PlayerAction.RAISE_75_POT: 0.75,
+                PlayerAction.RAISE_100_POT: 1.00,
+                PlayerAction.RAISE_125_POT: 1.25,
+                PlayerAction.RAISE_150_POT: 1.50,
+                PlayerAction.RAISE_175_POT: 1.75,
+                PlayerAction.RAISE_2X_POT: 2.00,
+                PlayerAction.RAISE_3X_POT: 3.00
+            }
+            
+            percentage = raise_percentages[action]
+            raise_amount = self.pot * percentage
+            
+            # Ensure minimum raise amount
+            if self.current_maximum_bet == 0:
+                min_raise = self.big_blind
+            else:
+                min_raise = (self.current_maximum_bet - current_player_bet) * 2
+            
+            raise_amount = max(raise_amount, min_raise)
+            total_bet = min(raise_amount, player_stack)  # Cap at player's stack
+            
             player_info['player_stack'] = player_stack - total_bet
             player_info['current_player_bet'] = current_player_bet + total_bet
             self.contributions[name] += total_bet

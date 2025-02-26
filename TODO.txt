@@ -1,0 +1,9 @@
+Eliott :
+- Hardcoder le Preflop (DEmander mathias)
+- Vérifier que les payoffs et que l'intégralité des simulations sont correctes
+- Mettre en place la prediction noséifiée des agents dans la simu (à voir)
+- Optimiser le les simulations de PokerGameOptimized
+- Mettre fin a la epsilon greedy exploration
+
+Mathias :
+- Hardcoder le Preflop
