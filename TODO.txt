@@ -1,5 +1,6 @@
 Eliott :
-- Hardcoder le Preflop (DEmander mathias)
+- Hardcoder le Preflop (Demander mathias)
+- Faire du action packing dans le poker_game_optimized
 - Vérifier que les payoffs et que l'intégralité des simulations sont correctes
 - Mettre en place la prediction noséifiée des agents dans la simu (à voir)
 - Optimiser le les simulations de PokerGameOptimized

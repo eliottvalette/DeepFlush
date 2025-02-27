@@ -53,7 +53,7 @@ class PokerGameOptimized:
         
         return remaining_deck
 
-    def get_valid_actions(self, player_info: Dict) -> List[PlayerAction]: # TODO : comparer avec _update_button_states
+    def get_valid_actions(self, player_info: Dict) -> List[PlayerAction]:
         """
         Retourne la liste des actions valides pour un joueur donné dans l'état de simulation.
         Si le joueur a déjà foldé ou est all‑in, aucune action n'est possible.
@@ -67,7 +67,24 @@ class PokerGameOptimized:
             return []
         
         # ---- Activer tous les boutons par défaut ----
-        valid_actions = [PlayerAction.FOLD, PlayerAction.CHECK,PlayerAction.CALL, PlayerAction.RAISE,PlayerAction.ALL_IN]
+        valid_actions = [
+            PlayerAction.FOLD, 
+            PlayerAction.CHECK,
+            PlayerAction.CALL, 
+            PlayerAction.RAISE,
+            PlayerAction.RAISE_25_POT,
+            PlayerAction.RAISE_33_POT,
+            PlayerAction.RAISE_50_POT,
+            PlayerAction.RAISE_66_POT,
+            PlayerAction.RAISE_75_POT,
+            PlayerAction.RAISE_100_POT,
+            PlayerAction.RAISE_125_POT,
+            PlayerAction.RAISE_150_POT,
+            PlayerAction.RAISE_175_POT,
+            PlayerAction.RAISE_2X_POT,
+            PlayerAction.RAISE_3X_POT,
+            PlayerAction.ALL_IN
+        ]
         
         current_player_bet = player_info['current_player_bet']
         player_stack = player_info['player_stack']
@@ -87,6 +104,25 @@ class PokerGameOptimized:
         elif player_stack < (self.current_maximum_bet - current_player_bet): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call
             valid_actions.remove(PlayerAction.CALL)
             valid_actions.remove(PlayerAction.RAISE)
+            # Remove all pot-based raises as well
+            pot_based_actions = [
+                PlayerAction.RAISE_25_POT,
+                PlayerAction.RAISE_33_POT,
+                PlayerAction.RAISE_50_POT,
+                PlayerAction.RAISE_66_POT,
+                PlayerAction.RAISE_75_POT,
+                PlayerAction.RAISE_100_POT,
+                PlayerAction.RAISE_125_POT,
+                PlayerAction.RAISE_150_POT,
+                PlayerAction.RAISE_175_POT,
+                PlayerAction.RAISE_2X_POT,
+                PlayerAction.RAISE_3X_POT
+            ]
+            for action in pot_based_actions:
+                try:
+                    valid_actions.remove(action)
+                except ValueError:
+                    pass
 
         # ---- RAISE ----
         # Calculer le raise minimal
@@ -101,6 +137,30 @@ class PokerGameOptimized:
                 valid_actions.remove(PlayerAction.RAISE)
             except ValueError:
                 pass
+
+            # Also remove all pot-based raises
+            raise_percentages = {
+                PlayerAction.RAISE_25_POT: 0.25,
+                PlayerAction.RAISE_33_POT: 0.33,
+                PlayerAction.RAISE_50_POT: 0.50,
+                PlayerAction.RAISE_66_POT: 0.66,
+                PlayerAction.RAISE_75_POT: 0.75,
+                PlayerAction.RAISE_100_POT: 1.00,
+                PlayerAction.RAISE_125_POT: 1.25,
+                PlayerAction.RAISE_150_POT: 1.50,
+                PlayerAction.RAISE_175_POT: 1.75,
+                PlayerAction.RAISE_2X_POT: 2.00,
+                PlayerAction.RAISE_3X_POT: 3.00
+            }
+
+            for action, percentage in raise_percentages.items():
+                # Calculate required raise for this pot-based action
+                pot_raise = self.pot * percentage
+                if pot_raise < min_raise or player_stack < pot_raise:
+                    try:
+                        valid_actions.remove(action)
+                    except ValueError:
+                        pass
 
         # ---- ALL-IN ----
         # All-in disponible si le joueur a des jetons, qu'il soit le premier à agir ou non

@@ -1,6 +1,7 @@
 import numpy as np
 import random as rd
 import copy
+import gc
 import json
 from typing import List, Dict, Tuple
 from poker_game import PlayerAction, PokerGame
@@ -32,13 +33,17 @@ class MCCFRTrainer:
                 replicated_game = PokerGameOptimized(copy.deepcopy(simple_game_state))
                 payoff = replicated_game.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
+                del replicated_game
+
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
         print('----------------------------------')
         print('valid_actions :', valid_actions)
         print('target_vector :', target_vector)
-        print('self.payoff_per_trajectory_action :', self.payoff_per_trajectory_action)
+        print('payoff_per_trajectory_action : ')
+        for action in [PlayerAction.FOLD, PlayerAction.CALL, PlayerAction.CHECK, PlayerAction.RAISE, PlayerAction.ALL_IN]:
+            print(f'{action} : {self.payoff_per_trajectory_action[action]}')
         print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action

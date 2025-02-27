@@ -313,6 +313,9 @@ class Visualizer:
             for state in episode:
                 if state["action"]:
                     action = state["action"].lower()
+                    # Normaliser les actions de raise pour le comptage
+                    if action.startswith('raise-'):
+                        action = 'raise'
                     action_freq[state["player"]][action] += 1
         
         x = np.arange(len(agents))
@@ -361,6 +364,9 @@ class Visualizer:
             for state in episode:
                 if state["action"] and state["phase"].lower() != 'showdown':
                     action = state["action"].lower()
+                    # Normaliser les actions de raise pour le comptage
+                    if action.startswith('raise-'):
+                        action = 'raise'
                     phase = state["phase"].lower()
                     phase_action_freq[state["player"]][phase][action] += 1
 
@@ -536,12 +542,12 @@ class Visualizer:
 
         # Métriques spécifiques à tracer basées sur l'output de train_model
         metrics_to_plot = [
-            ('policy_loss', 'Policy Loss'),
-            ('value_loss', 'Value Loss'),
+            ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)'),
+            ('value_loss', 'Value Loss (MSE de la valeur d\'état)'),
             ('total_loss', 'Total Loss'),
             ('invalid_action_loss', 'Invalid Action Loss'),
-            ('mean_predicted_value', 'Mean Predicted Value'),
-            ('mean_target_value', 'Mean Target Value')
+            ('mean_predicted_value', 'Mean Predicted Value (moyenne des valeurs d\'état)'),
+            ('mean_target_value', 'Mean Target Value (moyenne des vecteurs de probabilité des actions)')
         ]
 
         # Créer un subplot pour chaque métrique
