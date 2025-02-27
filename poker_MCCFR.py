@@ -42,7 +42,7 @@ class MCCFRTrainer:
         print('valid_actions :', valid_actions)
         print('target_vector :', target_vector)
         print('payoff_per_trajectory_action : ')
-        for action in [PlayerAction.FOLD, PlayerAction.CALL, PlayerAction.CHECK, PlayerAction.RAISE, PlayerAction.ALL_IN]:
+        for action in [PlayerAction.FOLD, PlayerAction.CHECK, PlayerAction.CALL, PlayerAction.RAISE, PlayerAction.ALL_IN]:
             print(f'{action} : {self.payoff_per_trajectory_action[action]}')
         print('----------------------------------')
         
@@ -124,10 +124,17 @@ class MCCFRTrainer:
         Calcule le vecteur de probabilité cible basé sur les regrets estimés.
         """
         max_payoff = max(payoffs.values())
-        positive_regrets = np.array([max(0, max_payoff - payoffs[action]) for action in PlayerAction])
-
-        if np.sum(positive_regrets) > 0:
+        if max_payoff > 0:
+            positive_regrets = np.array([max(0, payoffs[action]) for action in PlayerAction])
             return positive_regrets / np.sum(positive_regrets)
-        else:
-            return np.ones(len(PlayerAction)) / len(PlayerAction)  # Uniforme si regrets nuls
+
+        elif max_payoff <= 0:
+            # Si on a en payoff [-100, -10, -50] on veut que le target_action_prob soit [0, 1, 0]
+            # On prend donc l'action qui minimise la perte
+            min_loss_action = min(payoffs.items(), key=lambda x: abs(x[1]))[0]
+            target_probs = np.zeros(len(PlayerAction))
+            action_list = list(PlayerAction)
+            min_loss_idx = action_list.index(min_loss_action)
+            target_probs[min_loss_idx] = 1.0
+            return target_probs
 
