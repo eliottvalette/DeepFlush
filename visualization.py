@@ -177,8 +177,8 @@ class DataCollector:
             self.batch_episode_states = []
             self.batch_episode_metrics = []
         
-            # Reset current episode states
-            self.current_episode_states = []
+        # Reset current episode states
+        self.current_episode_states = []
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
             # Load Jsons
@@ -583,7 +583,8 @@ class Visualizer:
                 values = []
                 
                 for episode_num, episode_metrics in metrics_data.items():
-                    if metric_name in episode_metrics[agent_idx]:
+                    # Check if the metric exists and is not None before adding it
+                    if metric_name in episode_metrics[agent_idx] and episode_metrics[agent_idx][metric_name] is not None:
                         episodes.append(int(episode_num))
                         values.append(float(episode_metrics[agent_idx][metric_name]))
                 
