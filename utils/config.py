@@ -15,8 +15,8 @@ RENDERING = False
 FPS = 3
 
 # Sauvegarde
-SAVE_INTERVAL = 250
-PLOT_INTERVAL = 500
+SAVE_INTERVAL = 25
+PLOT_INTERVAL = 50
 
 def set_seed(seed=42):
     rd.seed(seed)

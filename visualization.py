@@ -63,6 +63,7 @@ class DataCollector:
         hand_rank_vector = state_vector[35:45]
         hand_rank = hand_rank_vector.index(1) if 1 in hand_rank_vector else 0
         
+        """
         # Subdiviser le vecteur d'état (basé sur la nouvelle structure)
         subdivided_full_state = {
             "player_cards": [
@@ -105,6 +106,7 @@ class DataCollector:
                 "flush_draw": state_vector[115]  # Potentiel de couleur
             }
         }
+        """
 
         subdivided_simple_state = {
             "player_cards": [
@@ -122,7 +124,7 @@ class DataCollector:
 
         # Mettre à jour state_info avec le vecteur d'état subdivisé
         state_info["state_vector"] = subdivided_simple_state
-        self.current_episode_states.append(state_info)
+        self.current_episode_states.append(state_info.copy())  # Use copy to ensure no reference issues
     
     def add_metrics(self, episode_metrics):
         """
@@ -147,47 +149,35 @@ class DataCollector:
         if len(self.batch_episode_states) >= self.save_interval:
             # Sauvegarder les états
             states_filename = os.path.join(self.output_dir, "episodes_states.json")
-            if os.path.exists(states_filename):
-                with open(states_filename, 'r') as f:
-                    all_episodes = json.load(f)
-            else:
-                all_episodes = {}
             
-            # Ajouter tous les épisodes batchés aux données
+            # Créer le fichier avec un dictionnaire vide s'il n'existe pas
+            if not os.path.exists(states_filename):
+                with open(states_filename, 'w') as f:
+                    f.write("{}")
+            
+            # Ajouter les nouveaux épisodes au fichier JSON
             for i, episode_states in enumerate(self.batch_episode_states):
                 episode_idx = episode_num - len(self.batch_episode_states) + i + 1
-                all_episodes[str(episode_idx)] = episode_states  # Convertir l'index en string
-            
-            # Sauvegarder les états
-            with open(states_filename, 'w') as f:
-                json.dump(all_episodes, f, indent=2)
+                self._append_to_json(states_filename, str(episode_idx), episode_states)
             
             # Sauvegarder les métriques
             metrics_filename = os.path.join(self.output_dir, "metrics_history.json")
-            if os.path.exists(metrics_filename):
-                with open(metrics_filename, 'r') as f:
-                    all_metrics = json.load(f)
-            else:
-                all_metrics = {}
             
-            # Ajouter toutes les métriques batchées aux données
+            # Créer le fichier avec un dictionnaire vide s'il n'existe pas
+            if not os.path.exists(metrics_filename):
+                with open(metrics_filename, 'w') as f:
+                    f.write("{}")
+            
+            # Ajouter les nouvelles métriques au fichier JSON
             for i, episode_metrics in enumerate(self.batch_episode_metrics):
                 episode_idx = episode_num - len(self.batch_episode_metrics) + i + 1
-                all_metrics[str(episode_idx)] = episode_metrics  # Convertir l'index en string
-            
-            # Sauvegarder les métriques
-            with open(metrics_filename, 'w') as f:
-                json.dump(all_metrics, f, indent=2)
+                self._append_to_json(metrics_filename, str(episode_idx), episode_metrics)
 
-            # Réinitialiser les variables
-            all_episodes = {}
-            all_metrics = {}
-            
-            # Réinitialiser les batchs
+            # Reset batches
             self.batch_episode_states = []
             self.batch_episode_metrics = []
         
-            # Réinitialiser les états de l'épisode courant
+            # Reset current episode states
             self.current_episode_states = []
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
@@ -214,6 +204,38 @@ class DataCollector:
             self.visualizer.plot_heatmaps_by_players(states_data)
             self.visualizer.plot_heatmaps_by_position(states_data)
             self.visualizer.plot_stack_sum(states_data)
+    
+    def _append_to_json(self, file_path, key, data):
+        """
+        Ajoute une nouvelle entrée à un fichier JSON existant en modifiant le fichier en place.
+        
+        Args:
+            file_path (str): Chemin du fichier JSON
+            key (str): Clé de la nouvelle entrée
+            data: Données à ajouter
+        """
+        with open(file_path, 'r+') as f:
+            f.seek(0)
+            content = f.read().strip()
+            # On part du principe que le contenu est un dict valide
+            # Supprimer le dernier caractère (qui doit être "}")
+            f.seek(0, os.SEEK_END)
+            pos = f.tell() - 1
+            f.seek(pos)
+            last_char = f.read(1)
+            if last_char != '}':
+                raise ValueError(f"Fichier JSON mal formé: {file_path}")
+            
+            # Vérifier si le dict est vide
+            if content == "{}":
+                new_content = f'"{key}": {json.dumps(data)}'
+            else:
+                new_content = f', "{key}": {json.dumps(data)}'
+            
+            # Réécriture : on tronque le dernier "}" et on y ajoute notre contenu + "}"
+            f.seek(pos)
+            f.truncate()
+            f.write(new_content + "}")
     
     def force_visualization(self):
         """
