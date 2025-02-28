@@ -197,7 +197,7 @@ class PokerGame:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, agents):
+    def __init__(self, agents, rendering: bool):
         """
         Initialise la partie de poker avec les joueurs et les blindes.
         
@@ -232,12 +232,13 @@ class PokerGame:
         
         # --------------------
         # Initialiser pygame et les variables d'interface
-        pygame.init()
-        pygame.font.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("6-Max Poker")
-        self.font = pygame.font.SysFont('Arial', 24)
-        self.clock = pygame.time.Clock()
+        if rendering:
+            pygame.init()
+            pygame.font.init()
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+            pygame.display.set_caption("6-Max Poker")
+            self.font = pygame.font.SysFont('Arial', 24)
+            self.clock = pygame.time.Clock()
 
         # Initialiser les éléments de l'interface
         self.pygame_bet_slider = pygame.Rect(50, SCREEN_HEIGHT - 100, 200, 20)

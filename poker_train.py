@@ -188,7 +188,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
     """
     # Initialisation des historiques et de l'environnement
     metrics_history = {}
-    env = PokerGame(agent_list)
+    env = PokerGame(agents = agent_list, rendering=rendering)
     
     # Configuration du collecteur de données
     data_collector = DataCollector(
