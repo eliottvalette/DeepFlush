@@ -36,12 +36,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         Tuple[List[float], List[dict]]: Récompenses finales et métriques d'entraînement
     """
 
-    # Nettoyage des variables non utilisées
-    if episode % PLOT_INTERVAL + 1 == 0:
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.mps.empty_cache()
-
     global number_of_hand_per_game  # Ajout de cette ligne pour référencer et mettre à jour la variable globale
 
     # Vérification du nombre minimum de joueurs
@@ -70,7 +64,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         "player": env.players[env.current_player_seat].name,
         "phase": "pre-game",
         "action": None,
-        "stack_changes": env.net_stack_changes,
         "final_stacks": env.final_stacks,
         "num_active_players": len(players_that_can_play),
         "state_vector": initial_state.tolist()
@@ -112,7 +105,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 "player": current_player.name,
                 "phase": env.current_phase.value,
                 "action": action_chosen.value,
-                "stack_changes": env.net_stack_changes,
                 "final_stacks": env.final_stacks,
                 "num_active_players": len(players_that_can_play),
                 "state_vector": current_state.tolist()

@@ -107,8 +107,6 @@ class DataCollector:
         }
 
         subdivided_simple_state = {
-            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
-            "current_bets": [bet * 100 for bet in state_vector[59:65]],  # Mises actuelles normalisées
             "player_cards": [
                 {
                     "value": state_vector[0],  # Valeur normalisée
@@ -180,13 +178,17 @@ class DataCollector:
             # Sauvegarder les métriques
             with open(metrics_filename, 'w') as f:
                 json.dump(all_metrics, f, indent=2)
+
+            # Réinitialiser les variables
+            all_episodes = {}
+            all_metrics = {}
             
             # Réinitialiser les batchs
             self.batch_episode_states = []
             self.batch_episode_metrics = []
         
-        # Réinitialiser les états de l'épisode courant
-        self.current_episode_states = []
+            # Réinitialiser les états de l'épisode courant
+            self.current_episode_states = []
 
         if episode_num % self.plot_interval == self.plot_interval - 1:
             # Load Jsons
@@ -225,7 +227,6 @@ class DataCollector:
             states_data = json.load(f)
         with open(metrics_path, 'r') as f:
             metrics_data = json.load(f)
-
 
         self.visualizer.plot_progress(states_data, metrics_data)
         self.visualizer.plot_metrics(metrics_data)
@@ -959,10 +960,7 @@ class Visualizer:
                     break
             if final_state is None:
                 final_state = episode[-1]
-            if "final_stacks" in final_state and final_state["final_stacks"]:
-                total_stack = sum(final_state["final_stacks"].values())
-            else:
-                total_stack = sum(final_state["state_vector"]["player_stacks"])
+            total_stack = sum(final_state["final_stacks"].values())
             x_data.append(int(ep))
             stack_sums.append(total_stack)
             

@@ -46,7 +46,7 @@ class PokerAgent:
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = deque(maxlen=10000)  # Buffer de replay
+        self.memory = deque(maxlen=1_000)  # Buffer de replay
         self.temp_memory = [] # Buffer temporaire pour les transitions de l'agent, avant update en backpropagation de la final reward
 
         if load_model:
@@ -149,13 +149,13 @@ class PokerAgent:
         if len(self.memory) < 32:
             print('Not enough data to train :', len(self.memory))
             return {
-                'policy_loss': np.nan,
-                'value_loss': np.nan,
-                'total_loss': np.nan,
-                'invalid_action_loss': np.nan,
-                'mean_predicted_value': np.nan,
-                'mean_target_value': np.nan,
-                'mean_action_prob': np.nan
+                'policy_loss': None,
+                'value_loss': None,
+                'total_loss': None,
+                'invalid_action_loss': None,
+                'mean_predicted_value': None,
+                'mean_target_value': None,
+                'mean_action_prob': None
             }
 
         try:
