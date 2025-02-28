@@ -1769,65 +1769,79 @@ class PokerGame:
         
         return final_state    
     
-    def get_simple_state(self) -> Dict:
+    def get_simple_state(self) -> Tuple[List, int]:
         """
-        Extrait un état de jeu simplifié sous forme de dictionnaire contenant les informations brutes nécessaires :
-        - Les cartes privées du joueur courant (hero)
-        - Les cartes communes déjà révélées
-        - La phase actuelle du jeu (en chaîne, par exemple "preflop", "flop", etc.)
-        - Les informations sur chaque joueur (nom, stack, mise actuelle, statut)
-        - Le pot principal et la mise maximale actuelle
-        - La position du bouton et le nombre de joueurs actifs
+        Extrait un état de jeu simplifié sous forme de vecteur plat contenant les informations brutes nécessaires.
+        Format du vecteur:
+        [
+            hero_name_idx,                # index du nom du héros (0-5)
+            hero_card1_value,             # valeur de la première carte (2-14)
+            hero_card1_suit_idx,          # index de la couleur (0-3)
+            hero_card2_value,             # valeur de la deuxième carte
+            hero_card2_suit_idx,          # index de la couleur
+            *community_cards_flat,        # 10 valeurs (5 cartes x [valeur, suit_idx])
+            phase_idx,                    # index de la phase (0-4)
+            pot,                          # valeur du pot
+            current_maximum_bet,          # mise maximale actuelle
+            big_blind,                    # valeur de la grosse blinde
+            small_blind,                  # valeur de la petite blinde
+            *players_info_flat           # Pour chaque joueur actif: [name_idx, stack, bet, active, folded, all_in, role_pos, acted, seat_pos]
+        ]
 
         Returns:
-            Dict: État simplifié du jeu
-            Les joueurs sont ordonnés selon leurs positions : SB, BB, UTG, HJ, CO, BTN
+            Tuple[List, int]: Vecteur d'état plat et nombre de joueurs actifs
         """
         current_player = self.players[self.current_player_seat]
-        hero_cards = [(card.value, card.suit) for card in current_player.cards]
-        community_cards = [(card.value, card.suit) for card in self.community_cards]
+        
+        # Conversion des cartes en valeurs numériques
+        hero_cards = [(card.value, ["♠", "♥", "♦", "♣"].index(card.suit)) for card in current_player.cards]
+        community_cards = [(card.value, ["♠", "♥", "♦", "♣"].index(card.suit)) for card in self.community_cards]
+        
+        # Padding des cartes communes si nécessaire
+        while len(community_cards) < 5:
+            community_cards.append((-1, -1))  # -1 indique une carte non distribuée
         
         # Récupérer les joueurs qui peuvent encore agir
         player_that_can_still_act = [p for p in self.players if not (p.has_folded or not p.is_active)]
         
-        # Créer une liste temporaire avec tous les joueurs et leurs positions
-        players_with_positions = []
+        # Construction du vecteur plat
+        flat_state = [
+            # Info du héros
+            self.players.index(current_player),  # hero_name_idx
+            
+            # Cartes du héros
+            hero_cards[0][0], hero_cards[0][1],  # card1 value, suit
+            hero_cards[1][0], hero_cards[1][1],  # card2 value, suit
+            
+            # Cartes communes (aplatir la liste)
+            *[val for card in community_cards for val in card],  # 10 valeurs
+            
+            # Phase de jeu
+            self.current_phase.value,
+            
+            # Informations générales
+            self.main_pot,
+            self.current_maximum_bet,
+            self.big_blind,
+            self.small_blind
+        ]
+        
+        # Informations des joueurs actifs
         for p in player_that_can_still_act:
-            players_with_positions.append({
-                'name': p.name,
-                'player_stack': p.stack,
-                'current_player_bet': p.current_player_bet,
-                'is_active': p.is_active,
-                'has_folded': p.has_folded,
-                'is_all_in': p.is_all_in,
-                'role_position': p.role_position,  # 0=SB, 1=BB, 2=UTG, 3=HJ, 4=CO, 5=BTN
-                'has_acted': p.has_acted,
-                'seat_position': p.seat_position
-            })
+            player_info = [
+                self.players.index(p),  # name_idx
+                p.stack,
+                p.current_player_bet,
+                1 if p.is_active else 0,
+                1 if p.has_folded else 0,
+                1 if p.is_all_in else 0,
+                p.role_position,
+                1 if p.has_acted else 0,
+                p.seat_position
+            ]
+            flat_state.extend(player_info)
         
-        # Trier les joueurs par position (SB=0, BB=1, UTG=2, etc.)
-        players_info = sorted(players_with_positions, key=lambda x: x['role_position'])
-
-        # Récupérer l'index du joueur courant dans la liste des dictionnaires players_info
-        hero_index = next((i for i, p in enumerate(players_info) if p['name'] == current_player.name), None)
-        if hero_index is None:
-            raise ValueError("Le joueur courant n'est pas trouvé dans la liste des joueurs")
-        
-        simple_state = {
-            'hero_name': current_player.name,
-            'hero_index': hero_index,
-            'hero_cards': hero_cards,
-            'community_cards': community_cards,
-            'phase': self.current_phase,
-            'pot': self.main_pot,
-            'current_maximum_bet': self.current_maximum_bet,
-            'players_info': players_info, 
-            'num_active_players': len(player_that_can_still_act),
-            'big_blind': self.big_blind,
-            'small_blind': self.small_blind
-        }
-        
-        return simple_state
+        return flat_state, len(player_that_can_still_act)
 
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:

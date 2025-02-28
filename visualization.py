@@ -569,8 +569,8 @@ class Visualizer:
             ('value_loss', 'Value Loss (MSE de la valeur d\'état)'),
             ('total_loss', 'Total Loss'),
             ('invalid_action_loss', 'Invalid Action Loss'),
-            ('mean_predicted_value', 'Mean Predicted Value (moyenne des valeurs d\'état)'),
-            ('mean_target_value', 'Mean Target Value (moyenne des vecteurs de probabilité des actions)')
+            ('mean_predicted_value', 'Mean Predicted Value (moyenne des valeurs d\'état prédites)'),
+            ('mean_target_value', 'Mean Target Value (moyenne des valeurs d\'état, récompense finale potentielle)')
         ]
 
         # Créer un subplot pour chaque métrique

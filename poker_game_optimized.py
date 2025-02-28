@@ -7,12 +7,88 @@ from collections import Counter
 import json
 
 class PokerGameOptimized:
-    def __init__(self, simple_state):
+    def __init__(self, flat_state_and_count: Tuple[List, int]):
         """
-        Initialise la simulation optimisée à partir de l'état simplifié du jeu classique.
-        On s'appuie sur get_simple_state() pour récupérer les informations essentielles.
+        Initialise la simulation optimisée à partir de l'état simplifié vectorisé du jeu classique.
+        
+        Args:
+            flat_state_and_count (Tuple[List, int]): Tuple contenant le vecteur d'état plat et le nombre de joueurs actifs
         """
-        self.simple_state = simple_state
+        flat_state, num_active_players = flat_state_and_count
+        
+        # Extraction des informations du vecteur plat
+        idx = 0
+        
+        # Info du héros
+        hero_idx = flat_state[idx]
+        idx += 1
+        
+        # Cartes du héros
+        hero_cards = []
+        for _ in range(2):
+            value = flat_state[idx]
+            suit = ["♠", "♥", "♦", "♣"][int(flat_state[idx + 1])]
+            hero_cards.append((value, suit))
+            idx += 2
+        
+        # Cartes communes
+        community_cards = []
+        for _ in range(5):
+            value = flat_state[idx]
+            suit_idx = flat_state[idx + 1]
+            if value != -1 and suit_idx != -1:
+                suit = ["♠", "♥", "♦", "♣"][int(suit_idx)]
+                community_cards.append((value, suit))
+            idx += 2
+        
+        # Phase et informations générales
+        phase_value = flat_state[idx]
+        idx += 1
+        pot = flat_state[idx]
+        idx += 1
+        current_maximum_bet = flat_state[idx]
+        idx += 1
+        big_blind = flat_state[idx]
+        idx += 1
+        small_blind = flat_state[idx]
+        idx += 1
+        
+        # Reconstruction des informations des joueurs
+        players_info = []
+        for _ in range(num_active_players):
+            player_info = {
+                'name': f'Player_{int(flat_state[idx])}',
+                'player_stack': flat_state[idx + 1],
+                'current_player_bet': flat_state[idx + 2],
+                'is_active': bool(flat_state[idx + 3]),
+                'has_folded': bool(flat_state[idx + 4]),
+                'is_all_in': bool(flat_state[idx + 5]),
+                'role_position': int(flat_state[idx + 6]),
+                'has_acted': bool(flat_state[idx + 7]),
+                'seat_position': int(flat_state[idx + 8])
+            }
+            players_info.append(player_info)
+            idx += 9
+        
+        # Trier les joueurs par position
+        players_info.sort(key=lambda x: x['role_position'])
+        
+        # Reconstruction du dictionnaire d'état
+        self.simple_state = {
+            'hero_name': f'Player_{hero_idx}',
+            'hero_index': next(i for i, p in enumerate(players_info) if p['name'] == f'Player_{hero_idx}'),
+            'hero_cards': hero_cards,
+            'community_cards': community_cards,
+            'phase': GamePhase(phase_value),
+            'pot': pot,
+            'current_maximum_bet': current_maximum_bet,
+            'players_info': players_info,
+            'num_active_players': num_active_players,
+            'big_blind': big_blind,
+            'small_blind': small_blind
+        }
+        
+        # Initialisation des autres attributs comme avant
         self.current_phase = self.simple_state['phase']
         self.pot = self.simple_state['pot']
         self.big_blind = self.simple_state['big_blind']
@@ -25,11 +101,7 @@ class PokerGameOptimized:
         self.contributions = {player['name']: player['current_player_bet'] for player in self.players_info}
         self.number_raise_this_game_phase = 0
         self.hero_first_action = True
-
-        # Ajout des attributs manquants
-        self.num_players = len(self.players_info)        
-
-        # rd_opponents_cards et rd_missing_community_cards initialisés à vide
+        self.num_players = len(self.players_info)
         self.rd_opponents_cards = []
         self.rd_missing_community_cards = []
 

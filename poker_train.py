@@ -12,7 +12,7 @@ from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction
 from typing import List, Tuple
 import json
-from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL
+from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL, MC_SIMULATIONS
 from utils.renderer import handle_final_rendering, handle_rendering
 from utils.helping_funcs import save_models, save_metrics
 from poker_MCCFR import MCCFRTrainer
@@ -85,12 +85,12 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         if env.current_phase != GamePhase.PREFLOP: 
             # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
-            simple_state = copy.deepcopy(env.get_simple_state())
-            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, simple_state)
+            flat_state = env.get_simple_state()
+            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, flat_state)
         else:
             # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
-            simple_state = copy.deepcopy(env.get_simple_state())
-            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, simple_state)
+            flat_state = env.get_simple_state()
+            target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, flat_state)
 
         # Exécuter l'action dans l'environnement
         next_state, _ = env.step(action_chosen)
@@ -199,7 +199,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(num_simulations = 10)
+    mccfr_trainer = MCCFRTrainer(num_simulations = MC_SIMULATIONS)
     try:
         for episode in range(episodes):
             start_time = time.time()
