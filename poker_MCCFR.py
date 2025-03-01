@@ -1,8 +1,7 @@
+# poker_MCCFR.py
 import numpy as np
 import random as rd
-import copy
-import gc
-import json
+import torch
 from typing import List, Dict, Tuple
 from poker_game import PlayerAction, PokerGame
 from poker_game_optimized import PokerGameOptimized
@@ -119,22 +118,21 @@ class MCCFRTrainer:
         new_probs = base_probs * (1 - noise_level) + noise
         return new_probs / new_probs.sum()  # Normalisation
     
-    import numpy as np
 
-    def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> np.ndarray:
+    def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> torch.Tensor:
         """
         Calcule le vecteur de probabilité cible basé sur les regrets estimés.
         """
         max_payoff = max(payoffs.values())
         if max_payoff > 0:
-            positive_regrets = np.array([max(0, payoffs[action]) for action in PlayerAction])
-            return positive_regrets / np.sum(positive_regrets)
+            positive_regrets = torch.tensor([max(0, payoffs[action]) for action in PlayerAction])
+            return positive_regrets / torch.sum(positive_regrets)
 
         elif max_payoff <= 0:
             # Si on a en payoff [-100, -10, -50] on veut que le target_action_prob soit [0, 1, 0]
             # On prend donc l'action qui minimise la perte
             min_loss_action = min(payoffs.items(), key=lambda x: abs(x[1]))[0]
-            target_probs = np.zeros(len(PlayerAction))
+            target_probs = torch.zeros(len(PlayerAction))
             action_list = list(PlayerAction)
             min_loss_idx = action_list.index(min_loss_action)
             target_probs[min_loss_idx] = 1.0

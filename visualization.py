@@ -464,34 +464,6 @@ class Visualizer:
         ax4.set_facecolor('#F0F0F0')
         ax4.grid(True, alpha=0.3)
 
-        # 5. Rewards par agent
-        ax5 = plt.subplot(2, 3, 5)  # Position in bottom right
-
-        # Tracer les récompenses pour chaque agent
-        rewards_window = self.plot_interval
-        for i, agent in enumerate(agents):
-            episodes = []
-            rewards = []
-            
-            for episode_num, episode_metrics in metrics_data.items():
-                if 'reward' in episode_metrics[i]:
-                    episodes.append(int(episode_num))
-                    rewards.append(float(episode_metrics[i]['reward']))
-            
-            if rewards:
-                rolling_avg = pd.Series(rewards).rolling(window=rewards_window, min_periods=1).mean()
-                ax5.plot(episodes, rolling_avg, 
-                        label=f"{agent} Reward", 
-                        color=pastel_colors[i],
-                        linewidth=2)
-        
-        ax5.set_title('Evolution des Récompenses par Agent')
-        ax5.set_xlabel('Episode')
-        ax5.set_ylabel('Reward')
-        ax5.legend()
-        ax5.grid(True, alpha=0.3)
-        ax5.set_facecolor('#F0F0F0')
-
         # 6. Winrate par agent
         ax6 = plt.subplot(2, 3, 6)
 

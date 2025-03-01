@@ -54,9 +54,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         env.start_new_hand()
         number_of_hand_per_game += 1    
 
-    # Stockage des actions et rewards par joueur
-    cumulative_rewards = {player.name: 0 for player in env.players}
-
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
     initial_state = env.get_state()  # état initial (vecteur de dimension 116)
@@ -169,7 +166,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     metrics_list = []
     for player in env.players:
         metrics = player.agent.train_model()
-        metrics['reward'] = cumulative_rewards[player.name]
         metrics_list.append(metrics)
 
     # Sauvegarde des données
@@ -224,8 +220,8 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
             print("Generating visualization...")
             data_collector.force_visualization()
 
-    except KeyboardInterrupt:
-        print("\nTraining interrupted by user")
+    except Exception as e :
+        print(f"An error occurred: {e}")
         save_models(env.players, episode)
         print("Generating visualization...")
         data_collector.force_visualization()

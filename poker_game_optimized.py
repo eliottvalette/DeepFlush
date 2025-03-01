@@ -490,6 +490,17 @@ class PokerGameOptimized:
             if player_info['current_player_bet'] < self.current_maximum_bet and not player_info['is_all_in']:
                 return False, False
         
+        # Nouvelle condition: vérifier si tous les joueurs non foldés ont égalisé la mise maximale
+        all_bets_equal = True
+        max_bet = max(p['current_player_bet'] for p in non_folded_players)
+        for player_info in non_folded_players:
+            if not player_info['is_all_in'] and player_info['current_player_bet'] != max_bet:
+                all_bets_equal = False
+                break
+        
+        if not all_bets_equal:
+            return False, False
+        
         # Atteindre cette partie du code signifie que la phase est terminée
         print(f"Phase terminée, tous les joueurs ont agi et égalisé la mise maximale")
         phase_completed = True
