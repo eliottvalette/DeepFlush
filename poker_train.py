@@ -14,7 +14,7 @@ from typing import List, Tuple
 import json
 from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL, MC_SIMULATIONS
 from utils.renderer import handle_final_rendering, handle_rendering
-from utils.helping_funcs import save_models, save_metrics
+from utils.helping_funcs import save_models
 from poker_MCCFR import MCCFRTrainer
 
 # Compteurs
@@ -110,7 +110,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 "action": action_chosen.value,
                 "final_stacks": env.final_stacks,
                 "num_active_players": len(players_that_can_play),
-                "state_vector": current_state.tolist()
+                "state_vector": current_state.tolist(),
                 }
             data_collector.add_state(state_info)
 
@@ -158,7 +158,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             "stack_changes": env.net_stack_changes,
             "final_stacks": env.final_stacks,
             "num_active_players": len(players_that_can_play),
-            "state_vector": final_state.tolist()
+            "state_vector": final_state.tolist(),
         }
         data_collector.add_state(state_info)
     

@@ -5,7 +5,7 @@ import torch
 from typing import List, Dict, Tuple
 from poker_game import PlayerAction, PokerGame
 from poker_game_optimized import PokerGameOptimized
-from collections import defaultdict
+import sys
 
 class MCCFRTrainer:
     """
@@ -26,10 +26,66 @@ class MCCFRTrainer:
         # Créer une instance de PokerGameOptimized avec le flat state
         replicated_game = PokerGameOptimized(flat_state_and_count)
         hero_name = replicated_game.simple_state['hero_name']
-        
+
+        # ---- Action abstraction ----
+        real_valid_actions = valid_actions # On sauvegarde les actions valides réelles
+        raise_actions = []
+        raise_mapping = {}
+        if PlayerAction.RAISE in valid_actions:
+            # Identifier toutes les actions de raise disponibles et leurs pourcentages
+            raise_percentages = {
+                PlayerAction.RAISE: 0.1,  # Raise minimum (2x)
+                PlayerAction.RAISE_25_POT: 0.25,
+                PlayerAction.RAISE_33_POT: 0.33,
+                PlayerAction.RAISE_50_POT: 0.50,
+                PlayerAction.RAISE_66_POT: 0.66,
+                PlayerAction.RAISE_75_POT: 0.75,
+                PlayerAction.RAISE_100_POT: 1.00,
+                PlayerAction.RAISE_125_POT: 1.25,
+                PlayerAction.RAISE_150_POT: 1.50,
+                PlayerAction.RAISE_175_POT: 1.75,
+                PlayerAction.RAISE_2X_POT: 2.00,
+                PlayerAction.RAISE_3X_POT: 3.00
+            }
+            
+            # Filtrer les raises disponibles
+            available_raises = [action for action in valid_actions if action.value.startswith("raise")]
+            
+            if available_raises:
+                # Trier les raises par pourcentage
+                available_raises.sort(key=lambda x: raise_percentages.get(x, 0))
+                
+                # Sélectionner 3 raises représentatives (début, milieu, fin)
+                if len(available_raises) >= 3:
+                    raise_actions = [
+                        available_raises[0],  # Plus petite raise
+                        available_raises[len(available_raises)//2],  # Raise médiane
+                        available_raises[-1]  # Plus grande raise
+                    ]
+                else:
+                    raise_actions = available_raises  # Garder toutes si moins de 3
+                
+                # Créer un mapping pour les autres raises
+                raise_mapping = {}
+                if len(available_raises) > 3:
+                    median_idx = len(available_raises) // 2
+                    for i, action in enumerate(available_raises):
+                        if action not in raise_actions:
+                            if i < median_idx:
+                                raise_mapping[action] = raise_actions[0]  # Mapper aux petites raises
+                            elif i == median_idx:
+                                raise_mapping[action] = raise_actions[1]  # Mapper aux raises moyennes
+                            else:
+                                raise_mapping[action] = raise_actions[2]  # Mapper aux grandes raises
+                
+                # Mettre à jour valid_actions pour ne garder que les raises sélectionnées
+                valid_actions = [action for action in valid_actions if not action.value.startswith("raise")] + raise_actions
+
+        # Simulation des trajectoires
         for simulation_index in range(self.num_simulations):
             print(f"\nSimulation [{simulation_index + 1}/{self.num_simulations}]")
             print(f"Hero name: {hero_name}")
+            print('valid_actions :', valid_actions)
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(replicated_game.simple_state)
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
@@ -37,14 +93,23 @@ class MCCFRTrainer:
                 payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
+        # Appliquer les payoffs aux raises non simulées
+        if raise_mapping:
+            for action, mapped_action in raise_mapping.items():
+                self.payoff_per_trajectory_action[action] = self.payoff_per_trajectory_action[mapped_action]
+
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
         print('----------------------------------')
-        print('valid_actions :', valid_actions)
+        print('real valid actions:', real_valid_actions)
+        print('explored actions:', valid_actions)
         print('target_vector :', target_vector)
         print('payoff_per_trajectory_action : ')
         for action in [PlayerAction.FOLD, PlayerAction.CHECK, PlayerAction.CALL, PlayerAction.RAISE, PlayerAction.ALL_IN]:
             print(f'{action} : {self.payoff_per_trajectory_action[action]}')
+        if raise_actions:
+            print('Raise actions sélectionnées:', raise_actions)
+            print('Mapping des autres raises:', raise_mapping)
         print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action

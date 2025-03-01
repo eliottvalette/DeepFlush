@@ -4,6 +4,7 @@ from utils.config import set_seed, EPISODES, GAMMA, ALPHA, STATE_SIZE, RENDERING
 from poker_agents import PokerAgent
 from poker_bot import PokerBot
 import torch
+from collections import deque
 
 # Définir la graine pour la reproductibilité
 set_seed(43)
@@ -25,7 +26,7 @@ for i in range(6):
         action_size=16,
         gamma=GAMMA,
         learning_rate=ALPHA,
-        load_model=False,
+        load_model=True,
         load_path=f"saved_models/poker_agent_{list_names[i]}.pth",
         show_cards=True
     )
@@ -42,6 +43,11 @@ if False:
     for agent in agent_list:  # Seulement pour les 4 premiers agents qui sont des IA
         agent.model = shared_model
         agent.memory = shared_memory
+
+# Test avec un seul Joueur avec un modèle et tous les autres jouent au hasard (ils gardent leur mémoire vide et donc n'apprennent jamais)
+elif False:
+    for agent in agent_list[1:]:
+        agent.memory = deque(maxlen=0)
 
 # Démarrer l'entraînement
 main_training_loop(agent_list, episodes=EPISODES, rendering=RENDERING, render_every=1)

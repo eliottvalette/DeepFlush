@@ -3,11 +3,11 @@ import random as rd
 import numpy as np
 import torch
 
-EPISODES = 5_000
+EPISODES = 2_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9996
-START_EPS = 0.8
+START_EPS = 0.1
 STATE_SIZE = 127
 
 # Paramètres de visualisation

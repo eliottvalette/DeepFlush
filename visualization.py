@@ -195,7 +195,7 @@ class DataCollector:
             del states_data, metrics_data
             plt.close('all')
 
-        if episode_num % (self.plot_interval * 4) == (self.plot_interval * 4) - 1:
+        if episode_num % (self.plot_interval * 3) == (self.plot_interval * 3) - 1:
             # Load Jsons
             states_path = os.path.join(self.output_dir, "episodes_states.json")
             metrics_path = os.path.join(self.output_dir, "metrics_history.json")
