@@ -81,7 +81,7 @@ class MCCFRTrainer:
                                 raise_mapping[action] = raise_actions[2]  # Mapper aux grandes raises
                 
                 # Mettre à jour valid_actions pour ne garder que les raises sélectionnées
-                valid_actions = [action for action in valid_actions if not action.value.startswith("raise")] + raise_actions
+                valid_actions = [action for action in valid_actions if not action.value.startswith("raise") or action in raise_actions]
 
         # Simulation des trajectoires
         for simulation_index in range(self.num_simulations):
@@ -95,6 +95,10 @@ class MCCFRTrainer:
                 payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
+        print('----------------------------------')
+        print('real valid actions:', [real_valid_action.value for real_valid_action in real_valid_actions])
+        print('explored actions:', [valid_action.value for valid_action in valid_actions])
+        print('payoff_per_trajectory_action non mappé:', self.payoff_per_trajectory_action.values())
         # Appliquer les payoffs aux raises non simulées
         if raise_mapping:
             for action, mapped_action in raise_mapping.items():
@@ -102,16 +106,8 @@ class MCCFRTrainer:
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
-        print('----------------------------------')
-        print('real valid actions:', real_valid_actions)
-        print('explored actions:', valid_actions)
         print('target_vector :', target_vector)
-        print('payoff_per_trajectory_action : ')
-        for action in [PlayerAction.FOLD, PlayerAction.CHECK, PlayerAction.CALL, PlayerAction.RAISE, PlayerAction.ALL_IN]:
-            print(f'{action} : {self.payoff_per_trajectory_action[action]}')
-        if raise_actions:
-            print('Raise actions sélectionnées:', raise_actions)
-            print('Mapping des autres raises:', raise_mapping)
+        print('payoff_per_trajectory_action :', self.payoff_per_trajectory_action.values())
         print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action
@@ -188,8 +184,12 @@ class MCCFRTrainer:
 
     def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> torch.Tensor:
         """
-        Calcule le vecteur de probabilité cible basé sur les regrets estimés.
+        Calcule le vecteur de probabilité cible basé sur les payoffs estimés.
         Convertit automatiquement les valeurs None en le minimum des valeurs non-None.
+        
+        Exemple: Pour des payoffs {FOLD: None, CHECK: +200, CALL: -100, RAISE: None, ALL_IN: +100},
+        les None sont remplacés par -100 (le minimum), puis les valeurs sont décalées pour être positives,
+        et enfin normalisées pour obtenir un vecteur de probabilités {FOLD: 0, CHECK: 0.66, CALL: 0, RAISE: 0, ALL_IN: 0.33}.
         """
         # Convertir les valeurs None en le minimum des valeurs non-None
         non_none_values = [v for v in payoffs.values() if v is not None]
@@ -200,9 +200,12 @@ class MCCFRTrainer:
         min_non_none = min(non_none_values)
         payoffs_cleaned = {k: min_non_none if v is None else v for k, v in payoffs.items()}
         
-        # Appliquer Softmax au vecteur des payoffs
+        # Normaliser les probabilités le vecteur des payoffs pour le convertir en target_vector
         payoffs_vector = torch.tensor(list(payoffs_cleaned.values()))
-        target_probs = torch.softmax(payoffs_vector, dim=0)
+        shifted_payoffs = payoffs_vector - torch.min(payoffs_vector)
+        if torch.sum(shifted_payoffs) == 0:
+            return torch.ones(len(PlayerAction)) / len(PlayerAction)
+        target_probs = shifted_payoffs / torch.sum(shifted_payoffs)
         
         return target_probs
 
