@@ -4,5 +4,7 @@ temp/
 __pycache__/
 viz_json/episodes_states.json
 viz_json/metrics_history.json
+viz_json/episodes_states_reformatted.json
+viz_json/metrics_history_reformatted.json
 saved_models/
 viz_jpg/

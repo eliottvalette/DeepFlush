@@ -111,6 +111,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 "final_stacks": env.final_stacks,
                 "num_active_players": len(players_that_can_play),
                 "state_vector": current_state.tolist(),
+                "target_vector": target_vector.tolist(),
                 }
             data_collector.add_state(state_info)
 
@@ -159,6 +160,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             "final_stacks": env.final_stacks,
             "num_active_players": len(players_that_can_play),
             "state_vector": final_state.tolist(),
+            "target_vector": target_vector.tolist(),
         }
         data_collector.add_state(state_info)
     

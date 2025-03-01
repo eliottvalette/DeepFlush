@@ -229,7 +229,6 @@ class PokerAgent:
                 'mean_predicted_value': state_values.mean().item(),
                 'mean_target_value': target_vector_tensor.max(dim=1)[0].mean().item(),
                 'mean_action_prob': action_probs.mean().item(),
-                'target_vector': target_vector_tensor.tolist()
             }
 
             return metrics
