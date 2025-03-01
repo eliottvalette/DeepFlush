@@ -20,8 +20,10 @@ class MCCFRTrainer:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
-        # Initialiser a 0 pour toutes les actions de PlayerAction
-        self.payoff_per_trajectory_action = {action: 0 for action in PlayerAction}
+        # Initialiser a None pour toutes les actions non valides et 0 pour les actions valides
+        self.payoff_per_trajectory_action = {action: None for action in PlayerAction}
+        for action in valid_actions:
+            self.payoff_per_trajectory_action[action] = 0
         
         # Créer une instance de PokerGameOptimized avec le flat state
         replicated_game = PokerGameOptimized(flat_state_and_count)
@@ -187,19 +189,20 @@ class MCCFRTrainer:
     def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> torch.Tensor:
         """
         Calcule le vecteur de probabilité cible basé sur les regrets estimés.
+        Convertit automatiquement les valeurs None en le minimum des valeurs non-None.
         """
-        max_payoff = max(payoffs.values())
-        if max_payoff > 0:
-            positive_regrets = torch.tensor([max(0, payoffs[action]) for action in PlayerAction])
-            return positive_regrets / torch.sum(positive_regrets)
-
-        elif max_payoff <= 0:
-            # Si on a en payoff [-100, -10, -50] on veut que le target_action_prob soit [0, 1, 0]
-            # On prend donc l'action qui minimise la perte
-            min_loss_action = min(payoffs.items(), key=lambda x: abs(x[1]))[0]
-            target_probs = torch.zeros(len(PlayerAction))
-            action_list = list(PlayerAction)
-            min_loss_idx = action_list.index(min_loss_action)
-            target_probs[min_loss_idx] = 1.0
-            return target_probs
+        # Convertir les valeurs None en le minimum des valeurs non-None
+        non_none_values = [v for v in payoffs.values() if v is not None]
+        if not non_none_values:
+            # Si toutes les valeurs sont None, retourner une distribution uniforme
+            return torch.ones(len(PlayerAction)) / len(PlayerAction)
+        
+        min_non_none = min(non_none_values)
+        payoffs_cleaned = {k: min_non_none if v is None else v for k, v in payoffs.items()}
+        
+        # Appliquer Softmax au vecteur des payoffs
+        payoffs_vector = torch.tensor(list(payoffs_cleaned.values()))
+        target_probs = torch.softmax(payoffs_vector, dim=0)
+        
+        return target_probs
 

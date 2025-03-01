@@ -48,7 +48,7 @@ class PokerAgent:
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = deque(maxlen=100)  # Buffer de replay
+        self.memory = deque(maxlen=500)  # Buffer de replay
 
         if load_model:
             self.load(load_path)
