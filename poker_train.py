@@ -38,6 +38,12 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     global number_of_hand_per_game  # Ajout de cette ligne pour référencer et mettre à jour la variable globale
 
+     # Nettoyage des caches
+    if episode % 100 == 0:
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.mps.empty_cache()
+
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
     if len(players_that_can_play) < 3 or number_of_hand_per_game > 100:  # Évite les heads-up
@@ -174,8 +180,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     if rendering and (episode % render_every == 0):
         handle_final_rendering(env)
 
-    return cumulative_rewards, metrics_list
-
 def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: bool, render_every: int):
     """
     Boucle principale d'entraînement des agents.
@@ -187,7 +191,6 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
         render_every (int): Fréquence de mise à jour du rendu graphique
     """
     # Initialisation des historiques et de l'environnement
-    metrics_history = {}
     env = PokerGame(agents = agent_list, rendering=rendering)
     
     # Configuration du collecteur de données
@@ -208,12 +211,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
             epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
-            reward_dict, metrics_list = run_episode(
-                env, epsilon, rendering, episode, render_every, data_collector, mccfr_trainer
-            )
-            
-            # Enregistrer les métriques pour cet épisode en associant chaque métrique à une clé "agent"
-            metrics_history[str(episode)] = metrics_list
+            run_episode(env, epsilon, rendering, episode, render_every, data_collector, mccfr_trainer)
             
             # Afficher les informations de l'épisode
             print(f"\nEpisode [{episode + 1}/{episodes}]")
@@ -231,8 +229,3 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
         save_models(env.players, episode)
         print("Generating visualization...")
         data_collector.force_visualization()
-        
-    finally:
-        if rendering:
-            pygame.quit()
-        save_metrics(metrics_history, data_collector.output_dir)

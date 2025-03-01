@@ -190,6 +190,11 @@ class DataCollector:
             with open(metrics_path, 'r') as f:
                 metrics_data = json.load(f)
             self.visualizer.plot_progress(states_data, metrics_data, dpi = 250)
+            
+            # Supprimer les données et libérer de la mémoire
+            del states_data, metrics_data
+            plt.close('all')
+
         if episode_num % (self.plot_interval * 4) == (self.plot_interval * 4) - 1:
             # Load Jsons
             states_path = os.path.join(self.output_dir, "episodes_states.json")
@@ -204,6 +209,10 @@ class DataCollector:
             self.visualizer.plot_heatmaps_by_players(states_data)
             self.visualizer.plot_heatmaps_by_position(states_data)
             self.visualizer.plot_stack_sum(states_data)
+
+            # Supprimer les données et libérer de la mémoire
+            del states_data, metrics_data
+            plt.close('all')
     
     def _append_to_json(self, file_path, key, data):
         """
@@ -256,6 +265,10 @@ class DataCollector:
         self.visualizer.plot_heatmaps_by_players(states_data)
         self.visualizer.plot_heatmaps_by_position(states_data)
         self.visualizer.plot_stack_sum(states_data)
+
+        # Supprimer les données et libérer de la mémoire
+        del states_data, metrics_data
+        plt.close('all')
 
 class Visualizer:
     """
@@ -1118,3 +1131,5 @@ if __name__ == "__main__":
     visualizer.plot_heatmaps_by_players(states_data)
     visualizer.plot_heatmaps_by_position(states_data)
     visualizer.plot_stack_sum(states_data)
+
+    plt.close('all')
