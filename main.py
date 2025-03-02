@@ -5,6 +5,7 @@ from poker_agents import PokerAgent
 from poker_bot import PokerBot
 import torch
 from collections import deque
+import gc
 
 # Définir la graine pour la reproductibilité
 set_seed(43)

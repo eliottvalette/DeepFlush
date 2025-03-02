@@ -80,18 +80,18 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         env._update_button_states()
         valid_actions = [a for a in PlayerAction if env.action_buttons[a].enabled]
 
-        # On récupere la sequence d'entat du joueur actuel
+        # On récupère la sequence d'états du joueur actuel
         player_state_seq = state_seq[current_player.name]
 
-        # Prédiction avec une inférence de classique du model
+        # Prédiction avec une inférence classique du modèle
         action_chosen, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions, epsilon)
 
         if env.current_phase != GamePhase.PREFLOP: 
-            # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
+            # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
             flat_state = env.get_simple_state()
             target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, flat_state)
         else:
-            # Génération du vecteur de probabilités cible avec MCCFR a partir de l'état simplifié du jeu
+            # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
             flat_state = env.get_simple_state()
             target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(valid_actions, flat_state)
 
@@ -102,8 +102,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         if env.current_phase != GamePhase.SHOWDOWN:
             state_seq[current_player.name].append(next_state)
             
-            # Sauve l'exp dans un json. On ne stock pas le state durant le showdown car on le fait plus tard et cela créerait un double compte
-            current_state = player_state_seq[-1].clone()
+            # Sauve l'exp dans un json. On ne stocke pas le state durant le showdown car on le fait plus tard et cela créerait un double compte
+            current_state = player_state_seq[-1]
             state_info = {
                 "player": current_player.name,
                 "phase": env.current_phase.value,
@@ -152,6 +152,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         final_state = env.get_final_state(penultimate_state, env.final_stacks)
         # Stocker l'expérience finale pour la collecte des métriques
         current_player_name = player.name
+        
         state_info = {
             "player": current_player_name,
             "phase": GamePhase.SHOWDOWN.value,
@@ -201,6 +202,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
 
     # Initialisation du MCCFRTrainer
     mccfr_trainer = MCCFRTrainer(num_simulations = MC_SIMULATIONS)
+    
     try:
         for episode in range(episodes):
             start_time = time.time()
@@ -216,14 +218,36 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
             print(f"Randomness: {epsilon*100:.3f}%")
             print(f"Time taken: {time.time() - start_time:.2f} seconds")
             
+            # Periodic memory cleanup every 100 episodes
+            if episode % 100 == 0:
+                print("Performing periodic memory cleanup...")
+                gc.collect()
+                try:
+                    torch.cuda.empty_cache()
+                except:
+                    pass
+                try:
+                    torch.mps.empty_cache()
+                except:
+                    pass
+            
         # Save models at end of training
         if episode == episodes - 1:
             save_models(env.players, episode)
             print("Generating visualization...")
             data_collector.force_visualization()
 
-    except Exception as e :
+    except Exception as e:
         print(f"An error occurred: {e}")
         save_models(env.players, episode)
         print("Generating visualization...")
         data_collector.force_visualization()
+    finally:
+        # Final cleanup
+        print("Cleaning up resources...")
+        for agent in agent_list:
+            if hasattr(agent, 'cleanup'):
+                agent.cleanup()
+        del env
+        del mccfr_trainer
+        gc.collect()

@@ -2,11 +2,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 from poker_model import PokerTransformerModel
 from poker_game import PlayerAction
 from collections import deque
 import random
-import numpy as np
 import os
 import torch.nn.functional as F
 
@@ -46,7 +46,7 @@ class PokerAgent:
         self.invalid_action_loss_coeff = invalid_action_loss_coeff
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
-        self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size).to(device)
+        self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = deque(maxlen=500)  # Buffer de replay
 
@@ -120,8 +120,10 @@ class PokerAgent:
             action_probs = torch.zeros((1, self.action_size), device=self.device)
             action_probs[0, valid_indices] = 1.0/len(valid_indices)
         else:
-            # Use the model to choose action (existing code)
-            state_tensor = torch.stack(state).unsqueeze(0).to(self.device)
+            # Convert numpy arrays to PyTorch tensors
+            state_tensors = [torch.from_numpy(s).float() for s in state]
+            state_tensor = torch.stack(state_tensors).unsqueeze(0)
+            
             self.model.eval()
             with torch.no_grad():
                 action_probs, _ = self.model(state_tensor)
@@ -140,10 +142,8 @@ class PokerAgent:
         """
         Stocke une transition dans la mémoire de replay, cette transition sera utilisée pour l'entrainement du model
         """
-        state_seq_detached = [state.detach() for state in state_seq]
-        target_vector_detached = target_vector.detach()
-        valid_action_mask_detached = valid_action_mask.detach()
-        self.memory.append((state_seq_detached, target_vector_detached, valid_action_mask_detached))
+        # Store tensors directly
+        self.memory.append((state_seq, target_vector, valid_action_mask))
 
     def train_model(self):
         """
@@ -183,8 +183,13 @@ class PokerAgent:
                 else:
                     seq = state_sequence
                 
-                # Convertir directement en tensor PyTorch
-                seq_tensor = torch.stack(seq).to(self.device)
+                # Convertir chaque élément en tensor PyTorch si nécessaire
+                seq_tensors = []
+                for s in seq:
+                    seq_tensors.append(torch.from_numpy(s).float())
+                
+                # Empiler les tensors
+                seq_tensor = torch.stack(seq_tensors)
                 
                 # Vérifier la forme de la séquence
                 if len(seq_tensor.shape) == 1:
@@ -195,7 +200,9 @@ class PokerAgent:
                 padded_states[i, :len(seq_tensor)] = seq_tensor
 
             # Conversion des autres données en tensors PyTorch
-            target_vector_tensor = torch.stack([torch.tensor(v, device=self.device) for v in target_vectors])
+            target_vector_tensor = torch.stack([
+                torch.from_numpy(v).float() for v in target_vectors
+            ])
 
             # Calculer les probabilités d'action et les valeurs d'état
             action_probs, state_values = self.model(padded_states)
@@ -236,3 +243,24 @@ class PokerAgent:
         except Exception as e:
             print(f"Erreur pendant l'entraînement: {str(e)}")
             raise e
+
+    def cleanup(self):
+        """
+        Clean up resources and memory
+        """
+        # Clear memory
+        self.memory.clear()
+        
+        # Cleanup optimizer
+        if hasattr(self, 'optimizer'):
+            self.optimizer.zero_grad(set_to_none=True)
+        
+        # Cleanup device cache
+        try:
+            torch.cuda.empty_cache() 
+        except:
+            pass
+        try:
+            torch.mps.empty_cache()
+        except:
+            pass

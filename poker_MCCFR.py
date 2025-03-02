@@ -182,30 +182,26 @@ class MCCFRTrainer:
         return new_probs / new_probs.sum()  # Normalisation
     
 
-    def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> torch.Tensor:
+    def compute_target_probability_vector(self, payoffs: Dict[PlayerAction, float]) -> np.ndarray:
         """
         Calcule le vecteur de probabilité cible basé sur les payoffs estimés.
         Convertit automatiquement les valeurs None en le minimum des valeurs non-None.
-        
-        Exemple: Pour des payoffs {FOLD: None, CHECK: +200, CALL: -100, RAISE: None, ALL_IN: +100},
-        les None sont remplacés par -100 (le minimum), puis les valeurs sont décalées pour être positives,
-        et enfin normalisées pour obtenir un vecteur de probabilités {FOLD: 0, CHECK: 0.66, CALL: 0, RAISE: 0, ALL_IN: 0.33}.
         """
         # Convertir les valeurs None en le minimum des valeurs non-None
         non_none_values = [v for v in payoffs.values() if v is not None]
         if not non_none_values:
             # Si toutes les valeurs sont None, retourner une distribution uniforme
-            return torch.ones(len(PlayerAction)) / len(PlayerAction)
+            return np.ones(len(PlayerAction), dtype=np.float32) / len(PlayerAction)
         
         min_non_none = min(non_none_values)
         payoffs_cleaned = {k: min_non_none if v is None else v for k, v in payoffs.items()}
         
-        # Normaliser les probabilités le vecteur des payoffs pour le convertir en target_vector
-        payoffs_vector = torch.tensor(list(payoffs_cleaned.values()))
-        shifted_payoffs = payoffs_vector - torch.min(payoffs_vector)
-        if torch.sum(shifted_payoffs) == 0:
-            return torch.ones(len(PlayerAction)) / len(PlayerAction)
-        target_probs = shifted_payoffs / torch.sum(shifted_payoffs)
+        # Normaliser les probabilités
+        payoffs_vector = np.array(list(payoffs_cleaned.values()), dtype=np.float32)
+        shifted_payoffs = payoffs_vector - np.min(payoffs_vector)
+        if np.sum(shifted_payoffs) == 0:
+            return np.ones(len(PlayerAction), dtype=np.float32) / len(PlayerAction)
         
+        target_probs = shifted_payoffs / np.sum(shifted_payoffs)
         return target_probs
 

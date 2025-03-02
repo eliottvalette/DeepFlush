@@ -1438,7 +1438,7 @@ class PokerGame:
             - Potentiel de couleur
         
         Returns:
-            torch.Tensor: Vecteur d'état de dimension 106, normalisé entre -1 et 1
+            numpy.ndarray: Vecteur d'état de dimension 106, normalisé entre -1 et 1
         """
         current_player = self.players[self.current_player_seat]
         state = []
@@ -1592,15 +1592,15 @@ class PokerGame:
         state.append(straight_draw)
         state.append(flush_draw)
 
-        # Avant de retourner, conversion en tableau tensor.
-        state = torch.tensor(state, dtype=torch.float32)
+        # Avant de retourner, conversion en tableau numpy.
+        state = np.array(state, dtype=np.float32)
         return state
     
     def get_state_2(self):
         """
         
         Returns:
-            torch.Tensor
+            numpy.ndarray
         """
         current_player = self.players[self.current_player_seat]
 
@@ -1608,7 +1608,7 @@ class PokerGame:
         suit_map = {"♠": 0, "♥": 1, "♦": 2, "♣": 3}
 
         # 1. ------ Informations sur la phase de jeu ------ [0-4]
-        info_phase = torch.zeros(5)
+        info_phase = np.zeros(5)
         phase_values = {GamePhase.PREFLOP: 0, GamePhase.FLOP: 1, GamePhase.TURN: 2, GamePhase.RIVER: 3, GamePhase.SHOWDOWN: 4}
         # On récupère directement l'indice correspondant à la phase courante
         phase_idx = phase_values[self.current_phase]
@@ -1616,7 +1616,7 @@ class PokerGame:
         info_phase[phase_idx] = 1
 
         # 2. ------ Informations sur la position et le stack du current_player ------ [5-12]
-        info_stack = torch.zeros(7)
+        info_stack = np.zeros(7)
         max_stack = max(player.stack for player in self.players)
         # Normalisation du stack du joueur courant et affectation directe
         info_stack[0] = current_player.stack / max_stack
@@ -1625,7 +1625,7 @@ class PokerGame:
 
         # 3. ------ Cartes Personnelles ------ [13-46]
         # Remplir directement state pour les 5 cartes communes (2 x 17 = 34 éléments)
-        info_cards = torch.zeros(34)
+        info_cards = np.zeros(34)
         for i, card in enumerate(current_player.cards):
             base_idx = i * 17
             # One-hot encoding pour la valeur (indices 0 à 12 pour 2-14)
@@ -1635,7 +1635,7 @@ class PokerGame:
 
         
         # 4. ------ Cartes communes ------ [47-132]
-        info_community_cards = torch.zeros(85)
+        info_community_cards = np.zeros(85)
         # Remplir directement state pour les 5 cartes communes (5 x 17 = 85 éléments)
         for i, card in enumerate(self.community_cards):
             base_idx = i * 17
@@ -1646,10 +1646,10 @@ class PokerGame:
 
 
         # 5. ------ Informations sur la mise actuelle ------ [133]
-        actual_bet = torch.tensor(self.current_maximum_bet / self.starting_stack)
+        actual_bet = np.array(self.current_maximum_bet / self.starting_stack)
 
         # 6. ------ Informations sur les stacks et la position des joueurs des joueurs restants ------ [134-176]
-        info_players = torch.zeros(42)
+        info_players = np.zeros(42)
         for i, player in enumerate(self.players):
             # Calculer l'index de base pour ce joueur dans le vecteur d'état
             base_idx = i * 7  # 7 dimensions par joueur (1 pour stack + 6 pour position)
@@ -1673,14 +1673,14 @@ class PokerGame:
                 info_players[position_idx] = 1
 
         # 7. ------ Actions disponibles ------ [177-182]
-        info_actions = torch.zeros(6)
+        info_actions = np.zeros(6)
         for action in PlayerAction:
             if action in self.action_buttons and self.action_buttons[action].enabled:
                 info_actions[action.value] = 1
             else:
                 info_actions[action.value] = -1
 
-        state = torch.cat((info_phase, info_stack, info_cards, info_community_cards, actual_bet, info_players, info_actions))
+        state = np.concatenate((info_phase, info_stack, info_cards, info_community_cards, actual_bet, info_players, info_actions))
 
         return state
     
@@ -1719,21 +1719,21 @@ class PokerGame:
         14. Potentiel de couleur (changer en 0 pour tous)
 
         Args:
-            previous_state (torch.Tensor): Etat précédent
+            previous_state (numpy.ndarray): Etat précédent
             final_stack (float): Stack final
         
         Returns:
-            torch.Tensor: Vecteur d'état final de dimension 106, normalisé entre -1 et 1
+            numpy.ndarray: Vecteur d'état final de dimension 106, normalisé entre -1 et 1
         """
 
         # Créer une copie modifiable du previous_state
-        final_state = previous_state.clone()
+        final_state = previous_state.copy()
         
         # 1-3. Garder les cartes du joueur, cartes communes et info de la main inchangées
         # (indices 0-46 restent les mêmes)
         
         # 4. Mettre à jour la phase de jeu en SHOWDOWN
-        final_state[47:52] = torch.tensor([-1, -1, -1, -1, 1])  # One-hot encoding pour SHOWDOWN
+        final_state[47:52] = np.array([-1, -1, -1, -1, 1])  # One-hot encoding pour SHOWDOWN
         
         # 5. Mettre la mise maximale actuelle à 0
         final_state[52] = 0
@@ -1765,8 +1765,8 @@ class PokerGame:
         # 13-15. Réinitialiser les potentiels de tirage
         final_state[114:] = 0
 
-        # Avant de retourner, conversion en tableau tensor
-        final_state = torch.tensor(final_state, dtype=torch.float32)
+        # Avant de retourner, conversion en tableau numpy
+        final_state = np.array(final_state, dtype=np.float32)
         
         return final_state    
     
