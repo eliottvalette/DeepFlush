@@ -107,6 +107,8 @@ class PokerAgent:
             PlayerAction.ALL_IN: 15
         }
         valid_indices = [action_map[a] for a in valid_actions]
+        if len(valid_indices) == 0:
+            raise ValueError("No valid actions found for state: {state}")
 
         # Création d'un masque pour ne considérer que les actions valides
         valid_action_mask = torch.zeros((1, self.action_size), device=self.device)
