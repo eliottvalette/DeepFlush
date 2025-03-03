@@ -552,16 +552,16 @@ class Visualizer:
 
         # Métriques spécifiques à tracer basées sur l'output de train_model
         metrics_to_plot = [
-            ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)'),
-            ('value_loss', 'Value Loss (MSE de la valeur d\'état)'),
-            ('total_loss', 'Total Loss'),
-            ('invalid_action_loss', 'Invalid Action Loss'),
-            ('mean_predicted_value', 'Mean Predicted Value (moyenne des valeurs d\'état prédites)'),
-            ('mean_target_value', 'Mean Target Value (moyenne des valeurs d\'état, récompense finale potentielle)')
+            ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)', None, None),
+            ('value_loss', 'Value Loss (MSE de la valeur d\'état)', 0.5, 0.0),
+            ('total_loss', 'Total Loss', 0.55, 0.0),
+            ('invalid_action_loss', 'Invalid Action Loss', None, None),
+            ('mean_predicted_value', 'Mean Predicted Value (moyenne des valeurs d\'état prédites)', None, None),
+            ('mean_target_value', 'Mean Target Value (moyenne des valeurs d\'état, récompense finale potentielle)', None, None)
         ]
 
         # Créer un subplot pour chaque métrique
-        for idx, (metric_name, display_name) in enumerate(metrics_to_plot):
+        for idx, (metric_name, display_name, y_max, y_min) in enumerate(metrics_to_plot):
             ax = plt.subplot(2, 3, idx + 1)
             
             # Préparer les données pour chaque agent
@@ -588,7 +588,7 @@ class Visualizer:
             ax.set_xlabel('Episode')
             ax.set_ylabel(display_name)
             ax.legend()
-            
+            ax.set_ylim(y_min, y_max)
             # Style du subplot
             ax.set_facecolor('#F0F0F0')
             ax.grid(True, alpha=0.3)
