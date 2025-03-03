@@ -2,6 +2,7 @@
 from poker_game import PlayerAction, PokerGame, HandRank, Card, Player, GamePhase
 import random as rd
 import numpy as np
+from utils.config import DEBUG
 from typing import List, Tuple, Dict
 from collections import Counter
 import json
@@ -253,11 +254,13 @@ class PokerGameOptimized:
         player_stack = player_info['player_stack']
 
         if action == PlayerAction.FOLD:
-            print(f"{name} a fold")
+            if DEBUG:
+                print(f"{name} a fold")
             player_info['has_folded'] = True
 
         elif action == PlayerAction.CHECK:
-            print(f"{name} a check")
+            if DEBUG:
+                print(f"{name} a check")
             # Add validation to prevent invalid CHECK actions
             if player_info['current_player_bet'] < self.current_maximum_bet:
                 raise ValueError(f"Invalid CHECK action - player must match current bet of {self.current_maximum_bet}")
@@ -265,7 +268,8 @@ class PokerGameOptimized:
             pass
 
         elif action == PlayerAction.CALL:
-            print(f"{name} a call")
+            if DEBUG:
+                print(f"{name} a call")
             call_amount = self.current_maximum_bet - current_player_bet
             if call_amount > player_stack: 
                 raise ValueError(f"{name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
@@ -278,7 +282,8 @@ class PokerGameOptimized:
                 player_info['is_all_in'] = True
 
         elif action == PlayerAction.RAISE:
-            print(f"{name} a raise")
+            if DEBUG:
+                print(f"{name} a raise")
             call_amount = self.current_maximum_bet - current_player_bet
             if self.current_maximum_bet == 0:
                 raise_amount = self.big_blind
@@ -310,7 +315,8 @@ class PokerGameOptimized:
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         }:
-            print(f"{name} a raise (pot-based)")
+            if DEBUG:
+                print(f"{name} a raise (pot-based)")
             # Map actions to their pot percentages
             raise_percentages = {
                 PlayerAction.RAISE_25_POT: 0.25,
@@ -349,7 +355,8 @@ class PokerGameOptimized:
                 player_info['is_all_in'] = True
 
         elif action == PlayerAction.ALL_IN:
-            print(f"{name} a all-in")
+            if DEBUG:
+                print(f"{name} a all-in")
             # Calculer le montant réel de l'all-in en tenant compte des mises déjà faites
             remaining_stack = player_info['player_stack']
             all_in_amount = remaining_stack
@@ -362,15 +369,17 @@ class PokerGameOptimized:
             if player_info['current_player_bet'] > self.current_maximum_bet:
                 self.current_maximum_bet = player_info['current_player_bet']
             player_info['is_all_in'] = True
-            print(f"{name} a all-in {all_in_amount}BB (mise totale: {player_info['current_player_bet']}BB)")
+            if DEBUG:
+                print(f"{name} a all-in {all_in_amount}BB (mise totale: {player_info['current_player_bet']}BB)")
         else :
             raise ValueError(f"Action invalide: {action}")
         player_info['has_acted'] = True
 
     def betting_round(self, hero_trajectory_action: PlayerAction) -> Tuple[bool, bool]:
-        print(f"\n--- Début betting_round - phase : {self.current_phase} ---")
-        print(f"Index joueur actuel: {self.current_player_idx}")
-        
+        if DEBUG:
+            print(f"\n--- Début betting_round - phase : {self.current_phase} ---")
+            print(f"Index joueur actuel: {self.current_player_idx}")
+            
         # Réinitialiser has_acted pour les joueurs actifs non all-in
         for player_info in self.players_info:
             if not (player_info['has_folded'] or player_info['is_all_in']):
@@ -400,10 +409,12 @@ class PokerGameOptimized:
             
             # Faire agir le joueur courant
             player_info = self.players_info[self.current_player_idx]
-            print(f"Joueur actuel: {player_info['name']}")
+            if DEBUG:
+                print(f"Joueur actuel: {player_info['name']}")
 
             valid_actions = self.get_valid_actions(player_info)
-            print(f"Actions valides: {[a.value for a in valid_actions]}")
+            if DEBUG:
+                print(f"Actions valides: {[a.value for a in valid_actions]}")
 
             if not valid_actions:
                 print("player_info :", player_info)
@@ -411,7 +422,8 @@ class PokerGameOptimized:
             
             is_hero = (player_info['name'] == self.simple_state['hero_name'])
 
-            print('is_hero :', is_hero)
+            if DEBUG:
+                print('is_hero :', is_hero)
 
             if is_hero:
                 if self.hero_first_action:
@@ -422,16 +434,19 @@ class PokerGameOptimized:
             else:
                 chosen_action = rd.choice(valid_actions)
 
-            print(f"Action choisie: {chosen_action}")
+            if DEBUG:
+                print(f"Action choisie: {chosen_action}")
             self.simulate_action(player_info, chosen_action)
 
             # Vérifier si la phase est terminée
             phase_completed, instant_finish = self.check_phase_completion()
             if phase_completed :
-                print(f"Phase terminée - sortie de la boucle")
+                if DEBUG:
+                    print(f"Phase terminée - sortie de la boucle")
                 break
             if instant_finish:
-                print("Showdown instantané - sortie de la boucle")
+                if DEBUG:
+                    print("Showdown instantané - sortie de la boucle")
                 break
 
             # Passer au joueur suivant
@@ -441,15 +456,17 @@ class PokerGameOptimized:
                 self.current_player_idx = (self.current_player_idx + 1) % self.num_players
                 in_loop += 1
                 if in_loop > 10:
-                    print("Etat des joueurs avant le round :")
-                    for p in self.players_info:
-                        print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
+                    if DEBUG:
+                        print("Etat des joueurs avant le round :")
+                        for p in self.players_info:
+                            print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
                     raise ValueError("ATTENTION: Boucle infinie dans betting_round!")
 
             iteration += 1
             if iteration >= 20:
-                print('current_player_idx :', self.current_player_idx)
-                for p in self.players_info:
+                if DEBUG:
+                    print('current_player_idx :', self.current_player_idx)
+                    for p in self.players_info:
                             print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
                 raise ValueError("ATTENTION: Nombre maximum d'itérations atteint dans betting_round!")
 
@@ -466,18 +483,21 @@ class PokerGameOptimized:
         
         # Tout le monde a fold, signaler une erreur car la partie est censée être terminée avant que le dernier joueur agisse car c'était le dernier joueur en jeu
         if len(folded_players) == self.num_players:
-            for p in folded_players:
-                print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
+            if DEBUG:
+                for p in folded_players:
+                    print(f"{p['name']}: fold={p['has_folded']}, all_in={p['is_all_in']}, acted={p['has_acted']}, bet={p['current_player_bet']}")
             raise ValueError("ATTENTION: Tout le monde a foldé!")
         
         # Tout le monde a fold ou all-in
         if len(active_players) == 0:
-            print("Tout le monde a foldé ou all-in - showdown instantané")
+            if DEBUG:
+                print("Tout le monde a foldé ou all-in - showdown instantané")
             return True, True
         
         # Si un seul joueur reste
         if len(non_folded_players) == 1:
-            print("Un seul joueur reste - showdown instantané")
+            if DEBUG:
+                print("Un seul joueur reste - showdown instantané")
             return True, True
         
         # Vérifier que tous les joueurs ont agi et égalisé la mise maximale
@@ -502,10 +522,12 @@ class PokerGameOptimized:
             return False, False
         
         # Atteindre cette partie du code signifie que la phase est terminée
-        print(f"Phase terminée, tous les joueurs ont agi et égalisé la mise maximale")
+        if DEBUG:
+            print(f"Phase terminée, tous les joueurs ont agi et égalisé la mise maximale")
         phase_completed = True
         if self.current_phase == GamePhase.RIVER:
-            print("River complete - going to showdown")
+            if DEBUG:
+                print("River complete - going to showdown")
             return phase_completed, False
         
         return phase_completed, False
@@ -514,10 +536,11 @@ class PokerGameOptimized:
         """
         Fait évoluer la phase du jeu en complétant le board selon la phase.
         """
-        print("\n--- Début advance_phase ---")
-        print(f"Phase actuelle: {self.current_phase}")
-        print(f"Cartes communes actuelles: {self.community_cards}")
-        print(f"Cartes restantes à ajouter: {self.rd_missing_community_cards}")
+        if DEBUG:
+            print("\n--- Début advance_phase ---")
+            print(f"Phase actuelle: {self.current_phase}")
+            print(f"Cartes communes actuelles: {self.community_cards}")
+            print(f"Cartes restantes à ajouter: {self.rd_missing_community_cards}")
 
         # Progression des phases et distribution des cartes
         if self.current_phase == GamePhase.PREFLOP:
@@ -538,8 +561,9 @@ class PokerGameOptimized:
         elif self.current_phase == GamePhase.RIVER:
             self.current_phase = GamePhase.SHOWDOWN
 
-        print(f"Nouvelle phase: {self.current_phase}")
-        print(f"Nouvelles cartes communes: {self.community_cards}")
+        if DEBUG:
+            print(f"Nouvelle phase: {self.current_phase}")
+            print(f"Nouvelles cartes communes: {self.community_cards}")
 
         # Réinitialiser les mises pour la nouvelle phase
         self.current_maximum_bet = 0
@@ -560,45 +584,55 @@ class PokerGameOptimized:
                     self.current_player_idx = i
                     break
 
-        print("--- Fin advance_phase ---\n")
+        if DEBUG:
+            print("--- Fin advance_phase ---\n")
 
     def simulate_hand(self, hero_trajectory_action: PlayerAction, valid_actions: List[PlayerAction]) -> None:
         """
         Simule la suite de la main depuis l'état actuel jusqu'au showdown.
         """
-        print("\n=== Début simulate_hand ===")
-        print(f"Phase initiale: {self.current_phase}")
+        if DEBUG:
+            print("\n=== Début simulate_hand ===")
+            print(f"Phase initiale: {self.current_phase}")
         
         # Convert GamePhase enum to string value for JSON serialization
         json_safe_state = self.simple_state.copy()
         if 'phase' in json_safe_state:
             json_safe_state['phase'] = str(json_safe_state['phase'])
         
-        print(f"Action de la trajectoire: {hero_trajectory_action} parmi les actions à parcourir {[action.value for action in valid_actions]}")
+        if DEBUG:
+            print(f"Action de la trajectoire: {hero_trajectory_action} parmi les actions à parcourir {[action.value for action in valid_actions]}")
         
         # Ne pas simuler si déjà au showdown
         if self.current_phase == GamePhase.SHOWDOWN:
-            print("Déjà au showdown - pas de simulation nécessaire")
+            if DEBUG:
+                print("Déjà au showdown - pas de simulation nécessaire")
             return False
         
         iteration = 0
         instant_finish = False
         while self.current_phase != GamePhase.SHOWDOWN:
-            print(f"\nItération {iteration} de simulate_hand")            
+            if DEBUG:
+                print(f"\nItération {iteration} de simulate_hand")            
             phase_completed, instant_finish = self.betting_round(hero_trajectory_action)
-            print(f"--- Phase completed: {phase_completed}, Instant win: {instant_finish} ---")
+            if DEBUG:
+                print(f"--- Phase completed: {phase_completed}, Instant win: {instant_finish} ---")
             
             if instant_finish :
-                print("Instant showdown détecté - sortie totale de la boucle")
+                if DEBUG:
+                    print("Instant showdown détecté - sortie totale de la boucle")
                 break
             elif phase_completed:
-                print(f"Phase {self.current_phase} terminée - passage à la phase suivante")
+                if DEBUG:
+                    print(f"Phase {self.current_phase} terminée - passage à la phase suivante")
                 self.advance_phase()
-                print(f"Nouvelle phase: {self.current_phase}")
+                if DEBUG:
+                    print(f"Nouvelle phase: {self.current_phase}")
             else :
                 raise ValueError("ATTENTION: Phase non terminée dans la boucle principale de simulate_hand")
             
-        print("=== Fin simulate_hand ===\n")
+            if DEBUG:
+                print("=== Fin simulate_hand ===\n")
         return instant_finish
 
     def evaluate_showdown(self, instant_finish: bool) -> Dict[str, float]:
@@ -702,7 +736,8 @@ class PokerGameOptimized:
         
         # À l'issue du showdown, évaluer et calculer le payoff
         payoffs = self.evaluate_showdown(instant_finish)
-        print(f"Payoffs: {payoffs}")
+        if DEBUG:
+            print(f"Payoffs: {payoffs}")
         return payoffs[self.simple_state['hero_name']]
 
     def _evaluate_hand(self, cards: List[Tuple[int, str]]) -> Tuple[HandRank, List[int]]:

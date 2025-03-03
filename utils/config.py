@@ -7,10 +7,11 @@ EPISODES = 2_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9992
-START_EPS = 0.4
+START_EPS = 0.9
 STATE_SIZE = 127
 
 # Paramètres de visualisation
+DEBUG = False
 RENDERING = False
 FPS = 3
 
@@ -19,7 +20,7 @@ SAVE_INTERVAL = 250
 PLOT_INTERVAL = 500
 
 # Nombre de Simulations
-MC_SIMULATIONS = 5
+MC_SIMULATIONS = 100
 
 def set_seed(seed=42):
     rd.seed(seed)

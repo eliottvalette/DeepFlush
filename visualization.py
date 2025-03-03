@@ -9,6 +9,7 @@ import os
 import json
 import pandas as pd
 from datetime import datetime
+from utils.config import DEBUG
 import torch
 
 PLAYERS = ['Player_0', 'Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5']

@@ -2,11 +2,11 @@
 import numpy as np
 import random as rd
 import torch
+from utils.config import DEBUG
 from typing import List, Dict, Tuple
 from poker_game import PlayerAction, PokerGame
 from poker_game_optimized import PokerGameOptimized
-import sys
-
+import time
 class MCCFRTrainer:
     """
     Implémente l'algorithme Monte Carlo Counterfactual Regret Minimization (MCCFR)
@@ -83,11 +83,14 @@ class MCCFRTrainer:
                 # Mettre à jour valid_actions pour ne garder que les raises sélectionnées
                 valid_actions = [action for action in valid_actions if not action.value.startswith("raise") or action in raise_actions]
 
-        # Simulation des trajectoires
-        for simulation_index in range(self.num_simulations):
-            print(f"\nSimulation [{simulation_index + 1}/{self.num_simulations}]")
+        # Simulation des trajectoires7
+        if DEBUG:
             print(f"Hero name: {hero_name}")
-            print('valid_actions :', valid_actions)
+        start_time = time.time()
+        for simulation_index in range(self.num_simulations):
+            if DEBUG:
+                print(f"Simulation [{simulation_index + 1}/{self.num_simulations}] pour {len(valid_actions)} actions")
+                print('valid_actions :', valid_actions)
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(replicated_game.simple_state)
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
@@ -95,10 +98,17 @@ class MCCFRTrainer:
                 payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
-        print('----------------------------------')
-        print('real valid actions:', [real_valid_action.value for real_valid_action in real_valid_actions])
-        print('explored actions:', [valid_action.value for valid_action in valid_actions])
-        print('payoff_per_trajectory_action non mappé:', self.payoff_per_trajectory_action.values())
+        end_time = time.time()
+
+        if DEBUG:
+            print('----------------------------------')
+            print('real valid actions:', [real_valid_action.value for real_valid_action in real_valid_actions])
+            print('explored actions:', [valid_action.value for valid_action in valid_actions])
+            print('payoff_per_trajectory_action non mappé:', self.payoff_per_trajectory_action.values())
+
+        # Afficher le temps de simulation (Non debug)
+        print(f"Temps de simulation: {(end_time - start_time)*1000:.2f} ms")
+
         # Appliquer les payoffs aux raises non simulées
         if raise_mapping:
             for action, mapped_action in raise_mapping.items():
@@ -106,9 +116,10 @@ class MCCFRTrainer:
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
-        print('target_vector :', target_vector)
-        print('payoff_per_trajectory_action :', self.payoff_per_trajectory_action.values())
-        print('----------------------------------')
+        if DEBUG:
+            print('target_vector :', target_vector)
+            print('payoff_per_trajectory_action :', self.payoff_per_trajectory_action.values())
+            print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action
     

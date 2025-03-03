@@ -5,10 +5,11 @@ import torch.optim as optim
 import numpy as np
 from poker_model import PokerTransformerModel
 from poker_game import PlayerAction
+from utils.config import DEBUG
+import torch.nn.functional as F
 from collections import deque
 import random
 import os
-import torch.nn.functional as F
 
 class PokerAgent:
     """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
@@ -153,7 +154,8 @@ class PokerAgent:
         Les états sont des séquences (shape: [n, 116]).
         """
         if len(self.memory) < 32:
-            print('Not enough data to train :', len(self.memory))
+            if DEBUG:
+                print('Not enough data to train :', len(self.memory))
             return {
                 'policy_loss': None,
                 'value_loss': None,

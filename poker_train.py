@@ -12,7 +12,7 @@ from poker_agents import PokerAgent
 from poker_game import PokerGame, GamePhase, PlayerAction
 from typing import List, Tuple
 import json
-from utils.config import EPISODES, EPS_DECAY, START_EPS, RENDERING, SAVE_INTERVAL, PLOT_INTERVAL, MC_SIMULATIONS
+from utils.config import EPISODES, EPS_DECAY, START_EPS, DEBUG, SAVE_INTERVAL, PLOT_INTERVAL, MC_SIMULATIONS
 from utils.renderer import handle_final_rendering, handle_rendering
 from utils.helping_funcs import save_models
 from poker_MCCFR import MCCFRTrainer
