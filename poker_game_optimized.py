@@ -29,9 +29,13 @@ class PokerGameOptimized:
         # Main pot (indice 127)
         self.main_pot = state[127] * self.starting_stack
         
-        self.community_cards = visible_community_cards
-        self.rd_missing_community_cards = rd_missing_community_cards
-        self.rd_opponents_cards = rd_opponents_cards
+        # Faire des copies pour éviter de modifier les listes originales
+        self.community_cards = visible_community_cards.copy() if visible_community_cards else []
+        self.rd_missing_community_cards = rd_missing_community_cards.copy() if rd_missing_community_cards else []
+        self.rd_opponents_cards = rd_opponents_cards.copy() if rd_opponents_cards else []
+        print(f"visible_community_cards : {visible_community_cards}")
+        print(f"rd_missing_community_cards : {self.rd_missing_community_cards}")
+        print(f"self.community_cards : {self.community_cards}")
         self.hero_cards = hero_cards
         self.side_pots = self._create_side_pots()
         
@@ -125,13 +129,14 @@ class PokerGameOptimized:
         # il est nécessaire de laisser le temps au joueur en small blind d'intervenir.
         # C'est pourquoi, si le joueur actif est en position 0 durant le préflop,
         # la méthode retourne False et indique que la phase d'enchères ne peut pas encore être terminée
-        
+
         # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
         if (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
+            rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
             if DEBUG:
                 print("Moving to showdown (all remaining players are all-in)")
             while len(self.community_cards) < 5:
-                self.community_cards.append(self.deck.pop())
+                self.community_cards.append(rd_missing_community_cards_copy.pop())
             self.handle_showdown()
             return # Ne rien faire d'autre, la partie est terminée
         
@@ -194,7 +199,8 @@ class PokerGameOptimized:
             if DEBUG:
                 print("Moving to showdown (only one non all-in player remains)")
             while len(self.community_cards) < 5:
-                self.community_cards.append(self.deck.pop())
+                rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
+                self.community_cards.append(rd_missing_community_cards_copy.pop())
             self.handle_showdown()
             return
         
@@ -210,11 +216,22 @@ class PokerGameOptimized:
                 "Les cartes communes ne doivent être distribuées qu'après le pré-flop."
             )
         
+        # Vérifier que nous avons suffisamment de cartes pour la distribution
+        if not self.rd_missing_community_cards:
+            if DEBUG:
+                print("Attention: Aucune carte communautaire disponible pour la distribution.")
+            return
+            
+        # Faire une copie locale des cartes communautaires pour éviter de les épuiser
+        rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
+        
         if self.current_phase == GamePhase.FLOP:
             for _ in range(3):
-                self.community_cards.append(self.rd_missing_community_cards.pop())
+                self.community_cards.append(rd_missing_community_cards_copy.pop())
         elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
-            self.community_cards.append(self.rd_missing_community_cards.pop())
+            self.community_cards.append(rd_missing_community_cards_copy.pop())
+        
+        self.rd_missing_community_cards = rd_missing_community_cards_copy
 
     def deal_cards(self):
         """
@@ -412,7 +429,12 @@ class PokerGameOptimized:
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
             raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}, phase = {self.current_phase}")
         
+        # Mettre à jour l'état des boutons avant de vérifier les actions valides
+        self._update_button_states()
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
+        if not valid_actions:
+            raise ValueError(f"Aucune action valide disponible pour {player.name}")
+        
         if action not in valid_actions:
             raise ValueError(f"{player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
         
@@ -1027,15 +1049,12 @@ class PokerGameOptimized:
 
         return straight_draw, flush_draw
         
-    def play_trajectory(self, trajectory_action, opponent_hands, missing_community_cards, valid_actions):
+    def play_trajectory(self, trajectory_action):
         """
-        Simule le déroulement d'une partie à partir d'une action donnée.
+        Simule le déroulement de la fin d'une partie à partir d'une action donnée.
         
         Args:
-            trajectory_action (PlayerAction): L'action initiale à jouer
-            opponent_hands (List[List[Tuple[int, str]]]): Liste des mains des adversaires
-            missing_community_cards (List[Tuple[int, str]]): Liste des cartes communes restantes
-            valid_actions (List[PlayerAction]): Liste des actions valides
+            trajectory_action (PlayerAction): L'action initiale à jouer, imposée au Hero
             
         Returns:
             float: Le gain final (positif ou négatif) pour le joueur courant
@@ -1044,18 +1063,36 @@ class PokerGameOptimized:
         hero = self.players[self.current_player_seat]
         hero_initial_stack = hero.stack
         
+        # On fait une copie des cartes pour éviter de les consommer dans l'original
+        rd_opponents_cards_copy = self.rd_opponents_cards.copy() if self.rd_opponents_cards else []
+        
         # Distribuer les cartes aux adversaires
         active_opponents = [p for p in self.players if p.is_active and not p.has_folded and p.seat_position != self.current_player_seat]
         for i, opponent in enumerate(active_opponents):
-            if i < len(opponent_hands):
-                opponent.cards = opponent_hands[i]
-                
-        # Compléter les cartes communes manquantes
-        remaining_community_cards = missing_community_cards.copy()
+            if i < len(rd_opponents_cards_copy):
+                opponent.cards = rd_opponents_cards_copy[i]
         
+        # Mettre à jour les actions valides
+        self._update_button_states()
+        valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
+        
+        # Vérifier que des actions valides sont disponibles
+        if not valid_actions:
+            if DEBUG:
+                print(f"Aucune action valide disponible pour {hero.name}. Impossible de continuer la simulation.")
+            return 0
+            
         # Le héros joue d'abord son action
         if trajectory_action not in valid_actions:
-            raise ValueError(f"L'action {trajectory_action} n'est pas valide. Actions valides: {valid_actions}")
+            # Si l'action fournie n'est pas valide, essayer de trouver une action alternative
+            if valid_actions:
+                if DEBUG:
+                    print(f"L'action {trajectory_action} n'est pas valide. Utilisation d'une action alternative parmi: {valid_actions}")
+                trajectory_action = rd.choice(valid_actions)
+            else:
+                if DEBUG:
+                    print("Aucune action valide disponible. Fin de la simulation.")
+                return 0
         
         bet_amount = None
         if trajectory_action == PlayerAction.ALL_IN:
@@ -1108,18 +1145,6 @@ class PokerGameOptimized:
                         bet_amount = current_player.stack
                         
                     self.process_action(current_player, random_action, bet_amount)
-            
-            # Si on avance à une nouvelle phase, distribuer les cartes communes manquantes
-            if self.current_phase == GamePhase.FLOP and len(self.community_cards) < 3:
-                for _ in range(3):
-                    if remaining_community_cards:
-                        self.community_cards.append(remaining_community_cards.pop(0))
-            elif self.current_phase == GamePhase.TURN and len(self.community_cards) < 4:
-                if remaining_community_cards:
-                    self.community_cards.append(remaining_community_cards.pop(0))
-            elif self.current_phase == GamePhase.RIVER and len(self.community_cards) < 5:
-                if remaining_community_cards:
-                    self.community_cards.append(remaining_community_cards.pop(0))
         
         # À ce stade, nous avons atteint le showdown, calculer le gain du héros
         hero_final_stack = hero.stack

@@ -1486,6 +1486,7 @@ class PokerGame:
         """
         current_player = self.players[self.current_player_seat]
         state = []
+        STATE_DEBUG = False
 
         # Correspondance des couleurs avec des nombres ♠, ♥, ♦, ♣
         suit_map = {
@@ -1509,7 +1510,7 @@ class PokerGame:
             state.append(-1) # hauteur manquante
             state.extend([-1] * 4) # couleur manquante
         
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 1", len(state))
         
         # 2. Cartes communes [10:35]
@@ -1525,7 +1526,7 @@ class PokerGame:
             state.append(-1)         # hauteur manquante
             state.extend([-1] * 4)   # couleur manquante
         
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 2", len(state))
 
         # 3. Rang de la main actuelle (si assez de cartes sont visibles) [35:47]
@@ -1557,7 +1558,7 @@ class PokerGame:
             state.append((kickers[0]- 2) / 13)             # Normalisation de la valeur du kicker (taille = 1)
             state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 3", len(state))
 
         # 4. Informations sur le tour [47:52]
@@ -1573,34 +1574,34 @@ class PokerGame:
         phase_range[phase_values[self.current_phase]] = 1
         state.extend(phase_range)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 4", len(state))
 
         # 5. Mise actuelle normalisée par le stack initial [52:53]
         state.append(self.current_maximum_bet / self.starting_stack)  # Normalisation de la mise (taille = 1)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 5", len(state))
 
         # 6. Argent restant (tailles des stacks normalisées par le stack initial) [53:59]
         for player in self.players:
             state.append(player.stack / self.starting_stack) # (taille = 6)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 6", len(state))
 
         # 7. Informations sur les mises (normalisées par le stack initial) [59:65]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack) # (taille = 6)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 7", len(state))
 
         # 8. Informations sur l'activité (fold ou inactif) [65:71]
         for player in self.players:
             state.append(1 if ((not player.has_folded) and player.is_active) else -1) # (taille = 6)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 8", len(state))
 
         # 9. Informations sur la position (encodage one-hot des positions relatives) [71:77]
@@ -1609,7 +1610,7 @@ class PokerGame:
         relative_positions[relative_pos] = 1
         state.extend(relative_positions) # (taille = 6)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 9", len(state))
 
         # 10. Actions disponibles (binaire extrême : disponible/indisponible) [77:93]
@@ -1621,7 +1622,7 @@ class PokerGame:
                 action_availability.append(-1)
         state.extend(action_availability) # (taille = 6)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 10", len(state))
 
         # 11. Update action encoding for previous actions [93:123]    
@@ -1651,7 +1652,7 @@ class PokerGame:
         
         state.extend([val for sublist in last_actions for val in sublist])
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 11", len(state))
 
         # 12 Probabilité de victoire de la main au préflop [123:125]
@@ -1661,7 +1662,7 @@ class PokerGame:
         state.append(hand_win_prob) # (taille = 1)
         state.append(pot_odds) # (taille = 1)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 12", len(state))
 
         # 13. Potentiel de quinte et de couleur [125:127]
@@ -1669,20 +1670,20 @@ class PokerGame:
         state.append(straight_draw)
         state.append(flush_draw)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 13", len(state))
 
         # 14. Main pot [127:128]
         state.append(self.main_pot / self.starting_stack)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 14", len(state))
 
         # 15. Contribution des joueurs [128:134]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack)
 
-        if DEBUG:
+        if STATE_DEBUG:
             print("step 15", len(state))
 
         # Avant de retourner, conversion en tableau numpy.

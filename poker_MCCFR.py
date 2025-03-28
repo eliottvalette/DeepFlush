@@ -91,7 +91,7 @@ class MCCFRTrainer:
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
                 game_copy = PokerGameOptimized(state, hero_cards, hero_seat, button_seat, visible_community_cards, rd_opponents_cards, rd_missing_community_cards)
-                payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
+                payoff = game_copy.play_trajectory(trajectory_action)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
         end_time = time.time()
@@ -153,8 +153,16 @@ class MCCFRTrainer:
         # Échantillonnage des cartes restantes
         drawn_cards = rd.sample(remaining_deck, nb_missing_community_cards + 2 * num_opponents)
         
-        missing_community_cards = drawn_cards[:nb_missing_community_cards]
-        opponent_hands = [drawn_cards[nb_missing_community_cards + i*2: nb_missing_community_cards + i*2+2] for i in range(num_opponents)]
+        # Convertir les tuples en objets Card
+        from poker_game import Card
+        
+        # Cartes communautaires manquantes
+        tuple_missing_community_cards = drawn_cards[:nb_missing_community_cards]
+        missing_community_cards = [Card(card[1], card[0]) for card in tuple_missing_community_cards]
+        
+        # Mains des adversaires
+        tuple_opponent_hands = [drawn_cards[nb_missing_community_cards + i*2: nb_missing_community_cards + i*2+2] for i in range(num_opponents)]
+        opponent_hands = [[Card(card[1], card[0]) for card in hand] for hand in tuple_opponent_hands]
 
         return opponent_hands, missing_community_cards
 
