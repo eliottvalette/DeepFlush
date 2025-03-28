@@ -17,7 +17,7 @@ class PokerGameOptimized:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, flat_state, hero_cards, community_cards, rd_opponents_cards, rd_missing_community_cards):
+    def __init__(self, state : List[float], hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]], rd_opponents_cards, rd_missing_community_cards):
         """
         Initialise la partie de poker avec un état plat pour la simulation MCCFR.
         """
@@ -27,7 +27,7 @@ class PokerGameOptimized:
         self.starting_stack = 100
         
         # Main pot (indice 119)
-        self.main_pot = flat_state[119] * self.starting_stack
+        self.main_pot = state[119] * self.starting_stack
         
         self.community_cards = community_cards
         self.side_pots = self._create_side_pots()
@@ -35,14 +35,14 @@ class PokerGameOptimized:
         # Phase de jeu (indices 49-54)
         phase_indices = {0: GamePhase.PREFLOP, 1: GamePhase.FLOP, 2: GamePhase.TURN, 
                         3: GamePhase.RIVER, 4: GamePhase.SHOWDOWN}
-        phase_idx = np.argmax(flat_state[49:54]) if any(flat_state[49:54] > 0) else 0
+        phase_idx = np.argmax(state[49:54]) if any(state[49:54] > 0) else 0
         self.current_phase = phase_indices[phase_idx]
         
         # Position relative (indices 73-79)
-        relative_position = np.argmax(flat_state[73:79]) if any(flat_state[73:79] > 0) else 0
+        relative_position = np.argmax(state[73:79]) if any(state[73:79] > 0) else 0
         
         # Joueur actuel (indices 67-73)
-        active_player_indices = [i for i, val in enumerate(flat_state[67:73]) if val > 0]
+        active_player_indices = [i for i, val in enumerate(state[67:73]) if val > 0]
         current_player_idx = 0
         if active_player_indices:
             current_player_idx = active_player_indices[0]
@@ -52,10 +52,10 @@ class PokerGameOptimized:
         self.current_player_seat = current_player_idx
         
         # Mise maximale (indice 54)
-        self.current_maximum_bet = flat_state[54] * self.starting_stack
+        self.current_maximum_bet = state[54] * self.starting_stack
         
         # Initialiser les joueurs avec leurs stacks (indices 55-61)
-        self.players = self._initialize_simulated_players(flat_state)
+        self.players = self._initialize_simulated_players(state)
         
         # Historique des actions pour pygame
         self.pygame_action_history = {player.name: [] for player in self.players}
@@ -66,7 +66,7 @@ class PokerGameOptimized:
         
         # Initialiser les stacks APRÈS avoir créé les joueurs
         # On utilise les stacks déjà initialisés dans _initialize_simulated_players
-        self.initial_stacks = {player.name: flat_state[55 + player.seat_position] * self.starting_stack for player in self.players}
+        self.initial_stacks = {player.name: state[55 + player.seat_position] * self.starting_stack for player in self.players}
         self.net_stack_changes = {player.name: player.stack - self.initial_stacks[player.name] for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
 
@@ -202,6 +202,24 @@ class PokerGameOptimized:
                 self.community_cards.append(self.deck.pop())
             self.handle_showdown()
             return
+        
+    def deal_community_cards(self):
+        """
+        Distribue les cartes communes selon la phase de jeu actuelle.
+        Distribue 3 cartes pour le flop, 1 pour le turn et 1 pour la river.
+        """
+
+        if self.current_phase == GamePhase.PREFLOP:
+            raise ValueError(
+                "Erreur d'état : Distribution des community cards pendant le pré-flop. "
+                "Les cartes communes ne doivent être distribuées qu'après le pré-flop."
+            )
+        
+        if self.current_phase == GamePhase.FLOP:
+            for _ in range(3):
+                self.community_cards.append(self.deck.pop())
+        elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
+            self.community_cards.append(self.deck.pop())
 
     def advance_phase(self):
         """
@@ -1402,20 +1420,20 @@ class PokerGameOptimized:
         
         return payoff
 
-    def _initialize_simulated_players(self, flat_state):
+    def _initialize_simulated_players(self, state):
         """
         Initialise 6 joueurs simulés pour une partie MCCFR.
         """
         players = []
         
         # Extraction des stacks (indices 55-61)
-        stacks = [flat_state[55+i] * self.starting_stack for i in range(6)]
+        stacks = [state[55+i] * self.starting_stack for i in range(6)]
         
         # Extraction de l'état actif des joueurs (indices 67-73)
-        active_states = [flat_state[67+i] > 0 for i in range(6)]
+        active_states = [state[67+i] > 0 for i in range(6)]
         
         # Extraction des mises actuelles (indices 61-67)
-        current_bets = [flat_state[61+i] * self.starting_stack for i in range(6)]
+        current_bets = [state[61+i] * self.starting_stack for i in range(6)]
         
         # Créer les joueurs
         for i in range(6):

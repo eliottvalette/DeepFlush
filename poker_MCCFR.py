@@ -16,7 +16,7 @@ class MCCFRTrainer:
     def __init__(self, num_simulations: int):
         self.num_simulations = num_simulations
 
-    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], flat_state_and_count: Tuple[List, int]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
+    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], state: List[float], hero_seat: int, hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
@@ -24,12 +24,6 @@ class MCCFRTrainer:
         self.payoff_per_trajectory_action = {action: None for action in PlayerAction}
         for action in valid_actions:
             self.payoff_per_trajectory_action[action] = 0
-        
-        # Créer une instance de PokerGameOptimized avec le flat state
-        flat_state = flat_state_and_count[0] if isinstance(flat_state_and_count, tuple) else flat_state_and_count
-        
-        # Extraction des informations nécessaires à partir du flat_state pour initialiser le jeu
-        hero_cards, community_cards, active_players = self.extract_game_info_from_state(flat_state)
          
         # ---- Action abstraction ----
         real_valid_actions = valid_actions # On sauvegarde les actions valides réelles
@@ -96,7 +90,7 @@ class MCCFRTrainer:
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards({'hero_cards': hero_cards, 'community_cards': community_cards, 'num_active_players': active_players})
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
-                game_copy = PokerGameOptimized(flat_state, hero_cards, community_cards, rd_opponents_cards, rd_missing_community_cards)
+                game_copy = PokerGameOptimized(state, hero_cards, visible_community_cards, rd_opponents_cards, rd_missing_community_cards)
                 payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
@@ -124,52 +118,6 @@ class MCCFRTrainer:
             print('----------------------------------')
         
         return target_vector, self.payoff_per_trajectory_action
-
-    def extract_game_info_from_state(self, flat_state):
-        """
-        Extrait les informations nécessaires du flat_state pour initialiser une partie de poker
-        
-        Args:
-            flat_state: État du jeu vectorisé
-            
-        Returns:
-            Tuple[List, List, int]: Cartes du héro, cartes communes, nombre de joueurs actifs
-        """
-        # Structure de flat_state:
-        # - Indices 0-10: Cartes du joueur (2 cartes avec valeur normalisée et couleur one-hot)
-        # - Indices 11-35: Cartes communes (5 cartes avec valeur normalisée et couleur one-hot)
-        # - Indices 65-70: État des joueurs (1 si actif, -1 sinon)
-        
-        # Extraction des cartes du héro
-        hero_cards = []
-        suit_map = {0: "♠", 1: "♥", 2: "♦", 3: "♣"}
-        
-        # Traitement des deux cartes du héro (indices 0-10)
-        for i in range(2):
-            base_idx = i * 5
-            value_normalized = flat_state[base_idx]
-            if value_normalized > -0.9:  # Si la carte existe (-1 indique absence de carte)
-                value = int(value_normalized * 14) + 2  # Dénormaliser pour obtenir la valeur
-                suit_idx = np.argmax(flat_state[base_idx+1:base_idx+5])
-                suit = suit_map[suit_idx]
-                hero_cards.append((value, suit))
-        
-        # Extraction des cartes communes (indices 11-35)
-        community_cards = []
-        for i in range(5):
-            base_idx = 11 + i * 5
-            value_normalized = flat_state[base_idx]
-            if value_normalized > -0.9:  # Si la carte existe
-                value = int(value_normalized * 14) + 2
-                suit_idx = np.argmax(flat_state[base_idx+1:base_idx+5])
-                suit = suit_map[suit_idx]
-                community_cards.append((value, suit))
-        
-        # Comptage des joueurs actifs (indices 65-70)
-        active_players = sum(1 for val in flat_state[65:71] if val > 0)
-        
-        return hero_cards, community_cards, active_players
-
     
     def get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
