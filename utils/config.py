@@ -8,7 +8,7 @@ GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9992
 START_EPS = 0.9
-STATE_SIZE = 127
+STATE_SIZE = 134
 
 # Paramètres de visualisation
 DEBUG = False

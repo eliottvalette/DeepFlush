@@ -1,6 +1,9 @@
-# poker_game.py
+# poker_game_opitmized.py
 """
 Texas Hold'em, No Limit, 6 max.
+
+Cette classe est optimisée pour intiliser une partie de poker en cours.
+Dans le but d'effectuer des simulations de jeu pour l'algorithme MCCFR.
 """
 import pygame
 import random as rd
@@ -14,57 +17,44 @@ class PokerGameOptimized:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, flat_state=None):
+    def __init__(self, flat_state, hero_cards, community_cards, rd_opponents_cards, rd_missing_community_cards):
         """
-        Initialise la partie de poker, soit avec les agents (comportement normal),
-        soit avec un état plat (flat_state) pour la simulation MCCFR.
-        
-        Args:
-            flat_state (optional): État plat du jeu pour initialiser une partie en cours
+        Initialise la partie de poker avec un état plat pour la simulation MCCFR.
         """
         self.num_players = 6
-                
         self.small_blind = 0.5
         self.big_blind = 1
-        self.starting_stack = 100 # Stack de départ en BB
-        self.main_pot = 0
+        self.starting_stack = 100
         
-        # Variable pour stocker l'état simple lors des simulations MCCFR
-        self.simple_state = None
+        # Main pot (indice 119)
+        self.main_pot = flat_state[119] * self.starting_stack
         
+        self.community_cards = community_cards
+        self.side_pots = self._create_side_pots()
         
-        # Pour la simulation MCCFR, nous n'avons pas besoin de créer un deck
-        self.deck = []
-        self.community_cards = []
-        self.side_pots = []
-        
-        # Extraire la phase de jeu (indices 47-51)
+        # Phase de jeu (indices 49-54)
         phase_indices = {0: GamePhase.PREFLOP, 1: GamePhase.FLOP, 2: GamePhase.TURN, 
                         3: GamePhase.RIVER, 4: GamePhase.SHOWDOWN}
-        phase_idx = np.argmax(flat_state[47:52]) if any(flat_state[47:52] > 0) else 0
+        phase_idx = np.argmax(flat_state[49:54]) if any(flat_state[49:54] > 0) else 0
         self.current_phase = phase_indices[phase_idx]
         
-        # Extraire le pot (indice 52)
-        self.main_pot = flat_state[52] * self.starting_stack
+        # Position relative (indices 73-79)
+        relative_position = np.argmax(flat_state[73:79]) if any(flat_state[73:79] > 0) else 0
         
-        # Extraire la position du bouton (one-hot encoding indices 71-76)
-        # La position du bouton est celle du joueur actif moins la position relative
-        relative_position = np.argmax(flat_state[71:77]) if any(flat_state[71:77] > 0) else 0
-        
-        # Déterminer le joueur actuel (indice où se trouve le 1 dans la partie "état des joueurs")
-        active_player_indices = [i for i, val in enumerate(flat_state[65:71]) if val > 0]
+        # Joueur actuel (indices 67-73)
+        active_player_indices = [i for i, val in enumerate(flat_state[67:73]) if val > 0]
         current_player_idx = 0
         if active_player_indices:
-            current_player_idx = active_player_indices[0]  # Prendre le premier joueur actif
+            current_player_idx = active_player_indices[0]
         
-        # Calculer la position du bouton
+        # Position du bouton
         self.button_seat_position = (current_player_idx - relative_position) % 6
         self.current_player_seat = current_player_idx
         
-        # Extraire la mise maximale actuelle
-        self.current_maximum_bet = flat_state[52] * self.starting_stack  # Mise maximale
+        # Mise maximale (indice 54)
+        self.current_maximum_bet = flat_state[54] * self.starting_stack
         
-        # Initialiser les joueurs et leurs stacks
+        # Initialiser les joueurs avec leurs stacks (indices 55-61)
         self.players = self._initialize_simulated_players(flat_state)
         
         # Historique des actions pour pygame
@@ -74,11 +64,11 @@ class PokerGameOptimized:
         self.last_raiser = None
         self.action_buttons = self._create_action_buttons()
         
-        # Initialiser les stacks (pour le calcul des gains)
-        self.initial_stacks = {player.name: player.stack for player in self.players}
-        self.net_stack_changes = {player.name: 0 for player in self.players}
+        # Initialiser les stacks APRÈS avoir créé les joueurs
+        # On utilise les stacks déjà initialisés dans _initialize_simulated_players
+        self.initial_stacks = {player.name: flat_state[55 + player.seat_position] * self.starting_stack for player in self.players}
+        self.net_stack_changes = {player.name: player.stack - self.initial_stacks[player.name] for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
-        
 
     def _next_player(self):
         """
@@ -1415,31 +1405,23 @@ class PokerGameOptimized:
     def _initialize_simulated_players(self, flat_state):
         """
         Initialise 6 joueurs simulés pour une partie MCCFR.
-        
-        Args:
-            flat_state: État du jeu vectorisé
-            
-        Returns:
-            List[Player]: Liste de 6 joueurs
         """
-        from poker_game import Player
-        
         players = []
         
-        # Extraction des stacks (indices 53-58)
-        stacks = [flat_state[53+i] * self.starting_stack for i in range(6)]
+        # Extraction des stacks (indices 55-61)
+        stacks = [flat_state[55+i] * self.starting_stack for i in range(6)]
         
-        # Extraction de l'état actif des joueurs (indices 65-70)
-        active_states = [flat_state[65+i] > 0 for i in range(6)]
+        # Extraction de l'état actif des joueurs (indices 67-73)
+        active_states = [flat_state[67+i] > 0 for i in range(6)]
         
-        # Extraction des mises actuelles (indices 59-64)
-        current_bets = [flat_state[59+i] * self.starting_stack for i in range(6)]
+        # Extraction des mises actuelles (indices 61-67)
+        current_bets = [flat_state[61+i] * self.starting_stack for i in range(6)]
         
         # Créer les joueurs
         for i in range(6):
             player = Player(
                 name=f"Player_{i}",
-                agent=None,  # Pas d'agent pour la simulation
+                agent=None,
                 stack=stacks[i],
                 seat_position=i
             )
@@ -1447,10 +1429,9 @@ class PokerGameOptimized:
             player.has_folded = not active_states[i]
             player.current_player_bet = current_bets[i]
             player.total_bet = current_bets[i]
-            player.cards = []  # Sera rempli plus tard
+            player.cards = []
             players.append(player)
             
-            # Attribution des rôles
             player.role_position = (player.seat_position - self.button_seat_position - 1) % 6
         
         return players

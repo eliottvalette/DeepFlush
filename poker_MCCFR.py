@@ -30,10 +30,7 @@ class MCCFRTrainer:
         
         # Extraction des informations nécessaires à partir du flat_state pour initialiser le jeu
         hero_cards, community_cards, active_players = self.extract_game_info_from_state(flat_state)
-        
-        # Créer une partie optimisée à partir des informations extraites
-        replicated_game = self.create_optimized_game(flat_state, hero_cards, community_cards, active_players)
-        
+         
         # ---- Action abstraction ----
         real_valid_actions = valid_actions # On sauvegarde les actions valides réelles
         raise_actions = []
@@ -99,7 +96,7 @@ class MCCFRTrainer:
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards({'hero_cards': hero_cards, 'community_cards': community_cards, 'num_active_players': active_players})
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
-                game_copy = self.create_optimized_game(flat_state, hero_cards, community_cards, active_players)
+                game_copy = PokerGameOptimized(flat_state, hero_cards, community_cards, rd_opponents_cards, rd_missing_community_cards)
                 payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
@@ -172,43 +169,7 @@ class MCCFRTrainer:
         active_players = sum(1 for val in flat_state[65:71] if val > 0)
         
         return hero_cards, community_cards, active_players
-        
-    def create_optimized_game(self, flat_state, hero_cards, community_cards, active_players):
-        """
-        Crée une partie de poker optimisée à partir des informations extraites
-        
-        Args:
-            flat_state: État du jeu vectorisé
-            hero_cards: Cartes du héro
-            community_cards: Cartes communes
-            active_players: Nombre de joueurs actifs
-            
-        Returns:
-            PokerGameOptimized: Instance de jeu optimisée
-        """
-        # Initialisation du jeu optimisé
-        # Nous passons flat_state comme argument pour permettre à la classe de récupérer
-        # d'autres informations si nécessaire
-        game = PokerGameOptimized(flat_state)
-        
-        # Configuration des informations de base du jeu
-        game.simple_state = {
-            'hero_cards': hero_cards,
-            'community_cards': community_cards,
-            'num_active_players': active_players
-        }
-        
-        # Initialisation des cartes du héros
-        if hero_cards:
-            # Récupération du joueur actuel (héros)
-            hero = game.players[game.current_player_seat]
-            hero.cards = [Card(value, suit) for value, suit in hero_cards]
-        
-        # Ajout des cartes communes
-        if community_cards:
-            game.community_cards = [Card(value, suit) for value, suit in community_cards]
-        
-        return game
+
     
     def get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
