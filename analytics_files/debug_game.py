@@ -4,9 +4,9 @@ import os
 import numpy as np
 
 # Charger les données
-with open('./viz_json/episodes_states.json', 'r') as f:
+with open('./viz_json/episodes_states_reformatted.json', 'r') as f:
     episode_states = json.load(f)
-with open('./viz_json/metrics_history.json', 'r') as f:
+with open('./viz_json/metrics_history_reformatted.json', 'r') as f:
     metrics_history = json.load(f)
 
 rewards = {f"Player_{i}": [] for i in range(6)}

@@ -33,9 +33,6 @@ class PokerGameOptimized:
         self.community_cards = visible_community_cards.copy() if visible_community_cards else []
         self.rd_missing_community_cards = rd_missing_community_cards.copy() if rd_missing_community_cards else []
         self.rd_opponents_cards = rd_opponents_cards.copy() if rd_opponents_cards else []
-        print(f"visible_community_cards : {visible_community_cards}")
-        print(f"rd_missing_community_cards : {self.rd_missing_community_cards}")
-        print(f"self.community_cards : {self.community_cards}")
         self.hero_cards = hero_cards
         self.side_pots = self._create_side_pots()
         
@@ -43,7 +40,6 @@ class PokerGameOptimized:
         phase_indices = {0: GamePhase.PREFLOP, 1: GamePhase.FLOP, 2: GamePhase.TURN, 
                         3: GamePhase.RIVER, 4: GamePhase.SHOWDOWN}
         phase_idx = np.argmax(state[47:52]) if any(state[47:52] > 0) else 0
-        print(f"state[47:52] : {state[47:52]}")
         self.current_phase = phase_indices[phase_idx]
             
         # Position du bouton
