@@ -16,7 +16,7 @@ class MCCFRTrainer:
     def __init__(self, num_simulations: int):
         self.num_simulations = num_simulations
 
-    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], state: List[float], hero_seat: int, hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
+    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], state: List[float], hero_seat: int, button_seat: int, hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]], num_active_players: int) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
@@ -87,10 +87,10 @@ class MCCFRTrainer:
             if DEBUG:
                 print(f"Simulation [{simulation_index + 1}/{self.num_simulations}] pour {len(valid_actions)} actions")
                 print('valid_actions :', valid_actions)
-            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards({'hero_cards': hero_cards, 'community_cards': community_cards, 'num_active_players': active_players})
+            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards({'hero_cards': hero_cards, 'community_cards': visible_community_cards, 'num_active_players': num_active_players})
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
-                game_copy = PokerGameOptimized(state, hero_cards, visible_community_cards, rd_opponents_cards, rd_missing_community_cards)
+                game_copy = PokerGameOptimized(state, hero_cards, hero_seat, button_seat, visible_community_cards, rd_opponents_cards, rd_missing_community_cards)
                 payoff = game_copy.play_trajectory(trajectory_action, rd_opponents_cards, rd_missing_community_cards, valid_actions)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 

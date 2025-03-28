@@ -17,7 +17,7 @@ class PokerGameOptimized:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, state : List[float], hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]], rd_opponents_cards, rd_missing_community_cards):
+    def __init__(self, state : List[float], hero_cards: List[Tuple[int, str]], hero_seat: int, button_seat_position: int, visible_community_cards: List[Tuple[int, str]], rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]]):
         """
         Initialise la partie de poker avec un état plat pour la simulation MCCFR.
         """
@@ -26,35 +26,30 @@ class PokerGameOptimized:
         self.big_blind = 1
         self.starting_stack = 100
         
-        # Main pot (indice 119)
-        self.main_pot = state[119] * self.starting_stack
+        # Main pot (indice 127)
+        self.main_pot = state[127] * self.starting_stack
         
-        self.community_cards = community_cards
+        self.community_cards = visible_community_cards
+        self.rd_missing_community_cards = rd_missing_community_cards
+        self.rd_opponents_cards = rd_opponents_cards
+        self.hero_cards = hero_cards
         self.side_pots = self._create_side_pots()
         
         # Phase de jeu (indices 49-54)
         phase_indices = {0: GamePhase.PREFLOP, 1: GamePhase.FLOP, 2: GamePhase.TURN, 
                         3: GamePhase.RIVER, 4: GamePhase.SHOWDOWN}
-        phase_idx = np.argmax(state[49:54]) if any(state[49:54] > 0) else 0
+        phase_idx = np.argmax(state[47:52]) if any(state[47:52] > 0) else 0
+        print(f"state[47:52] : {state[47:52]}")
         self.current_phase = phase_indices[phase_idx]
-        
-        # Position relative (indices 73-79)
-        relative_position = np.argmax(state[73:79]) if any(state[73:79] > 0) else 0
-        
-        # Joueur actuel (indices 67-73)
-        active_player_indices = [i for i, val in enumerate(state[67:73]) if val > 0]
-        current_player_idx = 0
-        if active_player_indices:
-            current_player_idx = active_player_indices[0]
-        
+            
         # Position du bouton
-        self.button_seat_position = (current_player_idx - relative_position) % 6
-        self.current_player_seat = current_player_idx
+        self.button_seat_position = button_seat_position
+        self.current_player_seat = hero_seat
         
-        # Mise maximale (indice 54)
-        self.current_maximum_bet = state[54] * self.starting_stack
+        # Mise maximale (indice 52)
+        self.current_maximum_bet = state[52] * self.starting_stack
         
-        # Initialiser les joueurs avec leurs stacks (indices 55-61)
+        # Initialiser les joueurs avec leurs stacks (indices 53-59)
         self.players = self._initialize_simulated_players(state)
         
         # Historique des actions pour pygame
@@ -66,7 +61,7 @@ class PokerGameOptimized:
         
         # Initialiser les stacks APRÈS avoir créé les joueurs
         # On utilise les stacks déjà initialisés dans _initialize_simulated_players
-        self.initial_stacks = {player.name: state[55 + player.seat_position] * self.starting_stack for player in self.players}
+        self.initial_stacks = {player.name: state[53 + player.seat_position] * self.starting_stack for player in self.players}
         self.net_stack_changes = {player.name: player.stack - self.initial_stacks[player.name] for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
 
@@ -217,9 +212,24 @@ class PokerGameOptimized:
         
         if self.current_phase == GamePhase.FLOP:
             for _ in range(3):
-                self.community_cards.append(self.deck.pop())
+                self.community_cards.append(self.rd_missing_community_cards.pop())
         elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
-            self.community_cards.append(self.deck.pop())
+            self.community_cards.append(self.rd_missing_community_cards.pop())
+
+    def deal_cards(self):
+        """
+        Distribue deux cartes à chaque joueur actif.
+        Réinitialise et mélange le jeu avant la distribution.
+        """
+        # Deal two cards to each active player
+        for _ in range(2):
+            for player in self.players:
+                if not player.is_active:
+                    continue
+                if player.seat_position == self.hero_seat:
+                    player.cards = self.hero_cards
+                else:
+                    player.cards = self.rd_opponents_cards.pop()
 
     def advance_phase(self):
         """
@@ -400,7 +410,7 @@ class PokerGameOptimized:
             )
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
-            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
+            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}, phase = {self.current_phase}")
         
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if action not in valid_actions:
@@ -821,309 +831,6 @@ class PokerGameOptimized:
         
         return side_pots
 
-    # --------------------------------
-    # Methodes Nécessaires pour le RL
-    # --------------------------------
-    def get_state(self):
-        """
-        Obtient l'état actuel du jeu sous forme d'un vecteur d'état pour l'apprentissage par renforcement.
-        
-        Le vecteur d'état est composé des sous-vecteurs suivants :
-
-        1. Cartes du joueur (2 cartes × (4 + 1) + 1 = 11 dimensions) :
-            - Pour chaque carte :
-                - Valeur normalisée (1 dimension)
-                - Couleur one-hot (4 dimensions)
-        
-        2. Cartes communes (5 cartes × (4 + 1) + 1 = 26 dimensions) :
-            - Pour chaque carte :
-                - Valeur normalisée (1 dimension)
-                - Couleur one-hot (4 dimensions)
-            - -1 pour les cartes non distribuées
-        
-        3. Information sur la main (12 dimensions) :
-            - Rang de la main one-hot (10 dimensions)
-            - Valeur du kicker normalisée (1 dimension)
-            - Rang normalisé (1 dimension)
-        
-        4. Phase de jeu (5 dimensions) :
-            - One-hot encoding : [preflop, flop, turn, river, showdown]
-        
-        5. Information sur les mises (1 dimension) :
-            - Mise maximale actuelle normalisée
-        
-        6. Stacks des joueurs (6 dimensions) :
-            - Stack normalisé pour chaque joueur
-        
-        7. Mises actuelles (6 dimensions) :
-            - Mise actuelle normalisée pour chaque joueur
-        
-        8. État des joueurs (6 dimensions) :
-            - 1 si actif et non foldé, -1 sinon
-        
-        9. Positions relatives (6 dimensions) :
-            - One-hot encoding de la position relative au bouton
-        
-        10. Actions disponibles (5 dimensions) :
-            - Disponibilité de chaque action [fold, check, call, raise, all-in]
-        
-        11. Historique des actions (30 dimensions) :
-            - Pour chaque joueur (6) :
-                - One-hot encoding de la dernière action (5 dimensions)
-        
-        12. Informations stratégiques (2 dimensions) :
-            - Probabilité de victoire préflop
-            - Cotes du pot
-
-        13. Potentiel de quinte et de couleur (2 dimensions) :
-            - Potentiel de quinte
-            - Potentiel de couleur
-        
-        Returns:
-            numpy.ndarray: Vecteur d'état de dimension 106, normalisé entre -1 et 1
-        """
-        current_player = self.players[self.current_player_seat]
-        state = []
-
-        # Correspondance des couleurs avec des nombres ♠, ♥, ♦, ♣
-        suit_map = {
-            "♠" : 0,
-            "♥" : 1,
-            "♦" : 2,
-            "♣" : 3
-        }
-
-        # 1. Informations sur les cartes (encodage one-hot)
-        # Cartes du joueur (2 cartes )
-        for card in current_player.cards:
-            state.append((card.value - 2) / 14)  # Extension pour la valeur
-            suit_range = [-1] * 4
-            suit_range[suit_map[card.suit]] = 1
-            state.extend(suit_range)  # Extension pour la couleur
-        
-        # Ajout de remplissage pour les cartes manquantes du joueur
-        remaining_player_cards = 2 - len(current_player.cards)
-        for _ in range(remaining_player_cards):
-            state.append(-1) # hauteur manquante
-            state.extend([-1] * 4) # couleur manquante
-        
-        # Cartes communes
-        for i, card in enumerate(self.community_cards):
-            state.append((card.value - 2) / 14)  # Extension pour la valeur
-            suit_range = [-1] * 4
-            suit_range[suit_map[card.suit]] = 1
-            state.extend(suit_range)  # Extension
-        
-        # Ajout de remplissage pour les cartes communes manquantes
-        remaining_community_cards = 5 - len(self.community_cards)
-        for _ in range(remaining_community_cards):
-            state.append(-1)         # hauteur manquante
-            state.extend([-1] * 4)   # couleur manquante
-        
-        # 2. Rang de la main actuelle (si assez de cartes sont visibles)
-        kicker_idx_map = {
-            HandRank.HIGH_CARD: 0,
-            HandRank.PAIR: 1,
-            HandRank.TWO_PAIR: 2,
-            HandRank.THREE_OF_A_KIND: 1,
-            HandRank.STRAIGHT: 0,
-            HandRank.FLUSH: 0,
-            HandRank.FULL_HOUSE: 0,
-            HandRank.FOUR_OF_A_KIND: 1,
-            HandRank.STRAIGHT_FLUSH: 0,
-            HandRank.ROYAL_FLUSH: 0
-        }
-        if len(current_player.cards) + len(self.community_cards) >= 5:
-            hand_rank, kickers = self.evaluate_final_hand(current_player)
-            hand_rank_range = [-1] * len(HandRank)
-            hand_rank_range[hand_rank.value] = 1
-            kicker_idx = kicker_idx_map[hand_rank]
-            state.extend(hand_rank_range)                  # Tokénisation du rang
-            state.append((kickers[kicker_idx]- 2) / 13)    # Normalisation de la valeur du kicker (taille = 1)    
-            state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
-        else:
-            hand_rank, kickers = self.evaluate_current_hand(current_player)
-            hand_rank_range = [-1] * len(HandRank)
-            hand_rank_range[hand_rank.value] = 1
-            state.extend(hand_rank_range)                  # Tokénisation du rang
-            state.append((kickers[0]- 2) / 13)             # Normalisation de la valeur du kicker
-            state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
-
-        # 3. Informations sur le tour
-        phase_values = {
-            GamePhase.PREFLOP: 0,
-            GamePhase.FLOP: 1,
-            GamePhase.TURN: 2,
-            GamePhase.RIVER: 3,
-            GamePhase.SHOWDOWN: 4
-        }
-
-        phase_range = [-1] * 5
-        phase_range[phase_values[self.current_phase]] = 1
-        state.extend(phase_range)
-
-        # 4. Mise actuelle normalisée par le stack initial
-        state.append(self.current_maximum_bet / self.starting_stack)  # Normalisation de la mise (taille = 1)
-
-        # 5. Argent restant (tailles des stacks normalisées par le stack initial)
-        for player in self.players:
-            state.append(player.stack / self.starting_stack) # (taille = 6)
-
-        # 6. Informations sur les mises (normalisées par le stack initial)
-        for player in self.players:
-            state.append(player.total_bet / self.starting_stack) # (taille = 6)
-
-        # 7. Informations sur l'activité (fold ou inactif)
-        for player in self.players:
-            state.append(1 if ((not player.has_folded) and player.is_active) else -1) # (taille = 6)
-
-        # 8. Informations sur la position (encodage one-hot des positions relatives)
-        relative_positions = [-1] * self.num_players
-        relative_pos = (self.current_player_seat - self.button_seat_position) % self.num_players
-        relative_positions[relative_pos] = 1
-        state.extend(relative_positions) # (taille = 6)
-
-        # 9. Actions disponibles (binaire extrême : disponible/indisponible)
-        action_availability = []
-        for action in PlayerAction:
-            if action in self.action_buttons and self.action_buttons[action].enabled:
-                action_availability.append(1)
-            else:
-                action_availability.append(-1)
-        state.extend(action_availability) # (taille = 6)
-
-        # 10. Update action encoding for previous actions
-        action_encoding = {
-            None:     [-1, -1, -1, -1, -1],  # Default encoding for no action
-            "fold":   [1, 0, 0, 0, 0],
-            "check":  [0, 1, 0, 0, 0],
-            "call":   [0, 0, 1, 0, 0],
-            "raise":  [0, 0, 0, 1, 0],
-            "all-in": [0, 0, 0, 0, 1]
-        }
-
-        # 11. Obtenir la dernière action de chaque joueur, ordonnée relativement au joueur actuel
-        last_actions = []
-        # Commencer par le joueur actuel et parcourir les positions dans l'ordre relatif
-        for i in range(self.num_players):
-            relative_seat = (self.current_player_seat + i) % self.num_players
-            player = self.players[relative_seat]
-            player_actions = self.pygame_action_history[player.name]
-            
-            if player_actions:
-                # Extraction du type d'action de la dernière action
-                last_action = player_actions[-1].split()[0]  # Obtenir juste le type d'action
-                last_actions.append(action_encoding.get(last_action, action_encoding[None]))
-            else:
-                last_actions.append(action_encoding[None])
-        
-        # 12. Ajout des actions aplaties à l'état
-        state.extend([val for sublist in last_actions for val in sublist])
-
-        # 13 Probabilité de victoire de la main au préflop
-        hand_win_prob = self._evaluate_preflop_strength(current_player.cards)
-        state.append(hand_win_prob)
-
-        # 14. Cotes du pot
-        call_amount = self.current_maximum_bet - current_player.current_player_bet
-        pot_odds = call_amount / (self.main_pot + call_amount) if (self.main_pot + call_amount) > 0 else 0
-        state.append(pot_odds) # (taille = 1)
-
-        # 15. Potentiel de quinte et de couleur
-        straight_draw, flush_draw = self.compute_hand_draw_potential(current_player)
-        state.append(straight_draw)
-        state.append(flush_draw)
-
-        # Avant de retourner, conversion en tableau numpy.
-        state = np.array(state, dtype=np.float32)
-        return state
-    
-    def get_final_state(self, previous_state, final_stacks):
-        """
-        Reconstruit l'Etat final de la main en fonction de l'état précédent et du stack final.
-        Cette fonction est utilisée pour reconstruire l'état final de la main lorsque le showdown est déclenché car une fois
-        déclenché, l'état est réinitialisé le get_state appelle l'état de la main suivante.
-
-        1. Cartes du joueur (inchangées)
-        
-        2. Cartes communes (inchangées)
-        
-        3. Information sur la main (inchangées)
-        
-        4. Phase de jeu (changer en one-hot showdown)
-        
-        5. Information sur les mises (passer la mise max actuelle à 0)
-        
-        6. Stacks des joueurs (recupérer les stacks finaux dans le dict final_stack)
-        
-        7. Mises actuelles (changer en 0 pour tous)
-        
-        8. État des joueurs (changer en 0 pour tous)
-        
-        9. Positions relatives (inchangée)
-        
-        10. Actions disponibles (toutes les actions sont indisponibles)
-        
-        11. Historique des actions (changer en -1 pour tous)
-        
-        12. Informations stratégiques (changer en 0 pour tous)
-        
-        13. Potentiel de quinte (changer en 0 pour tous)
-
-        14. Potentiel de couleur (changer en 0 pour tous)
-
-        Args:
-            previous_state (numpy.ndarray): Etat précédent
-            final_stack (float): Stack final
-        
-        Returns:
-            numpy.ndarray: Vecteur d'état final de dimension 106, normalisé entre -1 et 1
-        """
-
-        # Créer une copie modifiable du previous_state
-        final_state = previous_state.copy()
-        
-        # 1-3. Garder les cartes du joueur, cartes communes et info de la main inchangées
-        # (indices 0-46 restent les mêmes)
-        
-        # 4. Mettre à jour la phase de jeu en SHOWDOWN
-        final_state[47:52] = np.array([-1, -1, -1, -1, 1])  # One-hot encoding pour SHOWDOWN
-        
-        # 5. Mettre la mise maximale actuelle à 0
-        final_state[52] = 0
-        
-        # 6. Mettre à jour les stacks des joueurs avec les stacks finaux
-        for i, player in enumerate(self.players):
-            final_state[53 + i] = final_stacks[player.name] / self.starting_stack
-        
-        # 7. Mettre les mises actuelles à 0
-        final_state[59:65] = 0
-        
-        # 8. Mettre l'état des joueurs à inactif (-1)
-        final_state[65:71] = -1
-        
-        # 9. Garder les positions relatives inchangées
-        # (indices 71-76 restent les mêmes)
-        
-        # 10. Désactiver toutes les actions disponibles
-        final_state[77:82] = -1
-        
-        # 11. Réinitialiser l'historique des actions
-        for i in range(6):  # Pour chaque joueur
-            final_state[82+i*5:82+(i+1)*5] = -1
-        
-        # 12. Réinitialiser les informations stratégiques
-        final_state[112] = 0  # Probabilité de victoire
-        final_state[113] = 0  # Cotes du pot
-        
-        # 13-15. Réinitialiser les potentiels de tirage
-        final_state[114:] = 0
-
-        # Avant de retourner, conversion en tableau numpy
-        final_state = np.array(final_state, dtype=np.float32)
-        
-        return final_state
-
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
         """
         Exécute une action et calcule la récompense associée.
@@ -1426,14 +1133,14 @@ class PokerGameOptimized:
         """
         players = []
         
-        # Extraction des stacks (indices 55-61)
-        stacks = [state[55+i] * self.starting_stack for i in range(6)]
+        # Extraction des stacks (indices 53-59)
+        stacks = [state[53+i] * self.starting_stack for i in range(6)]
         
-        # Extraction de l'état actif des joueurs (indices 67-73)
-        active_states = [state[67+i] > 0 for i in range(6)]
+        # Extraction de l'état actif des joueurs (indices 65-71)
+        active_states = [state[65+i] > 0 for i in range(6)]
         
-        # Extraction des mises actuelles (indices 61-67)
-        current_bets = [state[61+i] * self.starting_stack for i in range(6)]
+        # Extraction des mises actuelles (indices 59-65)
+        current_bets = [state[59+i] * self.starting_stack for i in range(6)]
         
         # Créer les joueurs
         for i in range(6):

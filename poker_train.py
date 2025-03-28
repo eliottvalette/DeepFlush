@@ -88,12 +88,16 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state()
+        if DEBUG:
+            print(f"state : {state}")
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
-            actions = valid_actions, 
+            valid_actions = valid_actions, 
             state = state, 
             hero_seat = current_player.seat_position,
+            button_seat = env.button_seat_position,
             hero_cards = current_player.cards,
-            visible_community_cards = env.community_cards
+            visible_community_cards = env.community_cards,
+            num_active_players = len(players_that_can_play)
         )
 
         # Exécuter l'action dans l'environnement

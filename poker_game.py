@@ -1426,12 +1426,12 @@ class PokerGame:
         
         Le vecteur d'état est composé des sous-vecteurs suivants :
 
-        1. Cartes du joueur (2 cartes × (4 + 1) + 1 = 11 dimensions) :
+        1. Cartes du joueur (2 cartes × (4 + 1) = 10 dimensions) :
             - Pour chaque carte :
                 - Valeur normalisée (1 dimension)
                 - Couleur one-hot (4 dimensions)
         
-        2. Cartes communes (5 cartes × (4 + 1) + 1 = 26 dimensions) :
+        2. Cartes communes (5 cartes × (4 + 1) = 25 dimensions) :
             - Pour chaque carte :
                 - Valeur normalisée (1 dimension)
                 - Couleur one-hot (4 dimensions)
@@ -1474,9 +1474,15 @@ class PokerGame:
         13. Potentiel de quinte et de couleur (2 dimensions) :
             - Potentiel de quinte
             - Potentiel de couleur
+
+        14. Main pot (1 dimension) :
+            - Main pot
+        
+        15. Contribution des joueurs (6 dimensions) :
+            - Contribution des joueurs
         
         Returns:
-            numpy.ndarray: Vecteur d'état de dimension 126, normalisé entre -1 et 1
+            numpy.ndarray: Vecteur d'état de dimension 134, normalisé entre -1 et 1
         """
         current_player = self.players[self.current_player_seat]
         state = []
@@ -1489,7 +1495,7 @@ class PokerGame:
             "♣" : 3
         }
 
-        # 1. Informations sur les cartes (encodage one-hot) [0:11]
+        # 1. Informations sur les cartes (encodage one-hot) [0:10]
         # Cartes du joueur (2 cartes )
         for card in current_player.cards:
             state.append((card.value - 2) / 14)  # Extension pour la valeur
@@ -1503,7 +1509,10 @@ class PokerGame:
             state.append(-1) # hauteur manquante
             state.extend([-1] * 4) # couleur manquante
         
-        # 2. Cartes communes [11:37]
+        if DEBUG:
+            print("step 1", len(state))
+        
+        # 2. Cartes communes [10:35]
         for i, card in enumerate(self.community_cards):
             state.append((card.value - 2) / 14)  # Extension pour la valeur
             suit_range = [-1] * 4
@@ -1516,7 +1525,10 @@ class PokerGame:
             state.append(-1)         # hauteur manquante
             state.extend([-1] * 4)   # couleur manquante
         
-        # 3. Rang de la main actuelle (si assez de cartes sont visibles) [37:49]
+        if DEBUG:
+            print("step 2", len(state))
+
+        # 3. Rang de la main actuelle (si assez de cartes sont visibles) [35:47]
         kicker_idx_map = {
             HandRank.HIGH_CARD: 0,
             HandRank.PAIR: 1,
@@ -1545,7 +1557,10 @@ class PokerGame:
             state.append((kickers[0]- 2) / 13)             # Normalisation de la valeur du kicker (taille = 1)
             state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
 
-        # 4. Informations sur le tour [49:54]
+        if DEBUG:
+            print("step 3", len(state))
+
+        # 4. Informations sur le tour [47:52]
         phase_values = {
             GamePhase.PREFLOP: 0,
             GamePhase.FLOP: 1,
@@ -1558,28 +1573,46 @@ class PokerGame:
         phase_range[phase_values[self.current_phase]] = 1
         state.extend(phase_range)
 
-        # 5. Mise actuelle normalisée par le stack initial [54:55]
+        if DEBUG:
+            print("step 4", len(state))
+
+        # 5. Mise actuelle normalisée par le stack initial [52:53]
         state.append(self.current_maximum_bet / self.starting_stack)  # Normalisation de la mise (taille = 1)
 
-        # 6. Argent restant (tailles des stacks normalisées par le stack initial) [55:61]
+        if DEBUG:
+            print("step 5", len(state))
+
+        # 6. Argent restant (tailles des stacks normalisées par le stack initial) [53:59]
         for player in self.players:
             state.append(player.stack / self.starting_stack) # (taille = 6)
 
-        # 7. Informations sur les mises (normalisées par le stack initial) [61:67]
+        if DEBUG:
+            print("step 6", len(state))
+
+        # 7. Informations sur les mises (normalisées par le stack initial) [59:65]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack) # (taille = 6)
 
-        # 8. Informations sur l'activité (fold ou inactif) [67:73]
+        if DEBUG:
+            print("step 7", len(state))
+
+        # 8. Informations sur l'activité (fold ou inactif) [65:71]
         for player in self.players:
             state.append(1 if ((not player.has_folded) and player.is_active) else -1) # (taille = 6)
 
-        # 9. Informations sur la position (encodage one-hot des positions relatives) [73:79]
+        if DEBUG:
+            print("step 8", len(state))
+
+        # 9. Informations sur la position (encodage one-hot des positions relatives) [71:77]
         relative_positions = [-1] * self.num_players
         relative_pos = (self.current_player_seat - self.button_seat_position) % self.num_players
         relative_positions[relative_pos] = 1
         state.extend(relative_positions) # (taille = 6)
 
-        # 10. Actions disponibles (binaire extrême : disponible/indisponible) [79:85]
+        if DEBUG:
+            print("step 9", len(state))
+
+        # 10. Actions disponibles (binaire extrême : disponible/indisponible) [77:93]
         action_availability = []
         for action in PlayerAction:
             if action in self.action_buttons and self.action_buttons[action].enabled:
@@ -1588,7 +1621,10 @@ class PokerGame:
                 action_availability.append(-1)
         state.extend(action_availability) # (taille = 6)
 
-        # 11. Update action encoding for previous actions [85:115]    
+        if DEBUG:
+            print("step 10", len(state))
+
+        # 11. Update action encoding for previous actions [93:123]    
         action_encoding = {
             None:     [-1, -1, -1, -1, -1],  # Default encoding for no action
             "fold":   [1, 0, 0, 0, 0],
@@ -1615,29 +1651,43 @@ class PokerGame:
         
         state.extend([val for sublist in last_actions for val in sublist])
 
-        # 12 Probabilité de victoire de la main au préflop [115:116]
+        if DEBUG:
+            print("step 11", len(state))
+
+        # 12 Probabilité de victoire de la main au préflop [123:125]
         hand_win_prob = self._evaluate_preflop_strength(current_player.cards)
         call_amount = self.current_maximum_bet - current_player.current_player_bet
         pot_odds = call_amount / (self.main_pot + call_amount) if (self.main_pot + call_amount) > 0 else 0
         state.append(hand_win_prob) # (taille = 1)
         state.append(pot_odds) # (taille = 1)
 
-        # 13. Potentiel de quinte et de couleur [117:119]
+        if DEBUG:
+            print("step 12", len(state))
+
+        # 13. Potentiel de quinte et de couleur [125:127]
         straight_draw, flush_draw = self.compute_hand_draw_potential(current_player)
         state.append(straight_draw)
         state.append(flush_draw)
 
-        # 14. Main pot [119:120]
+        if DEBUG:
+            print("step 13", len(state))
+
+        # 14. Main pot [127:128]
         state.append(self.main_pot / self.starting_stack)
 
-        # 15. Contribution des joueurs [120:126]
+        if DEBUG:
+            print("step 14", len(state))
+
+        # 15. Contribution des joueurs [128:134]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack)
+
+        if DEBUG:
+            print("step 15", len(state))
 
         # Avant de retourner, conversion en tableau numpy.
         state = np.array(state, dtype=np.float32)
         return state
-    
     
     def get_final_state(self, previous_state, final_stacks):
         """
