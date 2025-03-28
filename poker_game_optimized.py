@@ -7,7 +7,6 @@ import random as rd
 from typing import List, Dict, Optional, Tuple
 from utils.config import DEBUG
 from collections import Counter
-import pygame.font
 import numpy as np
 from poker_game import Player, PlayerAction, GamePhase, Card, SidePot, HandRank, Button, SCREEN_HEIGHT
 
@@ -15,12 +14,13 @@ class PokerGameOptimized:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, agents):
+    def __init__(self, flat_state=None):
         """
-        Initialise la partie de poker avec les joueurs et les blindes.
+        Initialise la partie de poker, soit avec les agents (comportement normal),
+        soit avec un état plat (flat_state) pour la simulation MCCFR.
         
         Args:
-            num_players (int): Nombre de joueurs (défaut: 6)
+            flat_state (optional): État plat du jeu pour initialiser une partie en cours
         """
         self.num_players = 6
                 
@@ -28,285 +28,57 @@ class PokerGameOptimized:
         self.big_blind = 1
         self.starting_stack = 100 # Stack de départ en BB
         self.main_pot = 0
-        self.side_pots = self._create_side_pots() 
-
-        self.deck: List[Card] = self._create_deck()
-        self.community_cards: List[Card] = []
-
-        self.current_phase = GamePhase.PREFLOP
-        self.players = self._initialize_players(agents) # self.players est une liste d'objets Player
-
-        self.button_seat_position = rd.randint(0, 5) # 0-5
-        for player in self.players:
-            player.role_position = (player.seat_position - self.button_seat_position - 1) % 6
-
-        # Initialiser les variables d'état du jeu
-        self.current_player_seat = (self.button_seat_position + 1) % 6 # 0-5 initialisé à SB
-        self.current_maximum_bet = 0 # initialisé à 0 mais s'updatera automatiquement à BB après la mise de SB puis BB
         
-        self.number_raise_this_game_phase = 0 # Nombre de raises dans la phase courante (4 max, 4 inclus)
-        self.last_raiser = None  # Dernier joueur ayant raisé
-        self.action_buttons = self._create_action_buttons() # Dictionnaire des boutons d'action, a chaque bouton est associé la propriété enabled qui détermine si le bouton est actif ou non
+        # Variable pour stocker l'état simple lors des simulations MCCFR
+        self.simple_state = None
         
-    def reset(self):
-        """
-        Réinitialise complètement l'état du jeu pour une nouvelle partie.
         
-        Returns:
-            List[float]: État initial du jeu après réinitialisation
-        """
-        # Réinitialiser les variables d'état du jeu
-        self.main_pot = 0
-        self.side_pots = self._create_side_pots() 
-        self.deck = self._create_deck()
+        # Pour la simulation MCCFR, nous n'avons pas besoin de créer un deck
+        self.deck = []
         self.community_cards = []
-        self.current_phase = GamePhase.PREFLOP
-        self.last_raiser = None
-
-        # Réinitialiser les variables de jeu
-        self.button_seat_position = rd.randint(0, 5)  # 0-5 (c'est une toute nouvelle partie donc on réassigne la position du bouton aléatoirement)
-        for player in self.players:
-            player.role_position = (player.seat_position - self.button_seat_position - 1) % 6
+        self.side_pots = []
         
-        # Réinitialiser les états variables des joueurs
-        for player in self.players:
-            player.stack = self.starting_stack
-            player.current_player_bet = 0
-            player.total_bet = 0
-            player.cards = []
-            player.is_active = True
-            player.has_folded = False
-            player.is_all_in = False
-            player.range = None        
+        # Extraire la phase de jeu (indices 47-51)
+        phase_indices = {0: GamePhase.PREFLOP, 1: GamePhase.FLOP, 2: GamePhase.TURN, 
+                        3: GamePhase.RIVER, 4: GamePhase.SHOWDOWN}
+        phase_idx = np.argmax(flat_state[47:52]) if any(flat_state[47:52] > 0) else 0
+        self.current_phase = phase_indices[phase_idx]
         
-        # Initialiser les variables d'état du jeu
-        self.current_player_seat = (self.button_seat_position + 1) % 6  # 0-5
-        self.current_maximum_bet = 0  # initialisé à 0 mais s'updatera automatiquement à BB
+        # Extraire le pot (indice 52)
+        self.main_pot = flat_state[52] * self.starting_stack
+        
+        # Extraire la position du bouton (one-hot encoding indices 71-76)
+        # La position du bouton est celle du joueur actif moins la position relative
+        relative_position = np.argmax(flat_state[71:77]) if any(flat_state[71:77] > 0) else 0
+        
+        # Déterminer le joueur actuel (indice où se trouve le 1 dans la partie "état des joueurs")
+        active_player_indices = [i for i, val in enumerate(flat_state[65:71]) if val > 0]
+        current_player_idx = 0
+        if active_player_indices:
+            current_player_idx = active_player_indices[0]  # Prendre le premier joueur actif
+        
+        # Calculer la position du bouton
+        self.button_seat_position = (current_player_idx - relative_position) % 6
+        self.current_player_seat = current_player_idx
+        
+        # Extraire la mise maximale actuelle
+        self.current_maximum_bet = flat_state[52] * self.starting_stack  # Mise maximale
+        
+        # Initialiser les joueurs et leurs stacks
+        self.players = self._initialize_simulated_players(flat_state)
+        
+        # Historique des actions pour pygame
+        self.pygame_action_history = {player.name: [] for player in self.players}
+        
         self.number_raise_this_game_phase = 0
-
-        self.start_new_hand()
-        self._update_button_states()
-        
-        return self.get_state()
-
-    def start_new_hand(self):
-        """
-        Distribue une nouvelle main sans réinitialiser la partie.
-        
-        Returns:
-            L'état initial du jeu après distribution.
-        """
-        # Réinitialiser les variables d'état du jeu
-        self.main_pot = 0
-        self.side_pots = self._create_side_pots()
-        self.deck = self._create_deck()  # Réinitialiser le deck
-        self.community_cards = []
-        self.current_phase = GamePhase.PREFLOP
         self.last_raiser = None
-
-        # Réinitialiser l'état des joueurs
-        for player in self.players:
-            player.cards = []
-            player.current_player_bet = 0
-            player.total_bet = 0
-            player.is_all_in = False
-            player.has_folded = False
-            player.range = None
-            player.is_active = player.stack > 0
-
-        # --- Nouvelle ligne ajoutée pour enregistrer les stacks initiales des joueurs
+        self.action_buttons = self._create_action_buttons()
+        
+        # Initialiser les stacks (pour le calcul des gains)
         self.initial_stacks = {player.name: player.stack for player in self.players}
         self.net_stack_changes = {player.name: 0 for player in self.players}
-        self.final_stacks = {player.name: 0 for player in self.players}
-
-        # Vérifier qu'il y a au moins 2 joueurs actifs sinon on réinitialise la partie
-        active_players = [player for player in self.players if player.is_active]
-        if len(active_players) < 2:
-            self.reset()
-
-        # Distribuer les cartes aux joueurs actifs
-        self.deal_cards()
-
-        # Faire tourner le bouton d'une position
-        self.button_seat_position = (self.button_seat_position + 1) % self.num_players
-
-        # Construire une liste ordonnée des joueurs actifs en fonction de leur seat_position
-        active_players = sorted([p for p in self.players if p.is_active],
-                                key=lambda p: p.seat_position)
-
-        # Réorganiser la liste pour que le premier joueur soit celui qui a le bouton
-        self.ordered_players = active_players[self.button_seat_position:] + active_players[:self.button_seat_position]
-        n = len(self.ordered_players)
-
-        # Réattribuer les rôles en fonction du nombre de joueurs actifs
-        if n == 2:
-            # Heads-Up : dans le heads-up, le joueur en bouton (qui est également SB) et l'autre (BB)
-            self.ordered_players[0].role_position = 5  # Small Blind (et Dealer)
-            self.ordered_players[1].role_position = 0  # Big Blind
-        elif n == 3:
-            # Dans le 3-handed, le joueur en bouton est SB.
-            self.ordered_players[0].role_position = 5  # Button (BTN)
-            self.ordered_players[1].role_position = 0  # Small Blind (SB)
-            self.ordered_players[2].role_position = 1  # Big Blind (BB)
-        elif n == 4:
-            self.ordered_players[0].role_position = 5  # Button (BTN)
-            self.ordered_players[1].role_position = 0  # Small Blind (SB)
-            self.ordered_players[2].role_position = 1  # Big Blind (BB)
-            self.ordered_players[3].role_position = 2  # UTG
-        elif n == 5:
-            self.ordered_players[0].role_position = 5  # Button (BTN)
-            self.ordered_players[1].role_position = 0  # Small Blind (SB)
-            self.ordered_players[2].role_position = 1  # Big Blind (BB) 
-            self.ordered_players[3].role_position = 2  # UTG
-            self.ordered_players[4].role_position = 3  # Hijack (HJ)
-        elif n == 6:
-            self.ordered_players[0].role_position = 5  # Button (BTN)
-            self.ordered_players[1].role_position = 0  # Small Blind (SB)
-            self.ordered_players[2].role_position = 1  # Big Blind (BB)
-            self.ordered_players[3].role_position = 2  # UTG
-            self.ordered_players[4].role_position = 3  # Hijack (HJ)
-            self.ordered_players[5].role_position = 4  # Cutoff (CO)
-
-        # Mettre à jour la position du bouton et du joueur courant en fonction des rôles réattribués
-        if n == 2:
-            # En heads-up, le Bouton (qui poste la Small Blind) est celui avec role_position == 0
-            for player in self.players:
-                if player.is_active and player.role_position == 0:
-                    self.button_seat_position = player.seat_position
-                    break
-        else:
-            for player in self.players:
-                if player.is_active and player.role_position == 5:
-                    self.button_seat_position = player.seat_position
-                    break
-
-        for player in self.players:
-            if player.is_active and player.role_position == 0:
-                self.current_player_seat = player.seat_position
-                break
-
-        # Initialiser les variables de jeu complémentaires
-        self.current_maximum_bet = 0  # Sera mis à jour par les blinds
-        self.number_raise_this_game_phase = 0
-
-        self._update_button_states()
-        self.deal_small_and_big_blind()
-
-        # Clear action history for new hand
-        self.pygame_action_history = {player.name: [] for player in self.players}
-
-        # In poker_game.py, inside start_new_hand() after resetting players:
-        if DEBUG:
-            print("Player positions and roles for the new hand:")
-            for p in self.players:
-                if p.is_active:
-                    print(f"{p.name}: seat={p.seat_position}, role={p.role_position}, stack={p.stack}")
-                else :
-                    print(f"{p.name}: seat={p.seat_position}, role=(inactive), stack={p.stack}")
-
-        return self.get_state()
-
-    def _initialize_players(self, agents) -> List[Player]:
-        """
-        Crée et initialise tous les joueurs pour la partie.
+        self.final_stacks = {player.name: player.stack for player in self.players}
         
-        Returns:
-            List[Player]: Liste des objets joueurs initialisés
-        """
-        players = []
-        for idx, agent in enumerate(agents):
-            player = Player(agent=agent, name=agent.name, stack=self.starting_stack, seat_position=idx)
-            players.append(player)
-        return players
-    
-    def deal_cards(self):
-        """
-        Distribue deux cartes à chaque joueur actif.
-        Réinitialise et mélange le jeu avant la distribution.
-        """
-        # Deal two cards to each active player
-        for _ in range(2):
-            for player in self.players:
-                if player.is_active:
-                    player.cards.append(self.deck.pop())
-    
-    def deal_community_cards(self):
-        """
-        Distribue les cartes communes selon la phase de jeu actuelle.
-        Distribue 3 cartes pour le flop, 1 pour le turn et 1 pour la river.
-        """
-
-        if self.current_phase == GamePhase.PREFLOP:
-            raise ValueError(
-                "Erreur d'état : Distribution des community cards pendant le pré-flop. "
-                "Les cartes communes ne doivent être distribuées qu'après le pré-flop."
-            )
-        
-        if self.current_phase == GamePhase.FLOP:
-            for _ in range(3):
-                self.community_cards.append(self.deck.pop())
-        elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
-            self.community_cards.append(self.deck.pop())
-    
-    def deal_small_and_big_blind(self):
-        """
-        Méthode à run en début de main pour distribuer automatiquement les blindes
-        """
-        active_players = [p for p in self.players if p.is_active]
-        # Déterminer les positions SB et BB en se basant sur les rôles attribués
-        if len(active_players) == 2:
-            # Heads-Up : le joueur en position 0 est la Small Blind et le joueur en position 5 est le Big Blind (bouton)
-            sb_player = next((p for p in self.players if p.is_active and p.role_position == 0), None)
-            bb_player = next((p for p in self.players if p.is_active and p.role_position == 5), None)
-        else:
-            sb_player = next((p for p in self.players if p.is_active and p.role_position == 0), None)
-            bb_player = next((p for p in self.players if p.is_active and p.role_position == 1), None)
-        
-        if sb_player is None or bb_player is None:
-            raise ValueError(
-                f"Impossible de déterminer la position de la Small Blind ou Big Blind : "
-                f"sb_player={sb_player}, bb_player={bb_player}. Vérifiez l'assignation des rôles des joueurs."
-            )
-        
-        sb_seat_position = sb_player.seat_position
-        bb_seat_position = bb_player.seat_position
-
-        # SB
-        if self.players[sb_seat_position].stack < self.small_blind:
-            self.players[sb_seat_position].is_all_in = True
-            self.players[sb_seat_position].current_player_bet = self.players[sb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la SB devient son stack
-            self.main_pot += self.players[sb_seat_position].stack  # Le pot est augmenté du stack du joueur
-            self.players[sb_seat_position].total_bet = self.players[sb_seat_position].stack
-            self.players[sb_seat_position].stack = 0  # Le stack du joueur est donc 0
-            self.players[sb_seat_position].has_acted = True
-        else:
-            self.players[sb_seat_position].stack -= self.small_blind
-            self.main_pot += self.small_blind  # Le pot est augmenté de la SB
-            self.players[sb_seat_position].total_bet = self.small_blind
-            self.players[sb_seat_position].current_player_bet = self.small_blind
-            self.players[sb_seat_position].has_acted = True
-
-        self.current_maximum_bet = self.small_blind
-        self._next_player()
-        
-        # BB
-        if self.players[bb_seat_position].stack < self.big_blind:
-            self.players[bb_seat_position].is_all_in = True
-            self.players[bb_seat_position].current_player_bet = self.players[bb_seat_position].stack  # Le bet du joueur n'ayant pas assez pour payer la BB devient son stack
-            self.main_pot += self.players[bb_seat_position].stack  # Le pot est augmenté du stack du joueur
-            self.players[bb_seat_position].total_bet = self.players[bb_seat_position].stack
-            self.players[bb_seat_position].stack = 0  # Le stack du joueur devient 0
-            self.players[bb_seat_position].has_acted = True
-        else:
-            self.players[bb_seat_position].stack -= self.big_blind
-            self.main_pot += self.big_blind  # Le pot est augmenté de la BB
-            self.players[bb_seat_position].total_bet = self.big_blind
-            self.players[bb_seat_position].current_player_bet = self.big_blind
-            # Modification : ne pas marquer la BB comme ayant déjà agi au preflop comme ça si tout le monde a juste call, elle peut checker pour voir le flop ou raise
-            self.players[bb_seat_position].has_acted = False
-        
-        self.current_maximum_bet = self.big_blind
-        self._next_player()
 
     def _next_player(self):
         """
@@ -582,36 +354,16 @@ class PokerGameOptimized:
         Returns:
             Dict[PlayerAction, Button]: Dictionnaire associant les actions aux objets boutons
         """
-        buttons = {
-            PlayerAction.FOLD: Button(300, SCREEN_HEIGHT - 50, 100, 40, "Fold", (200, 0, 0)),
-            PlayerAction.CHECK: Button(450, SCREEN_HEIGHT - 50, 100, 40, "Check", (0, 200, 0)),
-            PlayerAction.CALL: Button(600, SCREEN_HEIGHT - 50, 100, 40, "Call", (0, 0, 200)),
-            PlayerAction.RAISE: Button(750, SCREEN_HEIGHT - 50, 100, 40, "Raise", (200, 200, 0)),
-            PlayerAction.ALL_IN: Button(900, SCREEN_HEIGHT - 50, 100, 40, "All-in", (150, 0, 150))
-        }
-        # Ajout des boutons pour les raises pot-based
-        pot_raise_color = (255, 140, 0)  # Couleur orange pour les raises pot-based
-        # Première rangée (6 boutons)
-        start_x_row1 = 315
-        y_row1 = SCREEN_HEIGHT - 140
-        btn_width = 120
-        btn_height = 30
-        gap = 5
-        buttons[PlayerAction.RAISE_25_POT] = Button(start_x_row1, y_row1, btn_width, btn_height, "25%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_33_POT] = Button(start_x_row1 + (btn_width + gap) * 1, y_row1, btn_width, btn_height, "33%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_50_POT] = Button(start_x_row1 + (btn_width + gap) * 2, y_row1, btn_width, btn_height, "50%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_66_POT] = Button(start_x_row1 + (btn_width + gap) * 3, y_row1, btn_width, btn_height, "66%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_75_POT] = Button(start_x_row1 + (btn_width + gap) * 4, y_row1, btn_width, btn_height, "75%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_100_POT] = Button(start_x_row1 + (btn_width + gap) * 5, y_row1, btn_width, btn_height, "100%Pot", pot_raise_color)
+        # Pour la simulation MCCFR, nous utilisons une version simplifiée des boutons
+        # sans dépendance à pygame
+        from poker_game import PlayerAction
         
-        # Deuxième rangée (5 boutons)
-        start_x_row2 = 380
-        y_row2 = SCREEN_HEIGHT - 100
-        buttons[PlayerAction.RAISE_125_POT] = Button(start_x_row2, y_row2, btn_width, btn_height, "125%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row2 + (btn_width + gap) * 1, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_175_POT] = Button(start_x_row2 + (btn_width + gap) * 2, y_row2, btn_width, btn_height, "175%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row2 + (btn_width + gap) * 3, y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
-        buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row2 + (btn_width + gap) * 4, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
+        # Créer un dictionnaire de boutons simplifiés
+        class SimpleButton:
+            def __init__(self):
+                self.enabled = False
+                
+        buttons = {action: SimpleButton() for action in PlayerAction}
         
         return buttons
 
@@ -951,198 +703,64 @@ class PokerGameOptimized:
 
     def handle_showdown(self):
         """
-        Gère la phase de showdown en tenant compte correctement des side pots.
+        Gère la phase de showdown pour le mode simulation MCCFR.
+        Version simplifiée qui n'utilise pas le deck.
         """
         if DEBUG:
-            print("\n=== DÉBUT SHOWDOWN ===")
+            print("\n=== DÉBUT SHOWDOWN SIMULATION ===")
+        
         self.current_phase = GamePhase.SHOWDOWN
-        # On considère ici TOUS les joueurs qui ont contribué (même s'ils ont foldé)
-        active_players = [p for p in self.players if p.is_active and not p.has_folded]
-        if DEBUG:
-            print(f"Joueurs actifs au showdown: {[p.name for p in active_players]}")
         
         # Désactiver tous les boutons pendant le showdown
         for button in self.action_buttons.values():
             button.enabled = False
         
-        # S'assurer que toutes les cartes communes sont distribuées
-        while len(self.community_cards) < 5:
-            self.community_cards.append(self.deck.pop())
-        if DEBUG:
-            print(f"Cartes communes finales: {[str(card) for card in self.community_cards]}")
+        # Pour la simulation MCCFR, nous avons seulement besoin de déterminer qui a gagné
+        # et de mettre à jour les stacks en conséquence
+        active_players = [p for p in self.players if p.is_active and not p.has_folded]
         
-        # Afficher les mains des joueurs actifs
-        if DEBUG:
-            print("\nMains des joueurs actifs:")
-            for player in active_players:
-                print(f"- {player.name}: {[str(card) for card in player.cards]}")
-        
-        # --- Distribution des gains ---
-        # Cas particulier : victoire par fold (il ne reste qu'un joueur actif)
         if len(active_players) == 1:
+            # Si un seul joueur reste, il remporte tout le pot
             winner = active_players[0]
-            contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
-            total_pot = sum(contributions.values())
+            winner.stack += self.main_pot
             if DEBUG:
-                print(f"\nVictoire par fold - {winner.name} gagne {total_pot:.2f}BB")
-            winner.stack += total_pot
-            self.pygame_winner_info = f"{winner.name} gagne {total_pot:.2f}BB (tous les autres joueurs ont fold)"
+                print(f"Victoire par fold - {winner.name} gagne {self.main_pot:.2f}BB")
+            self.main_pot = 0
         else:
-            # --- Répartition des contributions en pots (Main Pot et Side Pots) ---
-            # IMPORTANT : On prend en compte tous les joueurs qui ont misé,
-            # même s'ils se sont couchés.
-            contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
+            # Dans le cas où plusieurs joueurs sont en jeu, nous évaluons leurs mains
+            best_rank = -1
+            winners = []
             
-            if DEBUG:
-                print("\nContributions totales (tous joueurs ayant misé):")
-                for player, amount in contributions.items():
-                    print(f"- {player.name}: {amount:.2f}BB")
-            
-            pots = []
-            pot_index = 0
-            
-            # Tant qu'au moins un joueur a une contribution positive
-            while any(amount > 0 for amount in contributions.values()):
-                # Les joueurs qui ont encore misé quelque chose (foldés ou non)
-                current_contributors = [player for player, amount in contributions.items() if amount > 0]
-                if not current_contributors:
-                    break
-                # Contribution minimale parmi tous les joueurs concernés
-                min_contrib = min(contributions[player] for player in current_contributors)
-                # Le montant du pot est : min_contrib * (nombre total de contributeurs)
-                pot_amount = min_contrib * len(current_contributors)
-                # Seuls les joueurs non-foldés sont éligibles pour remporter ce pot
-                eligible = [player for player in current_contributors if not player.has_folded]
-                
-                pot_name = "Main Pot" if pot_index == 0 else f"Side Pot {pot_index}"
-                pots.append({
-                    "name": pot_name,
-                    "amount": pot_amount,
-                    "eligible": eligible
-                })
-                
-                if DEBUG:
-                    print(f"\n{pot_name} calculé:")
-                    print(f"- Contribution minimale: {min_contrib:.2f}BB")
-                    print(f"- Nombre total de contributeurs: {len(current_contributors)}")
-                    print(f"- Montant du pot: {pot_amount:.2f}BB")
-                    print(f"- Joueurs éligibles: {[p.name for p in eligible]}")
-                
-                # Déduire la contribution minimale de tous les joueurs contributeurs
-                for player in contributions:
-                    if contributions[player] > 0:
-                        contributions[player] -= min_contrib
-                pot_index += 1
-            
-            # --- Distribution des gains pour chaque pot ---
-            if DEBUG: 
-                print("\nDistribution des gains par pot:")
-            for pot in pots:
-                if DEBUG:
-                    print(f"\nÉvaluation du {pot['name']} ({pot['amount']:.2f}BB):")
-                if not pot["eligible"]:
-                    if DEBUG:
-                        print("Aucun joueur éligible pour ce pot.")
-                    continue
-                
-                best_eval = None
-                winners = []
-                if DEBUG:
-                    print("Évaluation des mains:")
-                for player in pot["eligible"]:
-                    hand_eval = self.evaluate_final_hand(player)
-                    # Création d'une description textuelle de la main (exemple simplifié)
-                    if hand_eval[0] == HandRank.ROYAL_FLUSH:
-                        hand_str = "Quinte Flush Royale"
-                    elif hand_eval[0] == HandRank.STRAIGHT_FLUSH:
-                        hand_str = f"Quinte Flush hauteur {hand_eval[1][0]}"
-                    elif hand_eval[0] == HandRank.FOUR_OF_A_KIND:
-                        hand_str = f"Carré de {hand_eval[1][0]}, kicker {hand_eval[1][1]}"
-                    elif hand_eval[0] == HandRank.FULL_HOUSE:
-                        hand_str = f"Full aux {hand_eval[1][0]} par les {hand_eval[1][1]}"
-                    elif hand_eval[0] == HandRank.FLUSH:
-                        hand_str = f"Couleur {', '.join(str(x) for x in hand_eval[1])}"
-                    elif hand_eval[0] == HandRank.STRAIGHT:
-                        hand_str = f"Quinte hauteur {hand_eval[1][0]}"
-                    elif hand_eval[0] == HandRank.THREE_OF_A_KIND:
-                        hand_str = f"Brelan de {hand_eval[1][0]}, kickers {hand_eval[1][1:]}"
-                    elif hand_eval[0] == HandRank.TWO_PAIR:
-                        hand_str = f"Double paire {hand_eval[1][0]} et {hand_eval[1][1]}, kicker {hand_eval[1][2]}"
-                    elif hand_eval[0] == HandRank.PAIR:
-                        hand_str = f"Paire de {hand_eval[1][0]}, kickers {hand_eval[1][1:]}"
-                    else:
-                        hand_str = f"Carzzte haute: {', '.join(str(x) for x in hand_eval[1])}"
-        
-                    if DEBUG:
-                        print(f"- {player.name}: {hand_str}")
-                    current_key = (hand_eval[0].value, tuple(hand_eval[1]))
-                    if best_eval is None or current_key > best_eval:
-                        best_eval = current_key
+            for player in active_players:
+                if player.cards:  # S'assurer que le joueur a des cartes
+                    hand_rank, _ = self.evaluate_final_hand(player)
+                    rank_value = hand_rank.value
+                    
+                    if rank_value > best_rank:
+                        best_rank = rank_value
                         winners = [player]
-                    elif current_key == best_eval:
+                    elif rank_value == best_rank:
                         winners.append(player)
-        
-                if winners:
-                    share = pot["amount"] / len(winners)
+            
+            # Distribuer le pot entre les gagnants
+            if winners:
+                share = self.main_pot / len(winners)
+                for winner in winners:
+                    winner.stack += share
                     if DEBUG:
-                        print(f"Gagnant(s): {[w.name for w in winners]}, {share:.2f}BB chacun")
-                    for winner in winners:
-                        winner.stack += share
-                else:
-                    share = 0
-                    if DEBUG:
-                        print("Aucun gagnant déterminé pour ce pot.")
+                        print(f"{winner.name} gagne {share:.2f}BB")
+                self.main_pot = 0
+            else:
+                if DEBUG:
+                    print("Aucun gagnant déterminé")
         
-            # (Optionnel) Mettre à jour l'info affichée par Pygame
-            self.pygame_winner_info = "\n".join(
-                [f"{pot['name']} ({pot['amount']:.2f}BB): {[p.name for p in pot['eligible'] if not p.has_folded]} gagnent {pot['amount'] / len([p for p in pot['eligible'] if not p.has_folded]):.2f}BB"
-                for pot in pots if len([p for p in pot['eligible'] if not p.has_folded]) > 0]
-            )
-        
-            if DEBUG:
-                print("\nStacks initiaux:")
-                for player in self.players:
-                    print(f"- {player.name}: {self.initial_stacks[player.name]}BB")
-        
-            if DEBUG:
-                print("\nStacks finaux:")
-                for player in self.players:
-                    print(f"- {player.name}: {player.stack:.2f}BB")
-        if DEBUG:
-            print("\nVariations :")
-        for player in self.players:
-            initial = self.initial_stacks.get(player.name, 0)
-            variation = player.stack - initial
-            signe = "+" if variation >= 0 else ""
-            if DEBUG :
-                print(f"- {player.name}: {signe}{variation:.2f}BB")
-        
-        # Calcul des changements nets de piles
-        self.net_stack_changes = {player.name: (player.stack - self.initial_stacks.get(player.name, 0)) for player in self.players}
+        # Calculer les changements nets des stacks
+        self.net_stack_changes = {player.name: (player.stack - self.initial_stacks.get(player.name, 0)) 
+                                for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
-            
-        # Réinitialiser les pots
-        self.main_pot = 0
-        self.side_pots = self._create_side_pots() 
-            
-        # Paramétrer le début de l'affichage du gagnant via Pygame
-        self.pygame_winner_display_start = pygame.time.get_ticks()
-        self.pygame_winner_display_duration = 2000  # 2 secondes
-        if DEBUG:
-            print("=== FIN SHOWDOWN ===\n")
-
-    def _create_deck(self) -> List[Card]:
-        """
-        Crée et mélange un nouveau jeu de 52 cartes.
         
-        Returns:
-            List[Card]: Un jeu de cartes mélangé
-        """
-        suits = ['♠', '♥', '♦', '♣']
-        values = range(2, 15)  # 2-14 (Ace is 14)
-        deck = [Card(suit, value) for suit in suits for value in values]
-        rd.shuffle(deck)
-        return deck
+        if DEBUG:
+            print("=== FIN SHOWDOWN SIMULATION ===\n")
 
     def _create_side_pots(self) -> List[SidePot]:
         """
@@ -1496,82 +1114,7 @@ class PokerGameOptimized:
         # Avant de retourner, conversion en tableau numpy
         final_state = np.array(final_state, dtype=np.float32)
         
-        return final_state    
-    
-    def get_simple_state(self) -> Tuple[List, int]:
-        """
-        Extrait un état de jeu simplifié sous forme de vecteur plat contenant les informations brutes nécessaires.
-        Format du vecteur:
-        [
-            hero_name_idx,                # index du nom du héros (0-5)
-            hero_card1_value,             # valeur de la première carte (2-14)
-            hero_card1_suit_idx,          # index de la couleur (0-3)
-            hero_card2_value,             # valeur de la deuxième carte
-            hero_card2_suit_idx,          # index de la couleur
-            *community_cards_flat,        # 10 valeurs (5 cartes x [valeur, suit_idx])
-            phase_idx,                    # index de la phase (0-4)
-            pot,                          # valeur du pot
-            current_maximum_bet,          # mise maximale actuelle
-            big_blind,                    # valeur de la grosse blinde
-            small_blind,                  # valeur de la petite blinde
-            *players_info_flat           # Pour chaque joueur actif: [name_idx, stack, bet, active, folded, all_in, role_pos, acted, seat_pos]
-        ]
-
-        Returns:
-            Tuple[List, int]: Vecteur d'état plat et nombre de joueurs actifs
-        """
-        current_player = self.players[self.current_player_seat]
-        
-        # Conversion des cartes en valeurs numériques
-        hero_cards = [(card.value, ["♠", "♥", "♦", "♣"].index(card.suit)) for card in current_player.cards]
-        community_cards = [(card.value, ["♠", "♥", "♦", "♣"].index(card.suit)) for card in self.community_cards]
-        
-        # Padding des cartes communes si nécessaire
-        while len(community_cards) < 5:
-            community_cards.append((-1, -1))  # -1 indique une carte non distribuée
-        
-        # Récupérer les joueurs qui peuvent encore agir
-        player_that_can_still_act = [p for p in self.players if not (p.has_folded or not p.is_active)]
-        
-        # Construction du vecteur plat
-        flat_state = [
-            # Info du héros
-            self.players.index(current_player),  # hero_name_idx
-            
-            # Cartes du héros
-            hero_cards[0][0], hero_cards[0][1],  # card1 value, suit
-            hero_cards[1][0], hero_cards[1][1],  # card2 value, suit
-            
-            # Cartes communes (aplatir la liste)
-            *[val for card in community_cards for val in card],  # 10 valeurs
-            
-            # Phase de jeu
-            self.current_phase.value,
-            
-            # Informations générales
-            self.main_pot,
-            self.current_maximum_bet,
-            self.big_blind,
-            self.small_blind
-        ]
-        
-        # Informations des joueurs actifs
-        for p in player_that_can_still_act:
-            player_info = [
-                self.players.index(p),  # name_idx
-                p.stack,
-                p.current_player_bet,
-                1 if p.is_active else 0,
-                1 if p.has_folded else 0,
-                1 if p.is_all_in else 0,
-                p.role_position,
-                1 if p.has_acted else 0,
-                p.seat_position
-            ]
-            flat_state.extend(player_info)
-        
-        return flat_state, len(player_that_can_still_act)
-
+        return final_state
 
     def step(self, action: PlayerAction) -> Tuple[List[float], float]:
         """
@@ -1768,3 +1311,146 @@ class PokerGameOptimized:
                 flush_draw = max(flush_draw, 0.1)
 
         return straight_draw, flush_draw
+        
+    def play_trajectory(self, trajectory_action, opponent_hands, missing_community_cards, valid_actions):
+        """
+        Simule le déroulement d'une partie à partir d'une action donnée.
+        
+        Args:
+            trajectory_action (PlayerAction): L'action initiale à jouer
+            opponent_hands (List[List[Tuple[int, str]]]): Liste des mains des adversaires
+            missing_community_cards (List[Tuple[int, str]]): Liste des cartes communes restantes
+            valid_actions (List[PlayerAction]): Liste des actions valides
+            
+        Returns:
+            float: Le gain final (positif ou négatif) pour le joueur courant
+        """
+        # Nous sommes au tour du joueur courant (hero)
+        hero = self.players[self.current_player_seat]
+        hero_initial_stack = hero.stack
+        
+        # Distribuer les cartes aux adversaires
+        active_opponents = [p for p in self.players if p.is_active and not p.has_folded and p.seat_position != self.current_player_seat]
+        for i, opponent in enumerate(active_opponents):
+            if i < len(opponent_hands):
+                opponent.cards = opponent_hands[i]
+                
+        # Compléter les cartes communes manquantes
+        remaining_community_cards = missing_community_cards.copy()
+        
+        # Le héros joue d'abord son action
+        if trajectory_action not in valid_actions:
+            raise ValueError(f"L'action {trajectory_action} n'est pas valide. Actions valides: {valid_actions}")
+        
+        bet_amount = None
+        if trajectory_action == PlayerAction.ALL_IN:
+            bet_amount = hero.stack
+            
+        # Exécute l'action du héros
+        self.process_action(hero, trajectory_action, bet_amount)
+        
+        # Simulation du jeu jusqu'à la fin de la main
+        while self.current_phase != GamePhase.SHOWDOWN:
+            # Récupération du joueur actuel
+            current_player = self.players[self.current_player_seat]
+            
+            # Si c'est le tour du héros à nouveau
+            if current_player.seat_position == hero.seat_position:
+                # Choix aléatoire d'une action valide
+                self._update_button_states()
+                valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
+                if not valid_actions:
+                    break  # Si aucune action n'est valide, sortir de la boucle
+                
+                random_action = rd.choice(valid_actions)
+                bet_amount = None
+                if random_action == PlayerAction.ALL_IN:
+                    bet_amount = current_player.stack
+                    
+                self.process_action(current_player, random_action, bet_amount)
+            else:
+                # Pour les adversaires, on utilise une stratégie simplifiée
+                self._update_button_states()
+                valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
+                if not valid_actions:
+                    break  # Si aucune action n'est valide, sortir de la boucle
+                
+                # Stratégie simple pour les adversaires
+                if PlayerAction.CHECK in valid_actions:
+                    # Check si possible
+                    self.process_action(current_player, PlayerAction.CHECK, None)
+                elif PlayerAction.CALL in valid_actions and rd.random() < 0.7:
+                    # Call avec 70% de probabilité si check n'est pas possible
+                    self.process_action(current_player, PlayerAction.CALL, None)
+                elif PlayerAction.FOLD in valid_actions:
+                    # Fold si on ne peut pas call
+                    self.process_action(current_player, PlayerAction.FOLD, None)
+                else:
+                    # Action aléatoire si aucune des actions précédentes n'est possible
+                    random_action = rd.choice(valid_actions)
+                    bet_amount = None
+                    if random_action == PlayerAction.ALL_IN:
+                        bet_amount = current_player.stack
+                        
+                    self.process_action(current_player, random_action, bet_amount)
+            
+            # Si on avance à une nouvelle phase, distribuer les cartes communes manquantes
+            if self.current_phase == GamePhase.FLOP and len(self.community_cards) < 3:
+                for _ in range(3):
+                    if remaining_community_cards:
+                        self.community_cards.append(remaining_community_cards.pop(0))
+            elif self.current_phase == GamePhase.TURN and len(self.community_cards) < 4:
+                if remaining_community_cards:
+                    self.community_cards.append(remaining_community_cards.pop(0))
+            elif self.current_phase == GamePhase.RIVER and len(self.community_cards) < 5:
+                if remaining_community_cards:
+                    self.community_cards.append(remaining_community_cards.pop(0))
+        
+        # À ce stade, nous avons atteint le showdown, calculer le gain du héros
+        hero_final_stack = hero.stack
+        payoff = hero_final_stack - hero_initial_stack
+        
+        return payoff
+
+    def _initialize_simulated_players(self, flat_state):
+        """
+        Initialise 6 joueurs simulés pour une partie MCCFR.
+        
+        Args:
+            flat_state: État du jeu vectorisé
+            
+        Returns:
+            List[Player]: Liste de 6 joueurs
+        """
+        from poker_game import Player
+        
+        players = []
+        
+        # Extraction des stacks (indices 53-58)
+        stacks = [flat_state[53+i] * self.starting_stack for i in range(6)]
+        
+        # Extraction de l'état actif des joueurs (indices 65-70)
+        active_states = [flat_state[65+i] > 0 for i in range(6)]
+        
+        # Extraction des mises actuelles (indices 59-64)
+        current_bets = [flat_state[59+i] * self.starting_stack for i in range(6)]
+        
+        # Créer les joueurs
+        for i in range(6):
+            player = Player(
+                name=f"Player_{i}",
+                agent=None,  # Pas d'agent pour la simulation
+                stack=stacks[i],
+                seat_position=i
+            )
+            player.is_active = active_states[i]
+            player.has_folded = not active_states[i]
+            player.current_player_bet = current_bets[i]
+            player.total_bet = current_bets[i]
+            player.cards = []  # Sera rempli plus tard
+            players.append(player)
+            
+            # Attribution des rôles
+            player.role_position = (player.seat_position - self.button_seat_position - 1) % 6
+        
+        return players
