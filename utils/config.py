@@ -3,7 +3,7 @@ import random as rd
 import numpy as np
 import torch
 
-EPISODES = 100
+EPISODES = 2_000
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9992
@@ -20,7 +20,7 @@ SAVE_INTERVAL = 250
 PLOT_INTERVAL = 500
 
 # Nombre de Simulations
-MC_SIMULATIONS = 3
+MC_SIMULATIONS = 100
 
 def set_seed(seed=42):
     rd.seed(seed)

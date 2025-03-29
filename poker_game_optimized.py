@@ -136,6 +136,21 @@ class PokerGameOptimized:
 
         current_player = self.players[self.current_player_seat]
 
+        # Exemple de cas particulier : si un seul joueur non all-in reste, déclencher le showdown
+        # Si un seul joueur non all-in reste, déclencher le showdown car il ne va pas jouer seul.
+        # Cette situation arrive lorsque qu'un joueur raise un montant supérieur au stack de ses adversaires. Dès lors, les autres joueurs peuvent soit call, soit all-in. 
+        # Or s'ils all-in, le joueur qui a raise est le seul actif, non all-in, non foldé restant. 
+        # Dès lors, il n'y a pas de sens à continuer la partie, donc on va au showdown.
+        non_all_in_has_acted_players = [p for p in in_game_players if not p.is_all_in and p.has_acted]
+        if len(non_all_in_has_acted_players) == 1 and len(in_game_players) > 1:
+            if DEBUG:
+                print("Moving to showdown (only one non all-in player remains)")
+            while len(self.community_cards) < 5:
+                rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
+                self.community_cards.append(rd_missing_community_cards_copy.pop())
+            self.handle_showdown()
+            return
+
         # Cas particulier, au PREFLOP, si la BB est limpée, elle doit avoir un droit de parole
         # Vérification d'un cas particulier en phase préflop :
         # En phase préflop, l'ordre d'action est particulier car après avoir posté les blinds
@@ -203,21 +218,6 @@ class PokerGameOptimized:
                         if p.is_active and not p.has_folded and not p.is_all_in:
                             p.has_acted = False
                 return
-
-        # Nouvelle vérification : si un seul joueur non all-in reste, déclencher le showdown
-        # Si un seul joueur non all-in reste, déclencher le showdown car il ne va pas jouer seul.
-        # Cette situation arrive lorsque qu'un joueur raise un montant supérieur au stack de ses adversaires. Dès lors, les autres joueurs peuvent soit call, soit all-in. 
-        # Or s'ils all-in, le joueur qui a raise est le seul actif, non all-in, non foldé restant. 
-        # Dès lors, il n'y a pas de sens à continuer la partie, donc on va au showdown.
-        non_all_in_players = [p for p in in_game_players if not p.is_all_in]
-        if len(non_all_in_players) == 1 and len(in_game_players) > 1:
-            if DEBUG:
-                print("Moving to showdown (only one non all-in player remains)")
-            while len(self.community_cards) < 5:
-                rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
-                self.community_cards.append(rd_missing_community_cards_copy.pop())
-            self.handle_showdown()
-            return
         
     def deal_community_cards(self):
         """
@@ -1152,7 +1152,7 @@ class PokerGameOptimized:
         """
         # Nous sommes au tour du joueur courant (hero)
         hero = self.players[self.current_player_seat]
-        hero_initial_stack = hero.stack
+        hero_initial_stack = hero.stack + hero.total_bet
         
         # On fait une copie des cartes pour éviter de les consommer dans l'original
         rd_opponents_cards_copy = self.rd_opponents_cards.copy() if self.rd_opponents_cards else []
