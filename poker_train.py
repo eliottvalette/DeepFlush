@@ -103,8 +103,10 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             num_active_players = len(players_that_can_play),
             initial_stacks = initial_stacks.copy()
         )
-        if DEBUG:
+
+        if DEBUG or True:
             print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
+            time.sleep(1)
 
         review_state = env.get_state()
         if state.tolist() != review_state.tolist():

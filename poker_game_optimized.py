@@ -38,8 +38,8 @@ class PokerGameOptimized:
         if DEBUG:
             print(f"[INIT] Hero seat: {hero_seat}, Button: {button_seat_position}")
             print(f"[INIT] Hero cards: {hero_cards}")
-            print(f"[INIT] Visible community cards: {visible_community_cards}")
-            print(f"[INIT] RD missing community cards: {self.rd_missing_community_cards} (len={len(self.rd_missing_community_cards)})")
+            print(f"[INIT] Visible community cards: {[card.value for card in visible_community_cards]}")
+            print(f"[INIT] RD missing community cards: {[card.value for card in self.rd_missing_community_cards]} (len={len(self.rd_missing_community_cards)})")
             print(f"[INIT] RD opponent cards: {len(self.rd_opponents_cards)} mains")
             print(f"[INIT] Main pot: {self.main_pot}BB")
         self.hero_cards = hero_cards
@@ -147,8 +147,7 @@ class PokerGameOptimized:
             if DEBUG:
                 print("Moving to showdown (only one non all-in player remains)")
             while len(self.community_cards) < 5:
-                rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
-                self.community_cards.append(rd_missing_community_cards_copy.pop())
+                self.community_cards.append(self.rd_missing_community_cards.pop())
             self.handle_showdown()
             return
 
@@ -163,11 +162,10 @@ class PokerGameOptimized:
 
         # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
         if (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
-            rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
             if DEBUG:
                 print("Moving to showdown (all remaining players are all-in)")
             while len(self.community_cards) < 5:
-                self.community_cards.append(rd_missing_community_cards_copy.pop())
+                self.community_cards.append(self.rd_missing_community_cards.pop())
             self.handle_showdown()
             return # Ne rien faire d'autre, la partie est terminée
         
@@ -239,17 +237,16 @@ class PokerGameOptimized:
             raise ValueError("[DISTRIBUTION] ⚠️ Attention: Aucune carte communautaire disponible pour la distribution.")
             
         # Faire une copie locale des cartes communautaires pour éviter de les épuiser
-        rd_missing_community_cards_copy = self.rd_missing_community_cards.copy()
         if DEBUG:
-            print(f"[DISTRIBUTION] Cartes disponibles: {len(rd_missing_community_cards_copy)}")
+            print(f"[DISTRIBUTION] Cartes disponibles: {len(self.rd_missing_community_cards)}")
         
         if self.current_phase == GamePhase.FLOP:
             # S'assurer qu'on a au moins 3 cartes pour le flop
-            if len(rd_missing_community_cards_copy) >= 3:
+            if len(self.rd_missing_community_cards) >= 3:
                 if DEBUG:
                     print("[DISTRIBUTION] Distribution du FLOP - 3 cartes")
                 for _ in range(3):
-                    card = rd_missing_community_cards_copy.pop(0)
+                    card = self.rd_missing_community_cards.pop(0)
                     self.community_cards.append(card)
                     if DEBUG:
                         print(f"[DISTRIBUTION] Carte distribuée: {card}")
@@ -257,10 +254,10 @@ class PokerGameOptimized:
                 raise ValueError("[DISTRIBUTION] ⚠️ Pas assez de cartes pour le flop!")
         elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
             # S'assurer qu'on a au moins 1 carte pour le turn/river
-            if rd_missing_community_cards_copy:
+            if self.rd_missing_community_cards:
                 if DEBUG:
                     print(f"[DISTRIBUTION] Distribution de la {self.current_phase} - 1 carte")
-                card = rd_missing_community_cards_copy.pop(0)
+                card = self.rd_missing_community_cards.pop(0)
                 self.community_cards.append(card)
                 if DEBUG:
                     print(f"[DISTRIBUTION] Carte distribuée: {card}")
@@ -268,7 +265,6 @@ class PokerGameOptimized:
                 raise ValueError(f"[DISTRIBUTION] ⚠️ Pas assez de cartes pour {self.current_phase}!")
                 
         # Mettre à jour la liste originale
-        self.rd_missing_community_cards = rd_missing_community_cards_copy
         if DEBUG:
             print(f"[DISTRIBUTION] Community cards après distribution: {self.community_cards}")
             print(f"[DISTRIBUTION] Cartes restantes: {len(self.rd_missing_community_cards)}")
@@ -279,14 +275,17 @@ class PokerGameOptimized:
         Réinitialise et mélange le jeu avant la distribution.
         """
         # Deal two cards to each active player
-        for _ in range(2):
-            for player in self.players:
-                if not player.is_active:
-                    continue
-                if player.seat_position == self.hero_seat:
-                    player.cards = self.hero_cards
-                else:
-                    player.cards = self.rd_opponents_cards.pop()
+        print('self.rd_opponents_cards : ', self.rd_opponents_cards)
+        for player in self.players:
+            if not player.is_active:
+                continue
+            elif player.seat_position == self.hero_seat:
+                player.cards = self.hero_cards
+            else:
+                player.cards = self.rd_opponents_cards.pop()
+
+        for player in self.players:
+            print(f"[CARDS] player : {player.name}, cards : {[card.value for card in player.cards]}")
 
     def advance_phase(self):
         """
@@ -784,9 +783,11 @@ class PokerGameOptimized:
         
         for player in active_players:
             if DEBUG:
-                print(f"[SHOWDOWN] {player.name} montre: {player.cards}")
+                if player.cards:
+                    print(f"[SHOWDOWN] {player.name} montre: {player.cards[0]} {player.cards[1]}")
+        
         if DEBUG:
-            print(f"[SHOWDOWN] Cartes communes: {self.community_cards}")
+            print(f"[SHOWDOWN] Cartes communes: {[card.value for card in self.community_cards]}")
         
         if len(active_players) == 1:
             # Si un seul joueur reste, il remporte tout le pot
@@ -829,7 +830,7 @@ class PokerGameOptimized:
                                 for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
         
-        if DEBUG or True:
+        if DEBUG:
             print("[SHOWDOWN] Stacks finaux:")
             for player in self.players:
                 change = self.net_stack_changes[player.name]
@@ -1097,14 +1098,8 @@ class PokerGameOptimized:
         # Nous sommes au tour du joueur courant (hero)
         hero = self.players[self.current_player_seat]
 
-        # On fait une copie des cartes pour éviter de les consommer dans l'original
-        rd_opponents_cards_copy = self.rd_opponents_cards.copy() if self.rd_opponents_cards else []
-        
-        # Distribuer les cartes aux adversaires
-        active_opponents = [p for p in self.players if p.is_active and not p.has_folded and p.seat_position != self.current_player_seat]
-        for i, opponent in enumerate(active_opponents):
-            if i < len(rd_opponents_cards_copy):
-                opponent.cards = rd_opponents_cards_copy[i]
+        # Donner les cartes aux joueurs
+        self.deal_cards()
         
         # Mettre à jour les actions valides
         self._update_button_states()
@@ -1200,9 +1195,6 @@ class PokerGameOptimized:
             player.has_acted = has_acted_states[i]
             
             player.role_position = (player.seat_position - self.button_seat_position - 1) % 6
-        
-        if DEBUG:
-            print("players", players)
         
         return players
 
