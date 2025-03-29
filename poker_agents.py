@@ -95,17 +95,13 @@ class PokerAgent:
             PlayerAction.CALL: 2,
             PlayerAction.RAISE: 3,
             PlayerAction.RAISE_25_POT: 4,
-            PlayerAction.RAISE_33_POT: 5,
-            PlayerAction.RAISE_50_POT: 6,
-            PlayerAction.RAISE_66_POT: 7,
-            PlayerAction.RAISE_75_POT: 8,
-            PlayerAction.RAISE_100_POT: 9,
-            PlayerAction.RAISE_125_POT: 10,
-            PlayerAction.RAISE_150_POT: 11,
-            PlayerAction.RAISE_175_POT: 12,
-            PlayerAction.RAISE_2X_POT: 13,
-            PlayerAction.RAISE_3X_POT: 14,
-            PlayerAction.ALL_IN: 15
+            PlayerAction.RAISE_50_POT: 5,
+            PlayerAction.RAISE_75_POT: 6,
+            PlayerAction.RAISE_100_POT: 7,
+            PlayerAction.RAISE_150_POT: 8,
+            PlayerAction.RAISE_2X_POT: 9,
+            PlayerAction.RAISE_3X_POT: 10,
+            PlayerAction.ALL_IN: 11
         }
         valid_indices = [action_map[a] for a in valid_actions]
         if len(valid_indices) == 0:

@@ -79,14 +79,10 @@ class PlayerAction(Enum):
     # -----------------------------------------------------
     RAISE = "raise" # Raise minimum (2x la mise précédente)
     RAISE_25_POT = "raise-25%"     # Raise de 25% du pot
-    RAISE_33_POT = "raise-33%"     # Raise de 33% du pot
     RAISE_50_POT = "raise-50%"     # Raise de 50% du pot
-    RAISE_66_POT = "raise-66%"     # Raise de 66% du pot
     RAISE_75_POT = "raise-75%"     # Raise de 75% du pot
     RAISE_100_POT = "raise-100%"   # Raise égal au pot
-    RAISE_125_POT = "raise-125%"   # Raise de 125% du pot
     RAISE_150_POT = "raise-150%"   # Raise de 150% du pot
-    RAISE_175_POT = "raise-175%"   # Raise de 175% du pot
     RAISE_2X_POT = "raise-200%"    # Raise de 2x le pot
     RAISE_3X_POT = "raise-300%"    # Raise de 3x le pot
     # -----------------------------------------------------
@@ -756,27 +752,19 @@ class PokerGame:
         # ---- Raises pot-based (custom) ----
         pot_raise_actions = [
             PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_33_POT,
             PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_66_POT,
             PlayerAction.RAISE_75_POT,
             PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_125_POT,
             PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_175_POT,
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         ]
         raise_percentages = {
             PlayerAction.RAISE_25_POT: 0.25,
-            PlayerAction.RAISE_33_POT: 0.33,
             PlayerAction.RAISE_50_POT: 0.50,
-            PlayerAction.RAISE_66_POT: 0.66,
             PlayerAction.RAISE_75_POT: 0.75,
             PlayerAction.RAISE_100_POT: 1.00,
-            PlayerAction.RAISE_125_POT: 1.25,
             PlayerAction.RAISE_150_POT: 1.50,
-            PlayerAction.RAISE_175_POT: 1.75,
             PlayerAction.RAISE_2X_POT: 2.00,
             PlayerAction.RAISE_3X_POT: 3.00
         }
@@ -823,18 +811,14 @@ class PokerGame:
         btn_height = 30
         gap = 5
         buttons[PlayerAction.RAISE_25_POT] = Button(start_x_row1, y_row1, btn_width, btn_height, "25%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_33_POT] = Button(start_x_row1 + (btn_width + gap) * 1, y_row1, btn_width, btn_height, "33%Pot", pot_raise_color)
         buttons[PlayerAction.RAISE_50_POT] = Button(start_x_row1 + (btn_width + gap) * 2, y_row1, btn_width, btn_height, "50%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_66_POT] = Button(start_x_row1 + (btn_width + gap) * 3, y_row1, btn_width, btn_height, "66%Pot", pot_raise_color)
         buttons[PlayerAction.RAISE_75_POT] = Button(start_x_row1 + (btn_width + gap) * 4, y_row1, btn_width, btn_height, "75%Pot", pot_raise_color)
         buttons[PlayerAction.RAISE_100_POT] = Button(start_x_row1 + (btn_width + gap) * 5, y_row1, btn_width, btn_height, "100%Pot", pot_raise_color)
         
         # Deuxième rangée (5 boutons)
         start_x_row2 = 380
         y_row2 = SCREEN_HEIGHT - 100
-        buttons[PlayerAction.RAISE_125_POT] = Button(start_x_row2, y_row2, btn_width, btn_height, "125%Pot", pot_raise_color)
         buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row2 + (btn_width + gap) * 1, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_175_POT] = Button(start_x_row2 + (btn_width + gap) * 2, y_row2, btn_width, btn_height, "175%Pot", pot_raise_color)
         buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row2 + (btn_width + gap) * 3, y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
         buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row2 + (btn_width + gap) * 4, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
         
@@ -948,27 +932,19 @@ class PokerGame:
         # --- Nouvelles actions pot-based ---
         elif action in {
             PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_33_POT,
             PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_66_POT,
             PlayerAction.RAISE_75_POT,
             PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_125_POT,
             PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_175_POT,
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         }:
             raise_percentages = {
                 PlayerAction.RAISE_25_POT: 0.25,
-                PlayerAction.RAISE_33_POT: 0.33,
                 PlayerAction.RAISE_50_POT: 0.50,
-                PlayerAction.RAISE_66_POT: 0.66,
                 PlayerAction.RAISE_75_POT: 0.75,
                 PlayerAction.RAISE_100_POT: 1.00,
-                PlayerAction.RAISE_125_POT: 1.25,
                 PlayerAction.RAISE_150_POT: 1.50,
-                PlayerAction.RAISE_175_POT: 1.75,
                 PlayerAction.RAISE_2X_POT: 2.00,
                 PlayerAction.RAISE_3X_POT: 3.00
             }
@@ -1043,14 +1019,10 @@ class PokerGame:
         action_text = f"{action.value}"
         if action in [PlayerAction.RAISE, PlayerAction.ALL_IN] or action in {
             PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_33_POT,
             PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_66_POT,
             PlayerAction.RAISE_75_POT,
             PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_125_POT,
             PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_175_POT,
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         }:
@@ -1618,7 +1590,7 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 9", len(state))
 
-        # 10. Actions disponibles (binaire extrême : disponible/indisponible) [77:93]
+        # 10. Actions disponibles (binaire extrême : disponible/indisponible) [77:89]
         action_availability = []
         for action in PlayerAction:
             if action in self.action_buttons and self.action_buttons[action].enabled:
@@ -1630,7 +1602,7 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 10", len(state))
 
-        # 11. Update action encoding for previous actions [93:123]    
+        # 11. Update action encoding for previous actions [89:119]    
         action_encoding = {
             None:     [-1, -1, -1, -1, -1],  # Default encoding for no action
             "fold":   [1, 0, 0, 0, 0],
@@ -1660,7 +1632,7 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 11", len(state))
 
-        # 12 Probabilité de victoire de la main au préflop [123:125]
+        # 12 Probabilité de victoire de la main au préflop [119:121]
         hand_win_prob = self._evaluate_preflop_strength(current_player.cards)
         call_amount = self.current_maximum_bet - current_player.current_player_bet
         pot_odds = call_amount / (self.main_pot + call_amount) if (self.main_pot + call_amount) > 0 else 0
@@ -1670,7 +1642,7 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 12", len(state))
 
-        # 13. Potentiel de quinte et de couleur [125:127]
+        # 13. Potentiel de quinte et de couleur [121:123]
         straight_draw, flush_draw = self.compute_hand_draw_potential(current_player)
         state.append(straight_draw)
         state.append(flush_draw)
@@ -1678,27 +1650,27 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 13", len(state))
 
-        # 14. Main pot [127:128]
+        # 14. Main pot [123:124]
         state.append(self.main_pot / self.starting_stack)
 
         if STATE_DEBUG:
             print("step 14", len(state))
 
-        # 15. Contribution des joueurs [128:134]
+        # 15. Contribution des joueurs [124:130]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack)
 
         if STATE_DEBUG:
             print("step 15", len(state))
 
-        # 16. has_acted status [134:140]
+        # 16. has_acted status [130:136]
         for player in self.players:
             state.append(1 if player.has_acted else -1)
 
         if STATE_DEBUG:
             print("step 16", len(state))
 
-        # 17. Informations sur les mises du round actuel [140:146]
+        # 17. Informations sur les mises du round actuel [136:142]
         for player in self.players:
             state.append(player.current_player_bet / self.starting_stack) # (taille = 6)
 

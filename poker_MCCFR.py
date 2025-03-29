@@ -34,14 +34,10 @@ class MCCFRTrainer:
             raise_percentages = {
                 PlayerAction.RAISE: 0.1,  # Raise minimum (2x)
                 PlayerAction.RAISE_25_POT: 0.25,
-                PlayerAction.RAISE_33_POT: 0.33,
                 PlayerAction.RAISE_50_POT: 0.50,
-                PlayerAction.RAISE_66_POT: 0.66,
                 PlayerAction.RAISE_75_POT: 0.75,
                 PlayerAction.RAISE_100_POT: 1.00,
-                PlayerAction.RAISE_125_POT: 1.25,
                 PlayerAction.RAISE_150_POT: 1.50,
-                PlayerAction.RAISE_175_POT: 1.75,
                 PlayerAction.RAISE_2X_POT: 2.00,
                 PlayerAction.RAISE_3X_POT: 3.00
             }

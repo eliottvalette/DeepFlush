@@ -29,7 +29,7 @@ class PokerGameOptimized:
         self.starting_stack = 100
         
         # Main pot (indice 127)
-        self.main_pot = self._round_value(state[127] * self.starting_stack)
+        self.main_pot = self._round_value(state[123] * self.starting_stack)
         
         # Faire des copies pour éviter de modifier les listes originales
         self.community_cards = visible_community_cards.copy() if visible_community_cards else []
@@ -370,13 +370,7 @@ class PokerGameOptimized:
         if self.current_maximum_bet == 0:
             min_raise = self.big_blind
         else:
-            # Assurer que current_maximum_bet est toujours positif
-            current_max = max(0, self.current_maximum_bet)
-            # Assurer que current_player_bet est toujours positif ou nul
-            current_player_bet = max(0, current_player.current_player_bet)
-            min_raise = (current_max - current_player_bet) * 2
-            # Assurer que min_raise est au moins égal à la big blind
-            min_raise = max(min_raise, self.big_blind)
+            min_raise = (self.current_maximum_bet - current_player.current_player_bet) * 2
         
         if current_player.stack < min_raise:
             self.action_buttons[PlayerAction.RAISE].enabled = False
@@ -388,27 +382,19 @@ class PokerGameOptimized:
         # ---- Raises pot-based (custom) ----
         pot_raise_actions = [
             PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_33_POT,
             PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_66_POT,
             PlayerAction.RAISE_75_POT,
             PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_125_POT,
             PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_175_POT,
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         ]
         raise_percentages = {
             PlayerAction.RAISE_25_POT: 0.25,
-            PlayerAction.RAISE_33_POT: 0.33,
             PlayerAction.RAISE_50_POT: 0.50,
-            PlayerAction.RAISE_66_POT: 0.66,
             PlayerAction.RAISE_75_POT: 0.75,
             PlayerAction.RAISE_100_POT: 1.00,
-            PlayerAction.RAISE_125_POT: 1.25,
             PlayerAction.RAISE_150_POT: 1.50,
-            PlayerAction.RAISE_175_POT: 1.75,
             PlayerAction.RAISE_2X_POT: 2.00,
             PlayerAction.RAISE_3X_POT: 3.00
         }
@@ -468,44 +454,24 @@ class PokerGameOptimized:
         Returns:
             PlayerAction: L'action traitée (pour garder une cohérence dans le type de retour).
         """
-        if DEBUG:
-            print(f"\n[ACTION] {player.name} (seat {player.seat_position}) choisit: {action.value}")
-
-        if player.stack <= 0:
-            if DEBUG:
-                print(f"[ACTION] ❌ ERREUR: {player.name} n'a plus de jetons pourtant il n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}, phase = {self.current_phase}")
-            raise ValueError(f"{player.name} n'a plus de jetons et on lui a demandé de faire l'action {action.value}")
-        
+        #----- Vérification que c'est bien au tour du joueur de jouer -----
         if player.seat_position != self.current_player_seat:
             current_turn_player = self.players[self.current_player_seat].name
-            if DEBUG:
-                print(f"[ACTION] ❌ ERREUR: Ce n'est pas le tour de {player.name}. C'est au tour de {current_turn_player}")
             raise ValueError(
                 f"Erreur d'action : Ce n'est pas le tour de {player.name}. "
                 f"C'est au tour de {current_turn_player} d'agir."
             )
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
-            if DEBUG:
-                print(f"[ACTION] ❌ ERREUR: {player.name} n'est pas censé pouvoir agir - actif={player.is_active}, all-in={player.is_all_in}, folded={player.has_folded}, phase={self.current_phase}")
-            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}, phase = {self.current_phase}")
+            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
         
-        # Mettre à jour l'état des boutons avant de vérifier les actions valides
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
-        if not valid_actions:
-            if DEBUG:
-                print(f"[ACTION] ❌ ERREUR: Aucune action valide disponible pour {player.name}")
-            raise ValueError(f"Aucune action valide disponible pour {player.name}")
-        
         if action not in valid_actions:
-            if DEBUG:
-                print(f"[ACTION] ❌ ERREUR: {player.name} n'a pas le droit de faire l'action {action.value}")
-                print(f"[ACTION] Actions valides: {[a.value for a in valid_actions]}")
             raise ValueError(f"{player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
         
         #----- Affichage de débogage (pour le suivi durant l'exécution) -----
         if DEBUG:
-            print(f"\n=== SIMULATION Action par {player.name} ===")
+            print(f"\n=== Action par {player.name} ===")
             print(f"Joueur actif : {player.is_active}")
             print(f"Action choisie : {action.value}")
             print(f"Phase actuelle : {self.current_phase}")
@@ -520,20 +486,18 @@ class PokerGameOptimized:
         if action == PlayerAction.FOLD:
             # Le joueur se couche il n'est plus actif pour ce tour.
             player.has_folded = True
-            if DEBUG:
+            if DEBUG : 
                 print(f"{player.name} se couche (Fold).")
         
         elif action == PlayerAction.CHECK:
-            if DEBUG:
+            if DEBUG : 
                 print(f"{player.name} check.")
         
         elif action == PlayerAction.CALL:
-            if DEBUG:
+            if DEBUG : 
                 print(f"{player.name} call.")
             call_amount = self.current_maximum_bet - player.current_player_bet
             if call_amount > player.stack: 
-                if DEBUG:
-                    print(f"[ACTION] ❌ ERREUR: {player.name} n'a pas assez de jetons pour call ({player.stack}BB < {call_amount}BB)")
                 raise ValueError(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
         
             player.stack -= call_amount
@@ -542,39 +506,27 @@ class PokerGameOptimized:
             player.total_bet += call_amount
             if player.stack == 0:
                 player.is_all_in = True
-                if DEBUG:
-                    print(f"[ACTION] {player.name} call {call_amount}BB et se retrouve all-in!")
-            else:
-                if DEBUG:
-                    print(f"[ACTION] {player.name} call {call_amount}BB")
-        
+            if DEBUG : 
+                print(f"{player.name} a call {call_amount}BB")
+
         elif action == PlayerAction.RAISE:
-            if DEBUG:
+            if DEBUG : 
                 print(f"{player.name} raise.")
             # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
             else:
-                # Assurer que current_maximum_bet est toujours positif
-                current_max = max(0, self.current_maximum_bet)
-                # Assurer que current_player_bet est toujours positif ou nul
-                current_player_bet = max(0, player.current_player_bet)
-                min_raise = (current_max - current_player_bet) * 2
-                # Assurer que min_raise est au moins égal à la big blind
-                min_raise = max(min_raise, self.big_blind)
+                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
         
             # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
             if bet_amount is None or (bet_amount < min_raise and action != PlayerAction.ALL_IN):
                 bet_amount = min_raise
         
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
-            if player.stack < (bet_amount - max(0, player.current_player_bet)):
-                if DEBUG:
-                    print(f"[ACTION] ❌ ERREUR: {player.name} n'a pas assez pour raise {bet_amount}BB (stack: {player.stack}BB)")
+            if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
-                    f"Actions valides : {[a.value for a in valid_actions]}"
                     f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
-                    f"additionnel requis est {bet_amount - max(0, player.current_player_bet)}BB. Mise minimum requise : {min_raise}BB."
+                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
         
             # Traitement du raise standard
@@ -588,33 +540,25 @@ class PokerGameOptimized:
             self.last_raiser = player.seat_position
             player.is_all_in = player.is_active and (player.stack == 0)
         
-            if DEBUG:
-                print(f"[ACTION] {player.name} raise à {bet_amount}BB (mise: +{actual_bet}BB)")
+            if DEBUG : 
+                print(f"{player.name} a raise {bet_amount}BB")
         
         # --- Nouvelles actions pot-based ---
         elif action in {
             PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_33_POT,
             PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_66_POT,
             PlayerAction.RAISE_75_POT,
             PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_125_POT,
             PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_175_POT,
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         }:
             raise_percentages = {
                 PlayerAction.RAISE_25_POT: 0.25,
-                PlayerAction.RAISE_33_POT: 0.33,
                 PlayerAction.RAISE_50_POT: 0.50,
-                PlayerAction.RAISE_66_POT: 0.66,
                 PlayerAction.RAISE_75_POT: 0.75,
                 PlayerAction.RAISE_100_POT: 1.00,
-                PlayerAction.RAISE_125_POT: 1.25,
                 PlayerAction.RAISE_150_POT: 1.50,
-                PlayerAction.RAISE_175_POT: 1.75,
                 PlayerAction.RAISE_2X_POT: 2.00,
                 PlayerAction.RAISE_3X_POT: 3.00
             }
@@ -627,13 +571,7 @@ class PokerGameOptimized:
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
             else:
-                # Assurer que current_maximum_bet est toujours positif
-                current_max = max(0, self.current_maximum_bet)
-                # Assurer que current_player_bet est toujours positif ou nul
-                current_player_bet = max(0, player.current_player_bet)
-                min_raise = (current_max - current_player_bet) * 2
-                # Assurer que min_raise est au moins égal à la big blind
-                min_raise = max(min_raise, self.big_blind)
+                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
         
             # Vérifier que le montant additionnel respecte le minimum exigé
             if computed_bet - player.current_player_bet < min_raise:
@@ -642,12 +580,10 @@ class PokerGameOptimized:
             bet_amount = computed_bet
         
             # Vérifier que le joueur a suffisamment de jetons pour cette raise
-            if player.stack < (bet_amount - max(0, player.current_player_bet)):
-                if DEBUG:
-                    print(f"[ACTION] ❌ ERREUR: {player.name} n'a pas assez pour raise pot-based {percentage*100:.0f}% à {bet_amount}BB (stack: {player.stack}BB)")
+            if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
                     f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
-                    f"additionnel requis est {bet_amount - max(0, player.current_player_bet)}BB. Mise minimum requise : {min_raise}BB."
+                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
         
             # Traitement de la raise pot-based
@@ -661,19 +597,17 @@ class PokerGameOptimized:
             self.last_raiser = player.seat_position
             player.is_all_in = player.is_active and (player.stack == 0)
         
-            if DEBUG:
-                print(f"[ACTION] {player.name} raise pot-based {percentage*100:.0f}% à {bet_amount}BB (mise: +{actual_bet}BB)")
+            if DEBUG : 
+                print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
         
         
         elif action == PlayerAction.ALL_IN:
-            if DEBUG:
+            if DEBUG : 
                 print(f"{player.name} all-in.")
             # Si aucune valeur n'est passée pour bet_amount, on assigne automatiquement tout le stack
             if bet_amount is None:
                 bet_amount = player.stack
             elif bet_amount != player.stack:
-                if DEBUG:
-                    print(f"[ACTION] ❌ ERREUR: Montant all-in incorrect: {bet_amount}BB != {player.stack}BB")
                 raise ValueError(
                     f"Erreur ALL-IN : {player.name} doit miser exactement tout son stack ({player.stack}BB)."
                 )
@@ -689,29 +623,20 @@ class PokerGameOptimized:
             self.main_pot += bet_amount  # On ajoute le all-in au pot de la phase
             player.total_bet += bet_amount  # On ajoute le all-in à la mise totale du joueur
             player.is_all_in = True  # On indique que le joueur est all-in
-            if DEBUG:
+            if DEBUG : 
                 print(f"{player.name} a all-in {bet_amount}BB")
         
         player.has_acted = True
-        if DEBUG:
-            print(f"[ACTION] État après action - Stack: {player.stack}BB, Mise: {player.current_player_bet}BB, Pot: {self.main_pot}BB")
-            print(f"[ACTION] Vérification de fin de phase...")
         self.check_phase_completion()
-        if DEBUG:
-            print(f"[ACTION] Prochain joueur: {self.players[self.current_player_seat].name} (seat {self.current_player_seat})")
         
         # Mise à jour de l'historique des actions du joueur
         action_text = f"{action.value}"
         if action in [PlayerAction.RAISE, PlayerAction.ALL_IN] or action in {
             PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_33_POT,
             PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_66_POT,
             PlayerAction.RAISE_75_POT,
             PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_125_POT,
             PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_175_POT,
             PlayerAction.RAISE_2X_POT,
             PlayerAction.RAISE_3X_POT
         }:
@@ -1193,7 +1118,6 @@ class PokerGameOptimized:
             
         # Le héros joue d'abord son action
         if trajectory_action not in valid_actions:
-            # Si l'action fournie n'est pas valide, essayer de trouver une action alternative
             print(f"current_player_bet : {hero.current_player_bet}, current_maximum_bet : {self.current_maximum_bet}, stack : {hero.stack}")
             raise ValueError(f"L'action {trajectory_action} n'est pas valide. Utilisation d'une action alternative parmi: {valid_actions}")
             
@@ -1252,11 +1176,11 @@ class PokerGameOptimized:
         # Extraction des mises actuelles (indices 59-65)
         current_total_bets = [self._round_value(state[59+i] * self.starting_stack) for i in range(6)]
 
-        # Extraction des mises actuelles du round actuel (indices 140-146)
-        current_round_bets = [self._round_value(state[140+i] * self.starting_stack) for i in range(6)]
+        # Extraction des mises actuelles du round actuel (indices 136-142)
+        current_round_bets = [self._round_value(state[136+i] * self.starting_stack) for i in range(6)]
 
-        # Extraction des actions effectuées (indices 134-139)
-        has_acted_states = [state[134+i] == 1 for i in range(6)]
+        # Extraction des actions effectuées (indices 130-135)
+        has_acted_states = [state[130+i] == 1 for i in range(6)]
         
         # Créer les joueurs
         for i in range(6):
@@ -1282,6 +1206,6 @@ class PokerGameOptimized:
         
         return players
 
-    def _round_value(self, value, decimals=5):
+    def _round_value(self, value, decimals=4):
         """Arrondit une valeur à un nombre spécifié de décimales pour éviter les erreurs de précision."""
         return round(value, decimals)

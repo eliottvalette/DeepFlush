@@ -91,7 +91,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state()
-        print(f"[OUT]current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
         if DEBUG:
             print(f"state : {state}")
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
