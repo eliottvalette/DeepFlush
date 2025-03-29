@@ -3,7 +3,7 @@ import random as rd
 import numpy as np
 import torch
 
-EPISODES = 1000
+EPISODES = 1
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9992
@@ -11,7 +11,7 @@ START_EPS = 0.9
 STATE_SIZE = 134
 
 # Paramètres de visualisation
-DEBUG = False
+DEBUG = True
 RENDERING = False
 FPS = 3
 
@@ -20,7 +20,7 @@ SAVE_INTERVAL = 250
 PLOT_INTERVAL = 500
 
 # Nombre de Simulations
-MC_SIMULATIONS = 10
+MC_SIMULATIONS = 3
 
 def set_seed(seed=42):
     rd.seed(seed)
