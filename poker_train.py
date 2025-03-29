@@ -99,6 +99,12 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             visible_community_cards = env.community_cards,
             num_active_players = len(players_that_can_play)
         )
+        print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
+        time.sleep(2)
+
+        review_state = env.get_state()
+        if state.tolist() != review_state.tolist():
+            raise ValueError(f"state != review_state => {state.tolist()} != {review_state.tolist()}")
 
         # Exécuter l'action dans l'environnement
         next_state, _ = env.step(action_chosen)

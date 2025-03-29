@@ -1698,6 +1698,13 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 16", len(state))
 
+        # 17. Informations sur les mises du round actuel [140:146]
+        for player in self.players:
+            state.append(player.current_player_bet / self.starting_stack) # (taille = 6)
+
+        if STATE_DEBUG:
+            print("step 17", len(state))
+
         # Avant de retourner, conversion en tableau numpy.
         state = np.array(state, dtype=np.float32)
         return state

@@ -22,7 +22,7 @@ class PokerGameOptimized:
         Initialise la partie de poker avec un état plat pour la simulation MCCFR.
         """
         if DEBUG:
-            print("========== INITIALISATION NOUVELLE PARTIE DE POKER ==========")
+            print("========== INITIALISATION NOUVELLE SIMULATION DE POKER ==========")
         self.num_players = 6
         self.small_blind = 0.5
         self.big_blind = 1
@@ -54,6 +54,7 @@ class PokerGameOptimized:
             print(f"[INIT] Phase de jeu: {self.current_phase}")
             
         # Position du bouton
+        self.hero_seat = hero_seat
         self.button_seat_position = button_seat_position
         self.current_player_seat = hero_seat
         
@@ -75,6 +76,8 @@ class PokerGameOptimized:
         self.initial_stacks = {player.name: state[53 + player.seat_position] * self.starting_stack for player in self.players}
         self.net_stack_changes = {player.name: player.stack - self.initial_stacks[player.name] for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
+
+        self.hero_stack_change = None
         
         # Affichage des joueurs et leurs stacks
         for player in self.players:
@@ -369,7 +372,13 @@ class PokerGameOptimized:
         if self.current_maximum_bet == 0:
             min_raise = self.big_blind
         else:
-            min_raise = (self.current_maximum_bet - current_player.current_player_bet) * 2
+            # Assurer que current_maximum_bet est toujours positif
+            current_max = max(0, self.current_maximum_bet)
+            # Assurer que current_player_bet est toujours positif ou nul
+            current_player_bet = max(0, current_player.current_player_bet)
+            min_raise = (current_max - current_player_bet) * 2
+            # Assurer que min_raise est au moins égal à la big blind
+            min_raise = max(min_raise, self.big_blind)
         
         if current_player.stack < min_raise:
             self.action_buttons[PlayerAction.RAISE].enabled = False
@@ -484,7 +493,6 @@ class PokerGameOptimized:
             raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}, phase = {self.current_phase}")
         
         # Mettre à jour l'état des boutons avant de vérifier les actions valides
-        self._update_button_states()
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if not valid_actions:
             if DEBUG:
@@ -549,19 +557,26 @@ class PokerGameOptimized:
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
             else:
-                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
+                # Assurer que current_maximum_bet est toujours positif
+                current_max = max(0, self.current_maximum_bet)
+                # Assurer que current_player_bet est toujours positif ou nul
+                current_player_bet = max(0, player.current_player_bet)
+                min_raise = (current_max - current_player_bet) * 2
+                # Assurer que min_raise est au moins égal à la big blind
+                min_raise = max(min_raise, self.big_blind)
         
             # Si aucune valeur n'est fournie ou si elle est inférieure au minimum, utiliser le minimum raise.
             if bet_amount is None or (bet_amount < min_raise and action != PlayerAction.ALL_IN):
                 bet_amount = min_raise
         
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
-            if player.stack < (bet_amount - player.current_player_bet):
+            if player.stack < (bet_amount - max(0, player.current_player_bet)):
                 if DEBUG:
                     print(f"[ACTION] ❌ ERREUR: {player.name} n'a pas assez pour raise {bet_amount}BB (stack: {player.stack}BB)")
                 raise ValueError(
+                    f"Actions valides : {[a.value for a in valid_actions]}"
                     f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
-                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
+                    f"additionnel requis est {bet_amount - max(0, player.current_player_bet)}BB. Mise minimum requise : {min_raise}BB."
                 )
         
             # Traitement du raise standard
@@ -614,7 +629,13 @@ class PokerGameOptimized:
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
             else:
-                min_raise = (self.current_maximum_bet - player.current_player_bet) * 2
+                # Assurer que current_maximum_bet est toujours positif
+                current_max = max(0, self.current_maximum_bet)
+                # Assurer que current_player_bet est toujours positif ou nul
+                current_player_bet = max(0, player.current_player_bet)
+                min_raise = (current_max - current_player_bet) * 2
+                # Assurer que min_raise est au moins égal à la big blind
+                min_raise = max(min_raise, self.big_blind)
         
             # Vérifier que le montant additionnel respecte le minimum exigé
             if computed_bet - player.current_player_bet < min_raise:
@@ -623,12 +644,12 @@ class PokerGameOptimized:
             bet_amount = computed_bet
         
             # Vérifier que le joueur a suffisamment de jetons pour cette raise
-            if player.stack < (bet_amount - player.current_player_bet):
+            if player.stack < (bet_amount - max(0, player.current_player_bet)):
                 if DEBUG:
                     print(f"[ACTION] ❌ ERREUR: {player.name} n'a pas assez pour raise pot-based {percentage*100:.0f}% à {bet_amount}BB (stack: {player.stack}BB)")
                 raise ValueError(
                     f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
-                    f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
+                    f"additionnel requis est {bet_amount - max(0, player.current_player_bet)}BB. Mise minimum requise : {min_raise}BB."
                 )
         
             # Traitement de la raise pot-based
@@ -884,8 +905,11 @@ class PokerGameOptimized:
         self.net_stack_changes = {player.name: (player.stack - self.initial_stacks.get(player.name, 0)) 
                                 for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
+
+        # Calculer le changement de stack du héros (payoff)
+        self.hero_stack_change = self.net_stack_changes[self.players[self.hero_seat].name]
         
-        if DEBUG:
+        if DEBUG or True:
             print("[SHOWDOWN] Stacks finaux:")
             for player in self.players:
                 change = self.net_stack_changes[player.name]
@@ -1152,8 +1176,7 @@ class PokerGameOptimized:
         """
         # Nous sommes au tour du joueur courant (hero)
         hero = self.players[self.current_player_seat]
-        hero_initial_stack = hero.stack + hero.total_bet
-        
+
         # On fait une copie des cartes pour éviter de les consommer dans l'original
         rd_opponents_cards_copy = self.rd_opponents_cards.copy() if self.rd_opponents_cards else []
         
@@ -1176,21 +1199,10 @@ class PokerGameOptimized:
         # Le héros joue d'abord son action
         if trajectory_action not in valid_actions:
             # Si l'action fournie n'est pas valide, essayer de trouver une action alternative
-            if valid_actions:
-                if DEBUG:
-                    print(f"L'action {trajectory_action} n'est pas valide. Utilisation d'une action alternative parmi: {valid_actions}")
-                trajectory_action = rd.choice(valid_actions)
-            else:
-                if DEBUG:
-                    print("Aucune action valide disponible. Fin de la simulation.")
-                return 0
-        
-        bet_amount = None
-        if trajectory_action == PlayerAction.ALL_IN:
-            bet_amount = hero.stack
+            raise ValueError(f"L'action {trajectory_action} n'est pas valide. Utilisation d'une action alternative parmi: {valid_actions}")
             
         # Exécute l'action du héros
-        self.process_action(hero, trajectory_action, bet_amount)
+        self.process_action(hero, trajectory_action)
         
         # Simulation du jeu jusqu'à la fin de la main
         while self.current_phase != GamePhase.SHOWDOWN:
@@ -1224,10 +1236,8 @@ class PokerGameOptimized:
                     bet_amount = current_player.stack
                     
                 self.process_action(current_player, random_action, bet_amount)
-        
-        # À ce stade, nous avons atteint le showdown, calculer le gain du héros
-        hero_final_stack = hero.stack
-        payoff = hero_final_stack - hero_initial_stack
+
+        payoff = self.hero_stack_change
         
         return payoff
 
@@ -1244,7 +1254,10 @@ class PokerGameOptimized:
         active_states = [state[65+i] > 0 for i in range(6)]
         
         # Extraction des mises actuelles (indices 59-65)
-        current_bets = [state[59+i] * self.starting_stack for i in range(6)]
+        current_total_bets = [state[59+i] * self.starting_stack for i in range(6)]
+
+        # Extraction des mises actuelles du round actuel (indices 140-146)
+        current_round_bets = [state[140+i] * self.starting_stack for i in range(6)]
 
         # Extraction des actions effectuées (indices 134-139)
         has_acted_states = [state[134+i] == 1 for i in range(6)]
@@ -1260,8 +1273,8 @@ class PokerGameOptimized:
             player.is_active = active_states[i]
             player.has_folded = not active_states[i]
             player.is_all_in = player.is_active and (player.stack == 0)
-            player.current_player_bet = current_bets[i]
-            player.total_bet = current_bets[i]
+            player.current_player_bet = current_round_bets[i]
+            player.total_bet = current_total_bets[i]
             player.cards = []
             players.append(player)
             player.has_acted = has_acted_states[i]

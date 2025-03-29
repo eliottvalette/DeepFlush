@@ -8,7 +8,7 @@ GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9992
 START_EPS = 0.9
-STATE_SIZE = 140
+STATE_SIZE = 146
 
 # Paramètres de visualisation
 DEBUG = False
@@ -20,7 +20,7 @@ SAVE_INTERVAL = 250
 PLOT_INTERVAL = 500
 
 # Nombre de Simulations
-MC_SIMULATIONS = 100
+MC_SIMULATIONS = 1
 
 def set_seed(seed=42):
     rd.seed(seed)

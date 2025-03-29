@@ -47,7 +47,7 @@ if False:
         agent.memory = shared_memory
 
 # Test avec un seul Joueur avec un modèle et tous les autres jouent au hasard (ils gardent leur mémoire vide et donc n'apprennent jamais)
-elif True:
+elif False:
     for agent in agent_list[1:]:
         agent.memory = deque(maxlen=0)
 
