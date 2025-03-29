@@ -54,6 +54,9 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         env.start_new_hand()
         number_of_hand_per_game += 1    
 
+    # Initialiser un dictionnaire qui associe à chaque agent son stack initial
+    initial_stacks = {player.name: player.stack for player in env.players}
+
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
     initial_state = env.get_state()  # état initial (vecteur de dimension 116)
@@ -88,6 +91,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state()
+        print(f"[OUT]current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
         if DEBUG:
             print(f"state : {state}")
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
@@ -97,10 +101,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             button_seat = env.button_seat_position,
             hero_cards = current_player.cards,
             visible_community_cards = env.community_cards,
-            num_active_players = len(players_that_can_play)
+            num_active_players = len(players_that_can_play),
+            initial_stacks = initial_stacks.copy()
         )
-        print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
-        time.sleep(2)
+        if DEBUG:
+            print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
 
         review_state = env.get_state()
         if state.tolist() != review_state.tolist():

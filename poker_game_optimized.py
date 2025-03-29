@@ -17,7 +17,7 @@ class PokerGameOptimized:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.
     """
-    def __init__(self, state : List[float], hero_cards: List[Tuple[int, str]], hero_seat: int, button_seat_position: int, visible_community_cards: List[Tuple[int, str]], rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]]):
+    def __init__(self, state : List[float], hero_cards: List[Tuple[int, str]], hero_seat: int, button_seat_position: int, visible_community_cards: List[Tuple[int, str]], rd_opponents_cards: List[List[Tuple[int, str]]], rd_missing_community_cards: List[Tuple[int, str]], initial_stacks: Dict[str, float]):
         """
         Initialise la partie de poker avec un état plat pour la simulation MCCFR.
         """
@@ -29,7 +29,7 @@ class PokerGameOptimized:
         self.starting_stack = 100
         
         # Main pot (indice 127)
-        self.main_pot = state[127] * self.starting_stack
+        self.main_pot = self._round_value(state[127] * self.starting_stack)
         
         # Faire des copies pour éviter de modifier les listes originales
         self.community_cards = visible_community_cards.copy() if visible_community_cards else []
@@ -59,7 +59,7 @@ class PokerGameOptimized:
         self.current_player_seat = hero_seat
         
         # Mise maximale (indice 52)
-        self.current_maximum_bet = state[52] * self.starting_stack
+        self.current_maximum_bet = self._round_value(state[52] * self.starting_stack)
         
         # Initialiser les joueurs avec leurs stacks (indices 53-59)
         self.players = self._initialize_simulated_players(state)
@@ -73,11 +73,9 @@ class PokerGameOptimized:
         
         # Initialiser les stacks APRÈS avoir créé les joueurs
         # On utilise les stacks déjà initialisés dans _initialize_simulated_players
-        self.initial_stacks = {player.name: state[53 + player.seat_position] * self.starting_stack for player in self.players}
+        self.initial_stacks = initial_stacks.copy()
         self.net_stack_changes = {player.name: player.stack - self.initial_stacks[player.name] for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
-
-        self.hero_stack_change = None
         
         # Affichage des joueurs et leurs stacks
         for player in self.players:
@@ -905,9 +903,6 @@ class PokerGameOptimized:
         self.net_stack_changes = {player.name: (player.stack - self.initial_stacks.get(player.name, 0)) 
                                 for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
-
-        # Calculer le changement de stack du héros (payoff)
-        self.hero_stack_change = self.net_stack_changes[self.players[self.hero_seat].name]
         
         if DEBUG or True:
             print("[SHOWDOWN] Stacks finaux:")
@@ -1199,6 +1194,7 @@ class PokerGameOptimized:
         # Le héros joue d'abord son action
         if trajectory_action not in valid_actions:
             # Si l'action fournie n'est pas valide, essayer de trouver une action alternative
+            print(f"current_player_bet : {hero.current_player_bet}, current_maximum_bet : {self.current_maximum_bet}, stack : {hero.stack}")
             raise ValueError(f"L'action {trajectory_action} n'est pas valide. Utilisation d'une action alternative parmi: {valid_actions}")
             
         # Exécute l'action du héros
@@ -1237,7 +1233,7 @@ class PokerGameOptimized:
                     
                 self.process_action(current_player, random_action, bet_amount)
 
-        payoff = self.hero_stack_change
+        payoff = hero.stack - self.initial_stacks[hero.name]
         
         return payoff
 
@@ -1248,16 +1244,16 @@ class PokerGameOptimized:
         players = []
         
         # Extraction des stacks (indices 53-59)
-        stacks = [state[53+i] * self.starting_stack for i in range(6)]
+        stacks = [self._round_value(state[53+i] * self.starting_stack) for i in range(6)]
         
         # Extraction de l'état actif des joueurs (indices 65-71)
         active_states = [state[65+i] > 0 for i in range(6)]
         
         # Extraction des mises actuelles (indices 59-65)
-        current_total_bets = [state[59+i] * self.starting_stack for i in range(6)]
+        current_total_bets = [self._round_value(state[59+i] * self.starting_stack) for i in range(6)]
 
         # Extraction des mises actuelles du round actuel (indices 140-146)
-        current_round_bets = [state[140+i] * self.starting_stack for i in range(6)]
+        current_round_bets = [self._round_value(state[140+i] * self.starting_stack) for i in range(6)]
 
         # Extraction des actions effectuées (indices 134-139)
         has_acted_states = [state[134+i] == 1 for i in range(6)]
@@ -1285,3 +1281,7 @@ class PokerGameOptimized:
             print("players", players)
         
         return players
+
+    def _round_value(self, value, decimals=5):
+        """Arrondit une valeur à un nombre spécifié de décimales pour éviter les erreurs de précision."""
+        return round(value, decimals)
