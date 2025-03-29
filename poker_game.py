@@ -179,6 +179,9 @@ class Player:
         self.total_bet = 0  # Cumul des mises effectuées dans la main
         self.x, self.y = POSITIONS[self.seat_position]
         self.has_acted = False # True si le joueur a fait une action dans la phase courante (nécessaire pour savoir si le tour est terminé, car si le premier joueur de la phase check, tous les jouers sont a bet égal et ca déclencherait la phase suivante)
+    
+    def __str__(self):
+        return f"Player(name={self.name}, stack={self.stack}, cards={self.cards}, is_active={self.is_active}, has_folded={self.has_folded}, is_all_in={self.is_all_in}, range={self.range}, current_player_bet={self.current_player_bet}, total_bet={self.total_bet}, x={self.x}, y={self.y}, has_acted={self.has_acted})"
 
 class SidePot:
     """
@@ -937,6 +940,7 @@ class PokerGame:
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
             self.last_raiser = player.seat_position
+            player.is_all_in = player.is_active and (player.stack == 0)
         
             if DEBUG : 
                 print(f"{player.name} a raise {bet_amount}BB")
@@ -1001,6 +1005,7 @@ class PokerGame:
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
             self.last_raiser = player.seat_position
+            player.is_all_in = player.is_active and (player.stack == 0)
         
             if DEBUG : 
                 print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
@@ -1455,7 +1460,7 @@ class PokerGame:
             - Mise actuelle normalisée pour chaque joueur
         
         8. État des joueurs (6 dimensions) :
-            - 1 si actif et non foldé, -1 sinon
+            - 1 si actif, -1 sinon
         
         9. Positions relatives (6 dimensions) :
             - One-hot encoding de la position relative au bouton
@@ -1482,7 +1487,7 @@ class PokerGame:
             - Contribution des joueurs
         
         Returns:
-            numpy.ndarray: Vecteur d'état de dimension 134, normalisé entre -1 et 1
+            numpy.ndarray: Vecteur d'état de dimension 139, normalisé entre -1 et 1
         """
         current_player = self.players[self.current_player_seat]
         state = []
@@ -1597,9 +1602,9 @@ class PokerGame:
         if STATE_DEBUG:
             print("step 7", len(state))
 
-        # 8. Informations sur l'activité (fold ou inactif) [65:71]
+        # 8. Informations sur l'activité [65:71]
         for player in self.players:
-            state.append(1 if ((not player.has_folded) and player.is_active) else -1) # (taille = 6)
+            state.append(1 if player.is_active else -1) # (taille = 6)
 
         if STATE_DEBUG:
             print("step 8", len(state))
@@ -1685,6 +1690,13 @@ class PokerGame:
 
         if STATE_DEBUG:
             print("step 15", len(state))
+
+        # 16. has_acted status [134:140]
+        for player in self.players:
+            state.append(1 if player.has_acted else -1)
+
+        if STATE_DEBUG:
+            print("step 16", len(state))
 
         # Avant de retourner, conversion en tableau numpy.
         state = np.array(state, dtype=np.float32)

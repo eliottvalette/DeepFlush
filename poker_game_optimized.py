@@ -573,6 +573,7 @@ class PokerGameOptimized:
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
             self.last_raiser = player.seat_position
+            player.is_all_in = player.is_active and (player.stack == 0)
         
             if DEBUG:
                 print(f"[ACTION] {player.name} raise à {bet_amount}BB (mise: +{actual_bet}BB)")
@@ -639,6 +640,7 @@ class PokerGameOptimized:
             self.current_maximum_bet = bet_amount
             self.number_raise_this_game_phase += 1
             self.last_raiser = player.seat_position
+            player.is_all_in = player.is_active and (player.stack == 0)
         
             if DEBUG:
                 print(f"[ACTION] {player.name} raise pot-based {percentage*100:.0f}% à {bet_amount}BB (mise: +{actual_bet}BB)")
@@ -1243,6 +1245,9 @@ class PokerGameOptimized:
         
         # Extraction des mises actuelles (indices 59-65)
         current_bets = [state[59+i] * self.starting_stack for i in range(6)]
+
+        # Extraction des actions effectuées (indices 134-139)
+        has_acted_states = [state[134+i] == 1 for i in range(6)]
         
         # Créer les joueurs
         for i in range(6):
@@ -1254,11 +1259,16 @@ class PokerGameOptimized:
             )
             player.is_active = active_states[i]
             player.has_folded = not active_states[i]
+            player.is_all_in = player.is_active and (player.stack == 0)
             player.current_player_bet = current_bets[i]
             player.total_bet = current_bets[i]
             player.cards = []
             players.append(player)
+            player.has_acted = has_acted_states[i]
             
             player.role_position = (player.seat_position - self.button_seat_position - 1) % 6
+        
+        if DEBUG:
+            print("players", players)
         
         return players

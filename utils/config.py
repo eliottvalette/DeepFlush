@@ -3,15 +3,15 @@ import random as rd
 import numpy as np
 import torch
 
-EPISODES = 1
+EPISODES = 100
 GAMMA = 0.9985
 ALPHA = 0.001
 EPS_DECAY = 0.9992
 START_EPS = 0.9
-STATE_SIZE = 134
+STATE_SIZE = 140
 
 # Paramètres de visualisation
-DEBUG = True
+DEBUG = False
 RENDERING = False
 FPS = 3
 
