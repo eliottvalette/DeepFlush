@@ -104,7 +104,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             initial_stacks = initial_stacks.copy()
         )
 
-        if DEBUG or True:
+        if DEBUG:
             print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
             time.sleep(1)
 

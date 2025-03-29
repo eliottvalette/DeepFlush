@@ -192,7 +192,6 @@ class SidePot:
         self.contributions_dict = {} # Dictionnaire des contributions de chaque joueur dans le side pot
         self.sum_of_contributions = 0 # Montant total dans le side pot
 
-
 class PokerGame:
     """
     Classe principale qui gère l'état et la logique du jeu de poker.

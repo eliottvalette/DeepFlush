@@ -275,7 +275,6 @@ class PokerGameOptimized:
         Réinitialise et mélange le jeu avant la distribution.
         """
         # Deal two cards to each active player
-        print('self.rd_opponents_cards : ', self.rd_opponents_cards)
         for player in self.players:
             if not player.is_active:
                 continue
@@ -284,8 +283,9 @@ class PokerGameOptimized:
             else:
                 player.cards = self.rd_opponents_cards.pop()
 
-        for player in self.players:
-            print(f"[CARDS] player : {player.name}, cards : {[card.value for card in player.cards]}")
+        if DEBUG:
+            for player in self.players:
+                print(f"[CARDS] player : {player.name}, cards : {[card.value for card in player.cards]}")
 
     def advance_phase(self):
         """
