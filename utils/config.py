@@ -6,12 +6,12 @@ import torch
 EPISODES = 5_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9992
-START_EPS = 0.2
+EPS_DECAY = 0.9993
+START_EPS = 0.9
 STATE_SIZE = 142
 
 # Paramètres de visualisation
-DEBUG = True
+DEBUG = False
 RENDERING = False
 FPS = 3
 

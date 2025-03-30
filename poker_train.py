@@ -46,7 +46,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 3 or number_of_hand_per_game > 100:  # Évite les heads-up
+    if len(players_that_can_play) < 3 or number_of_hand_per_game > 5:  # Évite les heads-up
         env.reset()
         number_of_hand_per_game = 0
         players_that_can_play = [p for p in env.players if p.stack > 0]
@@ -87,12 +87,14 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         player_state_seq = state_seq[current_player.name]
 
         # Prédiction avec une inférence classique du modèle
-        action_chosen, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions, epsilon)
+        chosen_action, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions, epsilon)
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state()
         if DEBUG:
             print(f"state : {state}")
+            print(f"\ncurrent_player.name : {current_player.name}, current_phase : {env.current_phase}, chosen_action : {chosen_action}\n")
+            print(f"current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
             valid_actions = valid_actions, 
             state = state, 
@@ -113,7 +115,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             raise ValueError(f"state != review_state => {state.tolist()} != {review_state.tolist()}")
 
         # Exécuter l'action dans l'environnement
-        next_state, _ = env.step(action_chosen)
+        next_state, _ = env.step(chosen_action)
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         if env.current_phase != GamePhase.SHOWDOWN:
@@ -124,7 +126,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             state_info = {
                 "player": current_player.name,
                 "phase": env.current_phase.value,
-                "action": action_chosen.value,
+                "action": chosen_action.value,
                 "final_stacks": env.final_stacks,
                 "num_active_players": len(players_that_can_play),
                 "state_vector": current_state.tolist(),

@@ -881,14 +881,14 @@ class PokerGame:
         elif action == PlayerAction.CALL:
             if DEBUG : 
                 print(f"{player.name} call.")
-            call_amount = self.current_maximum_bet - player.current_player_bet
+            call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
             if call_amount > player.stack: 
                 raise ValueError(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
         
-            player.stack -= call_amount
-            player.current_player_bet += call_amount
-            self.main_pot += call_amount
-            player.total_bet += call_amount
+            player.stack = self._round_value(player.stack - call_amount)
+            player.current_player_bet = self._round_value(player.current_player_bet + call_amount)
+            self.main_pot = self._round_value(self.main_pot + call_amount)
+            player.total_bet = self._round_value(player.total_bet + call_amount)
             if player.stack == 0:
                 player.is_all_in = True
             if DEBUG : 
@@ -915,12 +915,12 @@ class PokerGame:
                 )
         
             # Traitement du raise standard
-            actual_bet = bet_amount - player.current_player_bet  # Calculer combien de jetons le joueur doit ajouter
-            player.stack -= actual_bet
-            player.current_player_bet = bet_amount
-            self.main_pot += actual_bet
-            player.total_bet += actual_bet
-            self.current_maximum_bet = bet_amount
+            actual_bet = self._round_value(bet_amount - player.current_player_bet)
+            player.stack = self._round_value(player.stack - actual_bet)
+            player.current_player_bet = self._round_value(bet_amount)
+            self.main_pot = self._round_value(self.main_pot + actual_bet)
+            player.total_bet = self._round_value(player.total_bet + actual_bet)
+            self.current_maximum_bet = self._round_value(bet_amount)
             self.number_raise_this_game_phase += 1
             self.last_raiser = player.seat_position
             player.is_all_in = player.is_active and (player.stack == 0)
@@ -949,9 +949,9 @@ class PokerGame:
             }
             percentage = raise_percentages[action]
             # Calcul de la raise additionnelle basée sur le pourcentage du pot
-            custom_raise_amount = self.main_pot * percentage
+            custom_raise_amount = self._round_value(self.main_pot * percentage)
             # La nouvelle mise est : la mise actuelle + montant pour caller + raise additionnel
-            computed_bet = player.current_player_bet + custom_raise_amount
+            computed_bet = self._round_value(player.current_player_bet + custom_raise_amount)
         
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
@@ -1027,7 +1027,7 @@ class PokerGame:
         }:
             action_text += f" {bet_amount}BB"
         elif action == PlayerAction.CALL:
-            call_amount = self.current_maximum_bet - player.current_player_bet
+            call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
             action_text += f" {call_amount}BB"
         
         # Add action to player's history
@@ -1179,6 +1179,7 @@ class PokerGame:
         # Cas particulier : victoire par fold (il ne reste qu'un joueur actif)
         if len(active_players) == 1:
             winner = active_players[0]
+            winner.stack = self._round_value(winner.stack + self.main_pot)
             contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
             total_pot = sum(contributions.values())
             if DEBUG:
@@ -1281,11 +1282,11 @@ class PokerGame:
                         winners.append(player)
         
                 if winners:
-                    share = pot["amount"] / len(winners)
+                    share = self._round_value(pot['amount'] / len(winners))
                     if DEBUG:
                         print(f"Gagnant(s): {[w.name for w in winners]}, {share:.2f}BB chacun")
                     for winner in winners:
-                        winner.stack += share
+                        winner.stack = self._round_value(winner.stack + share)
                 else:
                     share = 0
                     if DEBUG:
@@ -2196,6 +2197,9 @@ class PokerGame:
 
         return straight_draw, flush_draw
 
+    def _round_value(self, value, decimals=4):
+        """Arrondit une valeur à un nombre spécifié de décimales pour éviter les erreurs de précision."""
+        return round(value, decimals)
 
 # ======================================================================
 # Interface graphique et affichage
