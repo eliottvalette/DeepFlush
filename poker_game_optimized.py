@@ -665,7 +665,7 @@ class PokerGameOptimized:
         if len(self.pygame_action_history[player.name]) > 5:
             self.pygame_action_history[player.name].pop(0)
         
-        next_state = self.get_state()
+        next_state = self.get_state(seat_position = player.seat_position)
 
         return next_state
 
@@ -1186,7 +1186,7 @@ class PokerGameOptimized:
         """Arrondit une valeur à un nombre spécifié de décimales pour éviter les erreurs de précision."""
         return round(value, decimals)
     
-    def get_state(self):
+    def get_state(self, seat_position: int):
         """
         Obtient l'état actuel du jeu sous forme d'un vecteur d'état pour l'apprentissage par renforcement.
         
@@ -1250,7 +1250,7 @@ class PokerGameOptimized:
         Returns:
             numpy.ndarray: Vecteur d'état de dimension 139, normalisé entre -1 et 1
         """
-        current_player = self.players[self.current_player_seat]
+        current_player = self.players[seat_position]
         state = []
         STATE_DEBUG = False
 

@@ -59,7 +59,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
-    initial_state = env.get_state()  # état initial (vecteur de dimension 116)
+    initial_state = env.get_state(seat_position = env.current_player_seat)  # état initial (vecteur de dimension 116)
 
     # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
@@ -90,7 +90,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         chosen_action, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions, epsilon)
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
-        state = env.get_state()
+        state = env.get_state(seat_position = current_player.seat_position)
         if DEBUG:
             print(f"state : {state}")
             print(f"\ncurrent_player.name : {current_player.name}, current_phase : {env.current_phase}, chosen_action : {chosen_action}\n")
@@ -111,7 +111,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
             time.sleep(10)
 
-        review_state = env.get_state()
+        review_state = env.get_state(seat_position = current_player.seat_position)
         if state.tolist() != review_state.tolist():
             raise ValueError(f"state != review_state => {state.tolist()} != {review_state.tolist()}")
 

@@ -301,7 +301,7 @@ class PokerGame:
         self.start_new_hand()
         self._update_button_states()
         
-        return self.get_state()
+        return self.get_state(seat_position = self.current_player_seat)
 
     def start_new_hand(self):
         """
@@ -424,7 +424,7 @@ class PokerGame:
                 else :
                     print(f"{p.name}: seat={p.seat_position}, role=(inactive), stack={p.stack}")
 
-        return self.get_state()
+        return self.get_state(seat_position = self.current_player_seat)
 
     def _initialize_players(self, agents) -> List[Player]:
         """
@@ -1396,7 +1396,7 @@ class PokerGame:
     # --------------------------------
     # Methodes Nécessaires pour le RL
     # --------------------------------
-    def get_state(self):
+    def get_state(self, seat_position: int):
         """
         Obtient l'état actuel du jeu sous forme d'un vecteur d'état pour l'apprentissage par renforcement.
         
@@ -1460,7 +1460,7 @@ class PokerGame:
         Returns:
             numpy.ndarray: Vecteur d'état de dimension 139, normalisé entre -1 et 1
         """
-        current_player = self.players[self.current_player_seat]
+        current_player = self.players[seat_position]
         state = []
         STATE_DEBUG = False
 
@@ -2014,7 +2014,7 @@ class PokerGame:
 
         # Traiter l'action (met à jour l'état du jeu)
         action = self.process_action(current_player, action, bet_amount)
-        next_state = self.get_state()
+        next_state = self.get_state(seat_position = current_player.seat_position)
 
         return next_state, reward
 
@@ -2518,7 +2518,7 @@ class PokerGame:
                     if event.key == pygame.K_c:
                         print(self.players)
                     if event.key == pygame.K_s:
-                        state = self.get_state()
+                        state = self.get_state(seat_position = self.current_player_seat)
                         print('\n=== État actuel du jeu ===')
                         
                         # Affichage complet du state pour vérifier toutes les informations (par ex. si les cartes sont suited ou non)
