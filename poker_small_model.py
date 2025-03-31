@@ -6,13 +6,19 @@ import torch.nn.functional as F
 
 class PokerSmallModel(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=512):
-        super(PokerSmallModel, self).__init__()
+        super().__init__()
         
         # Couches communes pour traiter l'état
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, hidden_dim)
         self.fc4 = nn.Linear(hidden_dim, hidden_dim)
+
+        # BatchNorm
+        self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.bn2 = nn.BatchNorm1d(hidden_dim)
+        self.bn3 = nn.BatchNorm1d(hidden_dim)
+        self.bn4 = nn.BatchNorm1d(hidden_dim)
         
         # Tête pour les probabilités d'action (politique)
         self.action_head = nn.Linear(hidden_dim, output_dim)
@@ -34,13 +40,13 @@ class PokerSmallModel(nn.Module):
             x = x[:, -1, :]  # Prendre le dernier état de la séquence pour chaque élément du batch
         
         # Traitement de l'état à travers les couches communes
-        x = F.relu(self.fc1(x))
+        x = F.relu(self.bn1(self.fc1(x)))
         x = F.dropout(x, p=0.15)
-        x = F.relu(self.fc2(x))
+        x = F.relu(self.bn2(self.fc2(x)))
         x = F.dropout(x, p=0.15)
-        x = F.relu(self.fc3(x))
+        x = F.relu(self.bn3(self.fc3(x)))
         x = F.dropout(x, p=0.15)
-        x = F.relu(self.fc4(x))
+        x = F.relu(self.bn4(self.fc4(x)))
         
         # Calcul des probabilités d'action (utilise softmax pour normaliser)
         action_probs = F.softmax(self.action_head(x), dim=-1)

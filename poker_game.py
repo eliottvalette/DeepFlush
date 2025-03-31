@@ -13,7 +13,7 @@ import pygame.font
 import numpy as np
 
 SCREEN_WIDTH = 1400
-SCREEN_HEIGHT = 900
+SCREEN_HEIGHT = 830
 POSITIONS = [
     (SCREEN_WIDTH-550, SCREEN_HEIGHT-250),         # Bas-Droite (Joueur 1)
     (420             , SCREEN_HEIGHT-250),         # Bas-Gauche (Joueur 2) 
@@ -794,32 +794,35 @@ class PokerGame:
         Returns:
             Dict[PlayerAction, Button]: Dictionnaire associant les actions aux objets boutons
         """
-        buttons = {
-            PlayerAction.FOLD: Button(300, SCREEN_HEIGHT - 50, 100, 40, "Fold", (200, 0, 0)),
-            PlayerAction.CHECK: Button(450, SCREEN_HEIGHT - 50, 100, 40, "Check", (0, 200, 0)),
-            PlayerAction.CALL: Button(600, SCREEN_HEIGHT - 50, 100, 40, "Call", (0, 0, 200)),
-            PlayerAction.RAISE: Button(750, SCREEN_HEIGHT - 50, 100, 40, "Raise", (200, 200, 0)),
-            PlayerAction.ALL_IN: Button(900, SCREEN_HEIGHT - 50, 100, 40, "All-in", (150, 0, 150))
-        }
+        
         # Ajout des boutons pour les raises pot-based
         pot_raise_color = (255, 140, 0)  # Couleur orange pour les raises pot-based
         # Première rangée (6 boutons)
-        start_x_row1 = 315
-        y_row1 = SCREEN_HEIGHT - 140
+        start_x_row_0 = 340
+        y_row0 = SCREEN_HEIGHT - 130
+        start_x_row_1 = 315
+        y_row1 = SCREEN_HEIGHT - 90
+        start_x_row2 = 380
+        y_row2 = SCREEN_HEIGHT - 50
         btn_width = 120
         btn_height = 30
         gap = 5
-        buttons[PlayerAction.RAISE_25_POT] = Button(start_x_row1, y_row1, btn_width, btn_height, "25%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_50_POT] = Button(start_x_row1 + (btn_width + gap) * 2, y_row1, btn_width, btn_height, "50%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_75_POT] = Button(start_x_row1 + (btn_width + gap) * 4, y_row1, btn_width, btn_height, "75%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_100_POT] = Button(start_x_row1 + (btn_width + gap) * 5, y_row1, btn_width, btn_height, "100%Pot", pot_raise_color)
+        buttons = {
+            PlayerAction.FOLD: Button(start_x_row_0, y_row0, btn_width, btn_height, "Fold", (200, 0, 0)),
+            PlayerAction.CHECK: Button(start_x_row_0 + btn_width + gap, y_row0, btn_width, btn_height, "Check", (0, 200, 0)),
+            PlayerAction.CALL: Button(start_x_row_0 + btn_width + (btn_width + gap), y_row0, btn_width, btn_height, "Call", (0, 0, 200)),
+            PlayerAction.RAISE: Button(start_x_row_0 + btn_width + (btn_width + gap) * 2, y_row0, btn_width, btn_height, "Raise", (200, 200, 0)),
+            PlayerAction.ALL_IN: Button(start_x_row_0 + btn_width + (btn_width + gap) * 3, y_row0, btn_width, btn_height, "All-in", (150, 0, 150))
+        }
+        buttons[PlayerAction.RAISE_25_POT] = Button(start_x_row_1 + btn_width, y_row1, btn_width, btn_height, "25%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_50_POT] = Button(start_x_row_1 + btn_width + (btn_width + gap), y_row1, btn_width, btn_height, "50%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_75_POT] = Button(start_x_row_1 + btn_width + (btn_width + gap) * 2, y_row1, btn_width, btn_height, "75%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_100_POT] = Button(start_x_row_1 + btn_width + (btn_width + gap) * 3, y_row1, btn_width, btn_height, "100%Pot", pot_raise_color)
         
         # Deuxième rangée (5 boutons)
-        start_x_row2 = 380
-        y_row2 = SCREEN_HEIGHT - 100
-        buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row2 + (btn_width + gap) * 1, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row2 + (btn_width + gap) * 3, y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
-        buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row2 + (btn_width + gap) * 4, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
+        buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row2 + btn_width, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row2 + btn_width + (btn_width + gap), y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
+        buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row2 + btn_width + (btn_width + gap) * 2, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
         
         return buttons
 
@@ -2631,6 +2634,6 @@ if __name__ == "__main__":
     human_players_list = []
     for i in range(6):
         human_players_list.append(HumanPlayer(None, f"Player_{i}", 100, i))
-    game = PokerGame(human_players_list)
+    game = PokerGame(human_players_list, rendering=True)
     game.reset()
     game.manual_run()
