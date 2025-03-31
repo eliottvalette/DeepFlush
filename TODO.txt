@@ -1,9 +1,4 @@
 Eliott :
-- Faire du action packing dans le poker_game_optimized (OK)
-- Vérifier que les payoffs et que l'intégralité des simulations sont correctes
-- Mettre en place la prediction noséifiée des agents dans la simu (à voir si on le fait vrmt)
-- Optimiser le les simulations de PokerGameOptimized
-- Mettre fin a la epsilon greedy exploration
-- Améliorer le action packing dans le poker_game_optimized
+- Verifier que le state donné à la sortie de process action n'est pas celui du joueur suivant
 
 Mathias :

@@ -29,15 +29,15 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:seq_len]
 
 class PokerTransformerModel(nn.Module):
-    def __init__(self, input_dim=116, output_dim=5, nhead=4, num_layers=4, dim_feedforward=512):
+    def __init__(self, input_dim=142, output_dim=5, nhead=4, num_layers=4, dim_feedforward=512):
         super().__init__()
         
         # Choix d'un espace latent (d_model) de 64 dimensions.
-        # Chaque vecteur d'état de dimension 116 sera projeté en un vecteur de dimension 64.
+        # Chaque vecteur d'état de dimension 142 sera projeté en un vecteur de dimension 64.
         d_model = 64
         
-        # Couche linéaire pour projeter chaque vecteur d'état (de dimension 116) en un vecteur de dimension 64.
-        # L'entrée est de forme (batch_size, seq_len, 116) et la sortie (batch_size, seq_len, 64).
+        # Couche linéaire pour projeter chaque vecteur d'état (de dimension 142) en un vecteur de dimension 64.
+        # L'entrée est de forme (batch_size, seq_len, 142) et la sortie (batch_size, seq_len, 64).
         self.input_projection = nn.Linear(input_dim, d_model)
         
         # Ajout d'un encodage positionnel pour injecter une notion d'ordre dans la séquence. Aucune modification de la dimension.
@@ -82,7 +82,7 @@ class PokerTransformerModel(nn.Module):
         # On considère qu'une séquence est paddée si tous les éléments d'un vecteur d'état sont 0
         padding_mask = (x.sum(dim=-1) == 0)  # Shape: (batch_size, seq_len)
         
-        # 1. Projection linéaire de chaque vecteur d'état de 116 à 64 dimensions.
+        # 1. Projection linéaire de chaque vecteur d'état de 142 à 64 dimensions.
         #    Après cette étape, x a la forme (batch_size, 10, 64).
         x = self.input_projection(x)
         

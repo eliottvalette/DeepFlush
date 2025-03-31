@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from poker_model import PokerTransformerModel
+from poker_small_model import PokerSmallModel
 from poker_game import PlayerAction
 from utils.config import DEBUG
 import torch.nn.functional as F
@@ -47,9 +48,9 @@ class PokerAgent:
         self.invalid_action_loss_coeff = invalid_action_loss_coeff
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
-        self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size)
+        self.model = PokerSmallModel(input_dim=state_size, output_dim=action_size)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = deque(maxlen=500)  # Buffer de replay
+        self.memory = deque(maxlen=10_000)  # Buffer de replay
 
         if load_model:
             self.load(load_path)

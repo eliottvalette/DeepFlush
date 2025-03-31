@@ -103,7 +103,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             hero_cards = current_player.cards,
             visible_community_cards = env.community_cards,
             num_active_players = len(players_that_can_play),
-            initial_stacks = initial_stacks.copy()
+            initial_stacks = initial_stacks.copy(),
+            state_seq = copy.deepcopy(state_seq)
         )
 
         if DEBUG:
@@ -220,7 +221,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
     )
 
     # Initialisation du MCCFRTrainer
-    mccfr_trainer = MCCFRTrainer(num_simulations = MC_SIMULATIONS)
+    mccfr_trainer = MCCFRTrainer(num_simulations = MC_SIMULATIONS, agent_list= agent_list)
     
     try:
         for episode in range(episodes):

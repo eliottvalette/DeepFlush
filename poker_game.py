@@ -1179,7 +1179,6 @@ class PokerGame:
         # Cas particulier : victoire par fold (il ne reste qu'un joueur actif)
         if len(active_players) == 1:
             winner = active_players[0]
-            winner.stack = self._round_value(winner.stack + self.main_pot)
             contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
             total_pot = sum(contributions.values())
             if DEBUG:

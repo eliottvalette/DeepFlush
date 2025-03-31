@@ -2,11 +2,12 @@
 import numpy as np
 import random as rd
 import json
-import torch
+import copy
 from utils.config import DEBUG
 from typing import List, Dict, Tuple
 from poker_game import PlayerAction, PokerGame, Card
 from poker_game_optimized import PokerGameOptimized
+from poker_agents import PokerAgent
 import time
 class MCCFRTrainer:
     """
@@ -14,10 +15,11 @@ class MCCFRTrainer:
     pour l'apprentissage de stratégies GTO au poker.
     """
     
-    def __init__(self, num_simulations: int):
+    def __init__(self, num_simulations: int, agent_list = List[PokerAgent]):
         self.num_simulations = num_simulations
+        self.agent_list = agent_list
 
-    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], state: List[float], hero_seat: int, button_seat: int, hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]], num_active_players: int, initial_stacks: Dict[str, float]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
+    def compute_expected_payoffs_and_target_vector(self, valid_actions: List[PlayerAction], state: List[float], hero_seat: int, button_seat: int, hero_cards: List[Tuple[int, str]], visible_community_cards: List[Tuple[int, str]], num_active_players: int, initial_stacks: Dict[str, float], state_seq: Dict[str, List[float]]) -> Tuple[np.ndarray, Dict[PlayerAction, float]]:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
@@ -89,7 +91,18 @@ class MCCFRTrainer:
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards({'hero_cards': hero_cards, 'community_cards': visible_community_cards, 'num_active_players': num_active_players})
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
-                game_copy = PokerGameOptimized(state, hero_cards, hero_seat, button_seat, visible_community_cards, rd_opponents_cards, rd_missing_community_cards, initial_stacks.copy())
+                game_copy = PokerGameOptimized(
+                    state = state, 
+                    hero_cards = hero_cards, 
+                    hero_seat = hero_seat, 
+                    button_seat_position = button_seat, 
+                    visible_community_cards = visible_community_cards, 
+                    rd_opponents_cards = rd_opponents_cards, 
+                    rd_missing_community_cards = rd_missing_community_cards, 
+                    initial_stacks = initial_stacks.copy(), 
+                    agent_list = self.agent_list,
+                    state_seq = copy.deepcopy(state_seq)
+                    )
                 payoff = game_copy.play_trajectory(trajectory_action)
                 self.payoff_per_trajectory_action[trajectory_action] += payoff / self.num_simulations
 
