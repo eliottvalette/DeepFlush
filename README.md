@@ -1,5 +1,5 @@
 # Deep-Flush: Advanced Poker AI System
-![Poker Game Screenshot](images/GameRendered.png =400x)
+![Poker Game Screenshot](images/GameRendered.png)
 
 Deep-Flush is a high-performance Texas Hold'em No-Limit poker AI system that combines Monte Carlo Counterfactual Regret Minimization (MCCFR) with deep reinforcement learning to achieve state-of-the-art poker play.
 
@@ -26,7 +26,7 @@ Deep-Flush is a high-performance Texas Hold'em No-Limit poker AI system that com
 - Performance analytics dashboard
 - Action probability heatmaps
 
-![Training Process](images/training_process.png =300x)
+![Training Process](images/training_process.png)
 
 ## Quick Start
 
@@ -83,7 +83,7 @@ The system uses a 142-dimensional state vector comprising:
 - Additional game context
 
 ### Neural Architecture
-![Model Architecture](images/ModelOrganigram.png =300x)
+![Model Architecture](images/ModelOrganigram.png)
 
 1. **State Embedding**
    - 142D → 64D projection layer
@@ -104,7 +104,7 @@ The system excels in:
 - Position-based strategy
 - Hand strength evaluation
 
-![Performance Metrics](images/Poker_metrics.jpg =300x)
+![Performance Metrics](images/Poker_metrics.jpg)
 
 ## Development Guide
 
