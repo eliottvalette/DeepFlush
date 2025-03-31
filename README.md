@@ -1,36 +1,36 @@
-# Poker AI Training System 🎲
-![Poker Game Screenshot](images/GameRendered.png)
+# Deep-Flush: Advanced Poker AI System
+![Poker Game Screenshot](images/GameRendered.png =400x)
 
-A sophisticated Texas Hold'em No-Limit poker AI training system using Monte Carlo Counterfactual Regret Minimization (MCCFR) and deep reinforcement learning.
+Deep-Flush is a high-performance Texas Hold'em No-Limit poker AI system that combines Monte Carlo Counterfactual Regret Minimization (MCCFR) with deep reinforcement learning to achieve state-of-the-art poker play.
 
-## 🌟 Features
-- **Advanced AI Architecture**
-  - Transformer-based neural network for state representation
-  - MCCFR for strategic decision making
-  - Actor-Critic learning framework
+## Core Components
 
-- **Complete Poker Environment**
-  - Full Texas Hold'em No-Limit rules implementation
-  - 6-max table support
-  - Realistic betting patterns and side pots
+### AI Architecture
+- State-of-the-art transformer-based neural network
+- MCCFR algorithm for optimal strategy computation
+- Actor-Critic architecture for policy optimization
 
-- **Training Capabilities**
-  - Multi-agent training environment
-  - Customizable simulation parameters
-  - Real-time performance metrics
-  - Model checkpointing and loading
+### Game Engine
+- Full Texas Hold'em No-Limit implementation
+- Support for 6-player tables
+- Advanced betting system with side pot handling
 
-- **Visualization Tools**
-  - Interactive GUI for game monitoring
-  - Performance metrics plotting
-  - Action probability visualization
+### Training Infrastructure
+- Multi-agent training environment
+- Configurable simulation parameters
+- Real-time performance tracking
+- Model persistence and loading
 
-![Model Architecture](images/ModelOrganigram.png)
+### Analysis Tools
+- Interactive game visualization
+- Performance analytics dashboard
+- Action probability heatmaps
 
-## 🚀 Getting Started
+![Training Process](images/training_process.png =300x)
 
-### Prerequisites
+## Quick Start
 
+### Requirements
 ```bash
 python >= 3.8
 pytorch >= 1.7
@@ -38,8 +38,7 @@ pygame
 numpy
 ```
 
-### Installation
-
+### Setup
 1. Clone the repository:
 ```bash
 git clone https://github.com/yourusername/poker-ai.git
@@ -51,68 +50,65 @@ cd poker-ai
 pip install -r requirements.txt
 ```
 
-### Running the System
-
-To start training:
+### Usage
+Training mode:
 ```bash
 python main.py
 ```
 
-To visualize a trained model:
+Visualization mode:
 ```bash
 python main.py --rendering True
 ```
 
-## 🎮 Game Configuration
+## Configuration
 
-The system supports various configuration options in `utils/config.py`:
-
+Key parameters in `utils/config.py`:
 ```python
-EPISODES = 5_000        # Number of training episodes
+EPISODES = 5_000        # Training episodes
 GAMMA = 0.9985         # Discount factor
 ALPHA = 0.001          # Learning rate
-MC_SIMULATIONS = 25    # MCCFR simulation count
+MC_SIMULATIONS = 25    # MCCFR iterations
 ```
 
-## 🏗️ Architecture
+## Technical Details
 
-### State Representation
-- 142-dimensional state vector including:
-  - Player cards (10 dimensions)
-  - Community cards (25 dimensions)
-  - Hand information (12 dimensions)
-  - Game phase (5 dimensions)
-  - Stack information (6 dimensions)
-  - And more...
+### State Space
+The system uses a 142-dimensional state vector comprising:
+- Player cards (10D)
+- Community cards (25D)
+- Hand strength metrics (12D)
+- Game state information (5D)
+- Stack sizes and positions (6D)
+- Additional game context
 
-### Model Structure
-![Training Process](images/training_process.png)
+### Neural Architecture
+![Model Architecture](images/ModelOrganigram.png =300x)
 
-1. **Input Projection Layer**
-   - Projects 142D state to 64D embedding
+1. **State Embedding**
+   - 142D → 64D projection layer
 
-2. **Transformer Encoder**
-   - Multi-head attention mechanism
+2. **Transformer Core**
+   - Multi-head self-attention
    - Position-wise feed-forward networks
 
-3. **Dual Output Heads**
-   - Action probabilities (policy)
-   - State value estimation (critic)
+3. **Output Layer**
+   - Policy head: action probabilities
+   - Value head: state value estimation
 
-## 📊 Performance
+## Performance Metrics
 
-The system demonstrates strong performance in:
-- Strategic decision making
+The system excels in:
+- Strategic decision-making
 - Pot odds calculation
-- Position-based play
+- Position-based strategy
 - Hand strength evaluation
 
-![Performance Metrics](images/Poker_metrics.jpg)
+![Performance Metrics](images/Poker_metrics.jpg =300x)
 
-## 🛠️ Advanced Usage
+## Development Guide
 
-### Custom Agent Training
-
+### Agent Implementation
 ```python
 agent = PokerAgent(
     state_size=STATE_SIZE,
@@ -124,18 +120,16 @@ agent = PokerAgent(
 )
 ```
 
-### Shared Model Training
-
+### Model Sharing
 ```python
 shared_model = agent_list[0].model
 for agent in agent_list:
     agent.model = shared_model
 ```
 
-## 📚 Citation
+## Citation
 
-If you use this code in your research, please cite:
-
+For academic use:
 ```bibtex
 @software{poker_ai_2024,
   author = {Eliott},
@@ -146,8 +140,8 @@ If you use this code in your research, please cite:
 }
 ```
 
-## 🙏 Acknowledgments
+## Credits
 
-- OpenAI for transformer architecture inspiration
-- DeepMind for MCCFR implementation insights
-- The poker AI research community
+- OpenAI's transformer architecture
+- DeepMind's MCCFR implementation
+- Poker AI research community
