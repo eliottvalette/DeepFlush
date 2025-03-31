@@ -132,7 +132,7 @@ for agent in agent_list:
 For academic use:
 ```bibtex
 @software{poker_ai_2024,
-  author = {Eliott},
+  author = {Eliott Valette and Mathias Garcia},
   title = {Poker AI Training System},
   year = {2025},
   publisher = {GitHub},
