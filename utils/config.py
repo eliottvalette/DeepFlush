@@ -20,7 +20,7 @@ SAVE_INTERVAL = 100
 PLOT_INTERVAL = 200
 
 # Nombre de Simulations
-MC_SIMULATIONS = 25
+MC_SIMULATIONS = 50
 
 def set_seed(seed=42):
     rd.seed(seed)

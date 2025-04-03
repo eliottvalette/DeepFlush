@@ -88,7 +88,7 @@ class MCCFRTrainer:
             if DEBUG:
                 print(f"Simulation [{simulation_index + 1}/{self.num_simulations}] pour {len(valid_actions)} actions")
                 print('valid_actions :', valid_actions)
-            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards({'hero_cards': hero_cards, 'community_cards': visible_community_cards, 'num_active_players': num_active_players})
+            rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(hero_cards = hero_cards.copy(), visible_community_cards = visible_community_cards.copy(), num_active_players = num_active_players)
             for trajectory_action in valid_actions:
                 # Créer une nouvelle instance pour chaque trajectoire
                 game_copy = PokerGameOptimized(
@@ -131,7 +131,7 @@ class MCCFRTrainer:
         
         return target_vector, self.payoff_per_trajectory_action
     
-    def get_remaining_deck(self, known_cards: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
+    def get_remaining_deck(self, known_cards: List[Card]) -> List[Card]:
         """
         Retourne la liste des cartes restantes dans le deck.
         
@@ -140,41 +140,36 @@ class MCCFRTrainer:
             community_cards: Liste des cartes communes
             
         Returns:
-            List[Tuple[int, str]]: Liste des cartes restantes dans le deck
+            List[Card]: Liste des cartes restantes dans le deck
         """
         # Create full deck
         suits = ["♠", "♥", "♦", "♣"]
-        values = range(2, 15)  # 2 to 14 (Ace)
-        deck = [(value, suit) for value in values for suit in suits]
+        values = list(range(2, 15))  # 2 to 14 (Ace)
+        deck = [Card(suit=suit, value=value) for value in values for suit in suits]
         
         # Remove cards that are already in play
-        remaining_deck = [card for card in deck if card not in known_cards]
+        remaining_deck = [card for card in deck if not any(known_card.value == card.value and known_card.suit == card.suit for known_card in known_cards)]
         
         return remaining_deck
     
-    def get_opponent_hands_and_community_cards(self, state_info: Dict):
+    def get_opponent_hands_and_community_cards(self, hero_cards: List[Card], visible_community_cards: List[Card], num_active_players: int):
         """
         Génère des mains aléatoires pour les adversaires et complète les cartes communes restantes.
         """
-        known_cards = state_info['hero_cards'] + state_info['community_cards']
-        remaining_deck = self.get_remaining_deck(known_cards)
+        known_cards = hero_cards + visible_community_cards
+        remaining_deck = self.get_remaining_deck(known_cards = known_cards)
 
-        num_opponents = state_info['num_active_players'] - 1
-        nb_missing_community_cards = 5 - len(state_info["community_cards"])
+        num_opponents = num_active_players - 1
+        nb_missing_community_cards = 5 - len(visible_community_cards)
 
         # Échantillonnage des cartes restantes
         drawn_cards = rd.sample(remaining_deck, nb_missing_community_cards + 2 * num_opponents)
         
-        # Convertir les tuples en objets Card
-        from poker_game import Card
-        
         # Cartes communautaires manquantes
-        tuple_missing_community_cards = drawn_cards[:nb_missing_community_cards]
-        missing_community_cards = [Card(card[1], card[0]) for card in tuple_missing_community_cards]
+        missing_community_cards = drawn_cards[:nb_missing_community_cards]
         
         # Mains des adversaires
-        tuple_opponent_hands = [drawn_cards[nb_missing_community_cards + i*2: nb_missing_community_cards + i*2+2] for i in range(num_opponents)]
-        opponent_hands = [[Card(card[1], card[0]) for card in hand] for hand in tuple_opponent_hands]
+        opponent_hands = [drawn_cards[nb_missing_community_cards + i*2: nb_missing_community_cards + i*2+2] for i in range(num_opponents)]
 
         return opponent_hands, missing_community_cards
 

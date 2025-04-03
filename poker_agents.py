@@ -48,7 +48,7 @@ class PokerAgent:
         self.invalid_action_loss_coeff = invalid_action_loss_coeff
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
-        self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size)
+        self.model = PokerSmallModel(input_dim=state_size, output_dim=action_size)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = deque(maxlen=10_000)  # Buffer de replay
 

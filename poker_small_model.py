@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import random as rd
+
 class PokerSmallModel(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=512):
         super().__init__()
@@ -40,17 +42,26 @@ class PokerSmallModel(nn.Module):
             x = x[:, -1, :]  # Prendre le dernier état de la séquence pour chaque élément du batch
         
         # Traitement de l'état à travers les couches communes
-        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.leaky_relu(self.bn1(self.fc1(x)))
+        if rd.random() < 0.0001 :
+            print('x_1', x.mean(), x.std(), x.max(), x.min())
         x = F.dropout(x, p=0.15)
-        x = F.relu(self.bn2(self.fc2(x)))
+        x = F.leaky_relu(self.bn2(self.fc2(x)))
+        if rd.random() < 0.0001 :
+            print('x_2', x.mean(), x.std(), x.max(), x.min())
         x = F.dropout(x, p=0.15)
-        x = F.relu(self.bn3(self.fc3(x)))
+        x = F.leaky_relu(self.bn3(self.fc3(x)))
+        if rd.random() < 0.0001 :
+            print('x_3', x.mean(), x.std(), x.max(), x.min())
         x = F.dropout(x, p=0.15)
-        x = F.relu(self.bn4(self.fc4(x)))
+        x = F.leaky_relu(self.bn4(self.fc4(x)))
+        if rd.random() < 0.0001 :
+            print('x_4', x.mean(), x.std(), x.max(), x.min())
         
         # Calcul des probabilités d'action (utilise softmax pour normaliser)
         action_probs = F.softmax(self.action_head(x), dim=-1)
-        
+        if rd.random() < 0.0001 :
+            print('action_probs', action_probs)
         # Calcul de la valeur d'état
         state_value = self.value_head(x)
         
