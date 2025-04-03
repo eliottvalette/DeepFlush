@@ -86,38 +86,28 @@ class PokerTransformerModel(nn.Module):
         # 1. Projection linéaire de chaque vecteur d'état de 142 à 64 dimensions.
         #    Après cette étape, x a la forme (batch_size, 10, 64).
         x = self.input_projection(x)
-        if rd.random() < 0.0001 :
-            print('x_0', x.mean(), x.std(), x.max(), x.min())
         
         # 2. Ajout de l'encodage positionnel :
         #    Chaque vecteur de la séquence reçoit une composante qui dépend de sa position dans la séquence.
         #    La forme reste (batch_size, 10, 64).
         x = self.pos_encoder(x)
-        if rd.random() < 0.0001 :
-            print('x_1', x.mean(), x.std(), x.max(), x.min())
         
         # 3. Passage dans l'encodeur Transformer :
         #    Le Transformer applique plusieurs mécanismes d'attention pour contextualiser chaque vecteur 
         #    en fonction des autres éléments de la séquence. La forme de x reste (batch_size, 10, 64).
         transformer_out = self.transformer(x, mask=None, src_key_padding_mask=padding_mask)
-        if rd.random() < 0.0001 :
-            print('x_2', transformer_out.mean(), transformer_out.std(), transformer_out.max(), transformer_out.min())
-        
+
         # 4. Agrégation de la séquence :
         #    On récupère le dernier vecteur de la séquence, qui est censé contenir une représentation 
         #    globale de l'information de toute la séquence.
         #    last_hidden a la forme (batch_size, 64).
         last_hidden = transformer_out[:, -1]
-        if rd.random() < 0.0001 :
-            print('x_3', last_hidden.mean(), last_hidden.std(), last_hidden.max(), last_hidden.min())
         
         # 5. Prédiction des probabilités d'action :
         #    last_hidden est passé à travers un réseau feed-forward pour produire un vecteur de dimension 5,
         #    puis softmax est appliqué pour obtenir une distribution de probabilités.
         action_probs = self.action_head(last_hidden)
-        if rd.random() < 0.0001 :
-            print('action_probs', action_probs.mean(), action_probs.std(), action_probs.max(), action_probs.min())
-        
+         
         # 6. Estimation de la valeur d'état :
         #    last_hidden est également passé à travers un autre réseau feed-forward pour produire un scalaire.
         state_value = self.value_head(last_hidden)

@@ -39,7 +39,7 @@ for agent in agent_list:
     print('agent :', agent.name)
 
 # Faire en sorte que les agents IA partagent le même modèle (Changer entre True et False pour activer ou désactiver le partage de modèle)
-if False:
+if True:
     shared_model = agent_list[0].model
     shared_memory = agent_list[0].memory
     for agent in agent_list:  # Seulement pour les 4 premiers agents qui sont des IA
@@ -47,7 +47,7 @@ if False:
         agent.memory = shared_memory
 
 # Test avec un seul Joueur avec un modèle et tous les autres jouent au hasard (ils gardent leur mémoire vide et donc n'apprennent jamais)
-elif True:
+elif False:
     for agent in agent_list:
         agent.memory = deque(maxlen=0)
 
