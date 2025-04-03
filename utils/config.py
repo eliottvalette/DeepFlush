@@ -6,8 +6,8 @@ import torch
 EPISODES = 5_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9993
-START_EPS = 0.4
+EPS_DECAY = 0.9985
+START_EPS = 0.8
 STATE_SIZE = 142
 
 # Paramètres de visualisation
@@ -16,8 +16,8 @@ RENDERING = False
 FPS = 3
 
 # Sauvegarde
-SAVE_INTERVAL = 100
-PLOT_INTERVAL = 200
+SAVE_INTERVAL = 50
+PLOT_INTERVAL = 100
 
 # Nombre de Simulations
 MC_SIMULATIONS = 50

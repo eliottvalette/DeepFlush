@@ -19,12 +19,12 @@ class PokerGameOptimized:
     """
     def __init__(self, 
                  state : List[float], 
-                 hero_cards: List[Tuple[int, str]], 
+                 hero_cards: List[Card], 
                  hero_seat: int, 
                  button_seat_position: int, 
-                 visible_community_cards: List[Tuple[int, str]],
-                 rd_opponents_cards: List[List[Tuple[int, str]]], 
-                 rd_missing_community_cards: List[Tuple[int, str]], 
+                 visible_community_cards: List[Card],
+                 rd_opponents_cards: List[List[Card]], 
+                 rd_missing_community_cards: List[Card], 
                  initial_stacks: Dict[str, float], 
                  agent_list: List[PokerAgent],
                  state_seq: Dict[str, List[float]]):
