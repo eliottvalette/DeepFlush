@@ -1309,13 +1309,9 @@ class PokerGameOptimized:
             HandRank.ROYAL_FLUSH: 0
         }
         if len(current_player.cards) + len(self.community_cards) >= 5:
-            print('current_player.cards', [card.value for card in current_player.cards])
-            print('self.community_cards', [card.value for card in self.community_cards])
             hand_rank, kickers = self.evaluate_final_hand(current_player)
             hand_rank_range = [-1] * len(HandRank)
             hand_rank_range[hand_rank.value] = 1
-            print('hand_rank', hand_rank)
-            print('kickers', kickers)
             kicker_idx = kicker_idx_map[hand_rank]
             state.extend(hand_rank_range)                  # Tokénisation du rang (taille = 10)
             state.append((kickers[kicker_idx]- 2) / 13)    # Normalisation de la valeur du kicker (taille = 1)    

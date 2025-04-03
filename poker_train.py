@@ -263,11 +263,9 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
         print("Generating visualization...")
         data_collector.force_visualization()
     finally:
-        # Final cleanup
-        print("Cleaning up resources...")
-        for agent in agent_list:
-            if hasattr(agent, 'cleanup'):
-                agent.cleanup()
+        save_models(env.players, episode)
+        print("Generating visualization...")
+        data_collector.force_visualization()
         del env
         del mccfr_trainer
         gc.collect()
