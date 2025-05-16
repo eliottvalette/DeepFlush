@@ -321,6 +321,7 @@ class Visualizer:
                             mbb_data[agent].append(stack_change * 1000)  # Conversion en mbb
                         else:
                             raise Exception(f"Agent {agent} n'a pas de showdown dans les metrics même vide")
+                    break
 
         # Tracer les moyennes mobiles pour chaque agent
         for i, (agent, data) in enumerate(mbb_data.items()):

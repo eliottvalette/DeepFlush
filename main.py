@@ -28,7 +28,7 @@ for i in range(6):
         action_size=12,
         gamma=GAMMA,
         learning_rate=ALPHA,
-        load_model=False if i >= 3 else True,
+        load_model=False, # if i >= 3 else True,
         load_path=f"saved_models/poker_agent_{list_names[i]}.pth",
         show_cards=True
     )
@@ -47,8 +47,8 @@ if False:
         agent.memory = shared_memory
 
 # Test avec un seul Joueur avec un modèle et tous les autres jouent au hasard (ils gardent leur mémoire vide et donc n'apprennent jamais)
-elif False:
-    for agent in agent_list:
+elif True:
+    for agent in agent_list[3:]:
         agent.memory = deque(maxlen=0)
 
 # Démarrer l'entraînement

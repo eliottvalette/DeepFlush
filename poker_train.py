@@ -46,7 +46,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 3 or number_of_hand_per_game > 5:  # Évite les heads-up
+    if len(players_that_can_play) < 3 or number_of_hand_per_game > 1:  # Évite les heads-up
         env.reset()
         number_of_hand_per_game = 0
         players_that_can_play = [p for p in env.players if p.stack > 0]

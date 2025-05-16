@@ -106,7 +106,7 @@ class PokerAgent:
         }
         valid_indices = [action_map[a] for a in valid_actions]
         if len(valid_indices) == 0:
-            raise ValueError("No valid actions found for state: {state}")
+            raise ValueError(f"No valid actions found for state: {state}")
 
         # Création d'un masque pour ne considérer que les actions valides
         valid_action_mask = torch.zeros((1, self.action_size), device=self.device)
@@ -114,7 +114,7 @@ class PokerAgent:
             valid_action_mask[0, idx] = 1
 
         # Implement epsilon-greedy
-        if random.random() < epsilon:  # With probability epsilon, choose random action
+        if random.random() < epsilon or len(self.memory) == 0:  # With probability epsilon, choose random action
             chosen_index = random.choice(valid_indices)
             # Create uniform distribution for reporting
             action_probs = torch.zeros((1, self.action_size), device=self.device)
@@ -127,10 +127,12 @@ class PokerAgent:
             self.model.eval()
             with torch.no_grad():
                 action_probs, _ = self.model(state_tensor)
+                if round(action_probs.sum().item(), 2) != 1:
+                    raise ValueError(f"The model predicted a probability of {round(action_probs.sum().item(), 2)} for all valid actions, state: {state}")
             masked_probs = action_probs * valid_action_mask
             
             if masked_probs.sum().item() == 0:
-                chosen_index = random.choice(valid_indices)
+                raise ValueError(f"The model predicted a probability of 0 for all valid actions, state: {state}")
             else:
                 masked_probs = masked_probs / masked_probs.sum()
                 chosen_index = torch.argmax(masked_probs).item()
