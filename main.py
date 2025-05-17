@@ -20,7 +20,7 @@ list_names = ["Player_0", "Player_1", "Player_2"]
 
 agent_list = []
 
-# Créer 6 agents IA
+# Créer 3 agents IA
 for i in range(3):
     agent = PokerAgent(
         state_size=STATE_SIZE,

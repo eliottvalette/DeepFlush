@@ -76,6 +76,24 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         }
     data_collector.add_state(state_info)
     
+    # Buffer to collect experiences until final reward is known
+    experiences = []
+    # Mapping from PlayerAction to action index
+    action_to_idx = {
+        PlayerAction.FOLD: 0,
+        PlayerAction.CHECK: 1,
+        PlayerAction.CALL: 2,
+        PlayerAction.RAISE: 3,
+        PlayerAction.RAISE_25_POT: 4,
+        PlayerAction.RAISE_50_POT: 5,
+        PlayerAction.RAISE_75_POT: 6,
+        PlayerAction.RAISE_100_POT: 7,
+        PlayerAction.RAISE_150_POT: 8,
+        PlayerAction.RAISE_2X_POT: 9,
+        PlayerAction.RAISE_3X_POT: 10,
+        PlayerAction.ALL_IN: 11
+    }
+
     #### Boucle principale du jeu ####
     while env.current_phase != GamePhase.SHOWDOWN:
         # Récupération du joueur actuel et mise à jour des boutons   
@@ -116,7 +134,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             raise ValueError(f"state != review_state => {state.tolist()} != {review_state.tolist()}")
 
         # Exécuter l'action dans l'environnement
-        next_state, _ = env.step(chosen_action)
+        next_state = env.step(chosen_action)
         
         # Mise à jour de la séquence : on ajoute le nouvel état à la fin
         if env.current_phase != GamePhase.SHOWDOWN:
@@ -135,12 +153,8 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 }
             data_collector.add_state(state_info)
 
-            # Stocker l'expérience
-            current_player.agent.remember(
-                state_seq = player_state_seq.copy(), 
-                target_vector = target_vector, 
-                valid_action_mask = action_mask
-            )
+            # Buffer experience (state_seq, action_index, mask) for later reward assignment
+            experiences.append((current_player.agent, player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector))
         
         else : # Cas spécifique au joueur qui déclenche le showdown par son action
             # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
@@ -152,11 +166,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             state_seq[current_player.name].append(next_state)
 
             # Stocker l'expérience
-            current_player.agent.remember(
-                state_seq = previous_player_state_seq.copy(), 
-                target_vector = target_vector, 
-                valid_action_mask = action_mask
-            )
+            experiences.append((current_player.agent, previous_player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector))
         
         # Rendu graphique si activé
         handle_rendering(env, rendering, episode, render_every)
@@ -185,7 +195,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         }
         data_collector.add_state(state_info)
     
-    # Entraînement et collecte des métriques
+    # Store buffered experiences with final rewards
+    for agent, state_sequence, action_idx, valid_mask, target_vector in experiences:
+        reward = env.net_stack_changes[agent.name]
+        agent.remember(state_seq=state_sequence, action_index=action_idx, valid_action_mask=valid_mask, reward=reward, target_vector=target_vector)
+
     metrics_list = []
     for player in env.players:
         metrics = player.agent.train_model()

@@ -69,6 +69,15 @@ class PokerTransformerModel(nn.Module):
             nn.Softmax(dim=-1)
         )
 
+        # Tête de sortie pour estimer la valeur de l'état.
+        # Elle transforme la représentation finale (64 dimensions) en un scalaire.
+        self.value_head = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.GELU(),
+            nn.LayerNorm(dim_feedforward),
+            nn.Linear(dim_feedforward, 1)
+        )
+
     def forward(self, x):
         # Créer un masque de padding basé sur les valeurs nulles
         # On considère qu'une séquence est paddée si tous les éléments d'un vecteur d'état sont 0
@@ -98,5 +107,9 @@ class PokerTransformerModel(nn.Module):
         #    last_hidden est passé à travers un réseau feed-forward pour produire un vecteur de dimension 5,
         #    puis softmax est appliqué pour obtenir une distribution de probabilités.
         action_probs = self.action_head(last_hidden)
+
+        # 6. Estimation de la valeur d'état :
+        #    last_hidden est également passé à travers un autre réseau feed-forward pour produire un scalaire.
+        state_value = self.value_head(last_hidden)
         
-        return action_probs
+        return action_probs, state_value

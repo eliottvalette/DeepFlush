@@ -559,6 +559,7 @@ class Visualizer:
             ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)', None, None),
             ('total_loss', 'Total Loss', 0.55, 0.0),
             ('invalid_action_loss', 'Invalid Action Loss', None, None),
+            ('value_loss', 'Value Loss (MSE entre la valeur estimée et la valeur cible)', None, None),
         ]
 
         # Créer un subplot pour chaque métrique
@@ -1018,9 +1019,9 @@ class Visualizer:
         ax1.grid(True, alpha=0.3)
         
         # Graphique 2 : Gains du gagnant en BB en bar plot
-        bar_colors = ['red' if gain > 500 else 'green' for gain in winner_gains]
+        bar_colors = ['red' if gain > 200 else 'green' for gain in winner_gains]
         ax2.bar(x_data, winner_gains, color=bar_colors, label="Gain du gagnant (BB)")
-        ax2.axhline(500, color='grey', linestyle='--', label="Limite 500BB")
+        ax2.axhline(200, color='grey', linestyle='--', label="Limite 200BB")
         
         ax2.set_title("Évolution des gains du gagnant en BB (Bar Plot)")
         ax2.set_xlabel("Episode")
@@ -1041,12 +1042,12 @@ class Visualizer:
         # Personnaliser les couleurs des boîtes en fonction de la médiane
         for box, data in zip(bplot['boxes'], bins):
             median = np.median(data)
-            if median > 500:
+            if median > 200:
                 box.set_facecolor('red')
             else:
                 box.set_facecolor('lightblue')
                 
-        ax3.axhline(500, color='grey', linestyle='--', label="Limite 500BB")
+        ax3.axhline(200, color='grey', linestyle='--', label="Limite 200BB")
         ax3.set_title("Gains du gagnant en BB (Box Plot par groupes d'épisodes)")
         ax3.set_xlabel("Episode (bin d'intervalle)")
         ax3.set_ylabel("Gain (BB)")
@@ -1057,7 +1058,7 @@ class Visualizer:
             xdata = flier.get_xdata()
             ydata = flier.get_ydata()
             for x_val, y_val in zip(xdata, ydata):
-                if y_val >= 500:
+                if y_val >= 200:
                     ax3.text(x_val, y_val, f"{y_val:.0f}", fontsize=8, color='black', ha='center', va='bottom')
         ax3.legend()
         ax3.grid(True, alpha=0.3)
@@ -1065,11 +1066,11 @@ class Visualizer:
         # Graphique 4 : Gains du gagnant en BB en box plot global (pour l'ensemble des épisodes)
         bplot_global = ax4.boxplot(winner_gains, patch_artist=True)
         median_global = np.median(winner_gains)
-        if median_global > 500:
+        if median_global > 200:
             bplot_global['boxes'][0].set_facecolor('red')
         else:
             bplot_global['boxes'][0].set_facecolor('lightblue')
-        ax4.axhline(500, color='grey', linestyle='--', label="Limite 500BB")
+        ax4.axhline(200, color='grey', linestyle='--', label="Limite 200BB")
         ax4.set_title("Gains du gagnant en BB (Box Plot global)")
         ax4.set_xlabel("Tous les épisodes")
         ax4.set_ylabel("Gain (BB)")

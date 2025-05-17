@@ -137,7 +137,7 @@ class PokerAgent:
             
             self.model.eval()
             with torch.no_grad():
-                action_probs = self.model(state_tensor)
+                action_probs, state_value = self.model(state_tensor)  
                 if round(action_probs.sum().item(), 2) != 1:
                     raise ValueError(f"The model predicted a probability of {round(action_probs.sum().item(), 2)} for all valid actions, state: {state}")
             masked_probs = action_probs * valid_action_mask
@@ -152,101 +152,95 @@ class PokerAgent:
 
         return reverse_action_map[chosen_index], valid_action_mask, action_probs
 
-    def remember(self, state_seq, target_vector, valid_action_mask):
+    def remember(self, state_seq, action_index, valid_action_mask, reward, target_vector):
         """
         Stocke une transition dans la mémoire de replay, cette transition sera utilisée pour l'entrainement du model
         """
-        # Store tensors directly
-        self.memory.append((state_seq, target_vector, valid_action_mask))
+        # Store sequence of states, chosen action index, valid action mask, and final reward
+        self.memory.append((state_seq, action_index, valid_action_mask, reward, target_vector))
 
     def train_model(self):
         """
-        Entraîne le modèle sur un batch de transitions.
-        Les états sont des séquences (shape: [n, 116]).
+        Entraîne le modèle sur un batch de transitions en combinant reward
+        et indicateur d'action optimale issu de MCCFR.
         """
         if len(self.memory) < 32:
             if DEBUG:
                 print('Not enough data to train :', len(self.memory))
             return {
                 'policy_loss': None,
+                'value_loss': None,
                 'total_loss': None,
                 'invalid_action_loss': None,
                 'mean_action_prob': None
             }
 
-        try:
-            batch = random.sample(self.memory, 32)
-            state_sequences, target_vectors, valid_action_masks = zip(*batch)
+        # Sample transitions and unpack including target_vectors
+        batch = random.sample(self.memory, 32)
+        state_sequences, actions, valid_action_masks, rewards, target_vectors = zip(*batch)
 
-            # Conversion et uniformisation des valid_action_masks en tensors
-            valid_action_masks_tensor = torch.stack([
-                mask for mask in valid_action_masks
-            ]).float()  # Shape: (batch_size, action_size)
+        # Convert valid action masks to tensor
+        valid_action_masks_tensor = torch.stack([mask for mask in valid_action_masks]).float().to(self.device)
 
-            # Fixer la longueur de séquence à 10 (padding/tronquage)
-            max_seq_len = 10
+        # Pad sequences to max length 10
+        max_seq_len = 10
+        padded_states = torch.zeros((len(state_sequences), max_seq_len, self.state_size), device=self.device)
+        for i, state_sequence in enumerate(state_sequences):
+            seq = state_sequence[-max_seq_len:] if len(state_sequence) > max_seq_len else state_sequence
+            seq_tensors = [torch.from_numpy(s).float() for s in seq]
+            seq_tensor = torch.stack(seq_tensors)
+            if seq_tensor.dim() == 1:
+                seq_tensor = seq_tensor.unsqueeze(0)
+            padded_states[i, :seq_tensor.size(0)] = seq_tensor
 
-            # Création du tenseur pour les états
-            padded_states = torch.zeros((len(state_sequences), max_seq_len, self.state_size), device=self.device)
-            for i, state_sequence in enumerate(state_sequences):
-                # Si la séquence est trop longue, on ne garde que les max_seq_len derniers états
-                if len(state_sequence) > max_seq_len:
-                    seq = state_sequence[-max_seq_len:]
-                else:
-                    seq = state_sequence
-                
-                # Convertir chaque élément en tensor PyTorch si nécessaire
-                seq_tensors = []
-                for s in seq:
-                    seq_tensors.append(torch.from_numpy(s).float())
-                
-                # Empiler les tensors
-                seq_tensor = torch.stack(seq_tensors)
-                
-                # Vérifier la forme de la séquence
-                if len(seq_tensor.shape) == 1:
-                    # Si c'est un vecteur 1D, on le reshape pour avoir la bonne forme (cela peut arriver si l'agent a Fold Preflop la sequence est de longueur 1 et donc la state sequence devient automatiquement un vecteur 1D)
-                    seq_tensor = seq_tensor.reshape(1, -1)
-                
-                # Remplir le tenseur padded_states avec la séquence
-                padded_states[i, :len(seq_tensor)] = seq_tensor
+        # Convert actions and rewards to tensors
+        actions_tensor = torch.tensor(actions, dtype=torch.long, device=self.device)
+        rewards_tensor = torch.tensor(rewards, dtype=torch.float, device=self.device)
 
-            # Conversion des autres données en tensors PyTorch
-            target_vector_tensor = torch.stack([
-                torch.from_numpy(v).float() for v in target_vectors
-            ])
+        # Stack target_vectors into tensor
+        target_tensors = torch.stack([
+            torch.from_numpy(tv).float() if isinstance(tv, np.ndarray) else tv
+            for tv in target_vectors
+        ]).to(self.device)
 
-            # Calculer les probabilités d'action et les valeurs d'état
-            action_probs = self.model(padded_states)
+        # Forward pass through network
+        action_probs, state_values = self.model(padded_states) # action_probs shape: (batch_size, 12), state_values shape: (batch_size, 1)
 
-            # Calcul de la MSE entre les probabilités d'action et le vecteur cible
-            policy_loss = F.mse_loss(action_probs, target_vector_tensor)
+        # Implement the loss function
+        # Normalize rewards for stable training
+        reward_norm = rewards_tensor / 150
 
-            # Calcul de la perte, Probs donnée aux actions invalides
-            invalid_action_probs = action_probs * (1 - valid_action_masks_tensor)
-            invalid_action_loss = F.mse_loss(invalid_action_probs, torch.zeros_like(invalid_action_probs))
-            
-            # Perte totale
-            total_loss = policy_loss + invalid_action_loss * self.invalid_action_loss_coeff
+        # Value loss: fit state values to normalized rewards
+        state_values = state_values.squeeze()
+        value_loss = F.mse_loss(state_values, reward_norm)
 
-            # Optimisation
-            self.optimizer.zero_grad()
-            total_loss.backward()
-            self.optimizer.step()
+        # Policy loss: encourage match to MCCFR target distribution
+        clamped_probs = action_probs.clamp(min=1e-8)
+        policy_loss = - (target_tensors * torch.log(clamped_probs)).sum(dim=1).mean()
 
-            # Métriques pour le suivi
-            metrics = {
-                'policy_loss': policy_loss.item(),
-                'total_loss': total_loss.item(),
-                'invalid_action_loss': invalid_action_loss.item(),
-                'mean_action_prob': action_probs.mean().item(),
-            }
+        # Invalid action loss: penalize probability mass on invalid actions
+        invalid_probs = action_probs * (1 - valid_action_masks_tensor)
+        invalid_action_loss = invalid_probs.sum(dim=1).mean()
+        
+        # Total loss: weighted sum of components
+        total_loss = policy_loss + self.value_loss_coeff * value_loss + self.invalid_action_loss_coeff * invalid_action_loss
 
-            return metrics
+        # Optimization step
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        self.optimizer.step()
 
-        except Exception as e:
-            print(f"Erreur pendant l'entraînement: {str(e)}")
-            raise e
+        # Metrics for monitoring
+        metrics = {
+            'reward_norm_mean': reward_norm.mean().item(),
+            'invalid_action_loss': invalid_action_loss.item(),
+            'value_loss': value_loss.item(),
+            'policy_loss': policy_loss.item(),
+            'total_loss': total_loss.item(),
+            'mean_action_prob': action_probs.mean().item(),
+        }
+
+        return metrics
 
     def cleanup(self):
         """

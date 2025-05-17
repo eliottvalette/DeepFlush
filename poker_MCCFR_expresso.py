@@ -9,6 +9,7 @@ from poker_game_expresso import PlayerAction, Card
 from poker_game_optimized_expresso import PokerGameOptimized
 from poker_agents import PokerAgent
 import time
+import scipy.special as sp
 
 class MCCFRTrainer:
     """
