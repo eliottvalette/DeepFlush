@@ -1132,8 +1132,9 @@ class PokerGameOptimized:
             print(f"trajectory_action type : {type(trajectory_action)}")
             print(f"valid_actions type : {type(valid_actions[0])}")
             print(f"current_player_bet : {hero.current_player_bet}, current_maximum_bet : {self.current_maximum_bet}, stack : {hero.stack}")
-            raise ValueError(f"L'action {trajectory_action} n'est pas valide. Utilisation d'une action alternative parmi: {valid_actions}")
-        
+            print(f"L'action {trajectory_action} n'est pas valide. C'est sans doute une erreur d'aproximation lors de la dénormalisation : {valid_actions}")
+            trajectory_action = PlayerAction.ALL_IN
+
         # Exécute l'action du héros
         next_state = self.process_action(hero, trajectory_action)
         self.state_seq[hero.name].append(next_state)

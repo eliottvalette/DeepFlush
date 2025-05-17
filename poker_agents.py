@@ -15,7 +15,7 @@ import os
 class PokerAgent:
     """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
     
-    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, invalid_action_loss_coeff = 5, load_model=False, load_path=None, show_cards=False):
+    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, invalid_action_loss_coeff = 5, policy_loss_coeff=0.3, load_model=False, load_path=None, show_cards=False):
         """
         Initialisation de l'agent
         :param state_size: Taille du vecteur d'état
@@ -46,6 +46,7 @@ class PokerAgent:
         self.entropy_coeff = entropy_coeff
         self.value_loss_coeff = value_loss_coeff
         self.invalid_action_loss_coeff = invalid_action_loss_coeff
+        self.policy_loss_coeff = policy_loss_coeff
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size)
@@ -168,11 +169,12 @@ class PokerAgent:
             if DEBUG:
                 print('Not enough data to train :', len(self.memory))
             return {
-                'policy_loss': None,
-                'value_loss': None,
-                'total_loss': None,
+                'reward_norm_mean': None,
                 'invalid_action_loss': None,
-                'mean_action_prob': None
+                'value_loss': None,
+                'policy_loss': None,
+                'total_loss': None,
+                'mean_action_prob': None,
             }
 
         # Sample transitions and unpack including target_vectors
@@ -208,7 +210,7 @@ class PokerAgent:
 
         # Implement the loss function
         # Normalize rewards for stable training
-        reward_norm = rewards_tensor / 150
+        reward_norm = rewards_tensor / 50
 
         # Value loss: fit state values to normalized rewards
         state_values = state_values.squeeze()
@@ -221,9 +223,9 @@ class PokerAgent:
         # Invalid action loss: penalize probability mass on invalid actions
         invalid_probs = action_probs * (1 - valid_action_masks_tensor)
         invalid_action_loss = invalid_probs.sum(dim=1).mean()
-        
+
         # Total loss: weighted sum of components
-        total_loss = policy_loss + self.value_loss_coeff * value_loss + self.invalid_action_loss_coeff * invalid_action_loss
+        total_loss = self.policy_loss_coeff * policy_loss + self.value_loss_coeff * value_loss + self.invalid_action_loss_coeff * invalid_action_loss
 
         # Optimization step
         self.optimizer.zero_grad()
