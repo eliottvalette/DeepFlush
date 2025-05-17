@@ -990,6 +990,9 @@ class PokerGame:
             call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
             action_text += f" {call_amount}BB"
         
+        else :
+            raise ValueError(f"Action invalide : {action}")
+        
         # Add action to player's history
         self.pygame_action_history[player.name].append(action_text)
         # Keep only last 5 actions per player
@@ -1695,7 +1698,7 @@ class PokerGame:
         final_state[52] = 0
         
         # 6. Mettre à jour les stacks des joueurs avec les stacks finaux
-        for i, player in enumerate(3):
+        for i, player in enumerate(self.players):
             final_state[53 + i] = final_stacks[player.name] / self.starting_stack
         
         # 7. Mettre les mises actuelles à 0

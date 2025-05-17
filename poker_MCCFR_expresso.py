@@ -24,6 +24,9 @@ class MCCFRTrainer:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
+        if DEBUG:
+            print("======= DEBUT MONTERCARLO SIMULATIONS =======\n")
+
         # Initialiser a None pour toutes les actions non valides et 0 pour les actions valides
         self.payoff_per_trajectory_action = {action: None for action in PlayerAction}
         for action in valid_actions:
@@ -129,6 +132,8 @@ class MCCFRTrainer:
             print('target_vector :', target_vector)
             print('payoff_per_trajectory_action :', json.dumps({action.value: value for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
             print('----------------------------------')
+
+        print("======= FIN MONTERCARLO SIMULATIONS =======\n")
         
         return target_vector, self.payoff_per_trajectory_action
     

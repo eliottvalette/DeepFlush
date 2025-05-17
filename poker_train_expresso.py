@@ -95,6 +95,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             print(f"state : {state}")
             print(f"\ncurrent_player.name : {current_player.name}, current_phase : {env.current_phase}, chosen_action : {chosen_action}\n")
             print(f"current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
+        
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
             valid_actions = valid_actions, 
             state = state, 
@@ -106,10 +107,12 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             initial_stacks = initial_stacks.copy(),
             state_seq = copy.deepcopy(state_seq)
         )
+        
+        target_vector = np.array([1] + [0] * (len(PlayerAction) - 1))
+        payoffs = {action: 0 for action in PlayerAction}
 
         if DEBUG:
             print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
-            time.sleep(10)
 
         review_state = env.get_state(seat_position = current_player.seat_position)
         if state.tolist() != review_state.tolist():
