@@ -137,7 +137,7 @@ class PokerAgent:
             
             self.model.eval()
             with torch.no_grad():
-                action_probs, _ = self.model(state_tensor)
+                action_probs = self.model(state_tensor)
                 if round(action_probs.sum().item(), 2) != 1:
                     raise ValueError(f"The model predicted a probability of {round(action_probs.sum().item(), 2)} for all valid actions, state: {state}")
             masked_probs = action_probs * valid_action_mask
@@ -169,11 +169,8 @@ class PokerAgent:
                 print('Not enough data to train :', len(self.memory))
             return {
                 'policy_loss': None,
-                'value_loss': None,
                 'total_loss': None,
                 'invalid_action_loss': None,
-                'mean_predicted_value': None,
-                'mean_target_value': None,
                 'mean_action_prob': None
             }
 
@@ -220,22 +217,17 @@ class PokerAgent:
             ])
 
             # Calculer les probabilités d'action et les valeurs d'état
-            action_probs, state_values = self.model(padded_states)
-            state_values = state_values.squeeze(-1)
+            action_probs = self.model(padded_states)
 
             # Calcul de la MSE entre les probabilités d'action et le vecteur cible
             policy_loss = F.mse_loss(action_probs, target_vector_tensor)
-            
-            # Calcul de la perte de la valeur (partie critique)
-            # On utilise la valeur finale comme cible pour la valeur d'état
-            value_loss = F.mse_loss(state_values, target_vector_tensor.max(dim=1)[0])
 
             # Calcul de la perte, Probs donnée aux actions invalides
             invalid_action_probs = action_probs * (1 - valid_action_masks_tensor)
             invalid_action_loss = F.mse_loss(invalid_action_probs, torch.zeros_like(invalid_action_probs))
             
             # Perte totale
-            total_loss = policy_loss + self.value_loss_coeff * value_loss + invalid_action_loss * self.invalid_action_loss_coeff
+            total_loss = policy_loss + invalid_action_loss * self.invalid_action_loss_coeff
 
             # Optimisation
             self.optimizer.zero_grad()
@@ -245,11 +237,8 @@ class PokerAgent:
             # Métriques pour le suivi
             metrics = {
                 'policy_loss': policy_loss.item(),
-                'value_loss': value_loss.item(),
                 'total_loss': total_loss.item(),
                 'invalid_action_loss': invalid_action_loss.item(),
-                'mean_predicted_value': state_values.mean().item(),
-                'mean_target_value': target_vector_tensor.max(dim=1)[0].mean().item(),
                 'mean_action_prob': action_probs.mean().item(),
             }
 

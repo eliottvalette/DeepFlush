@@ -107,9 +107,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             initial_stacks = initial_stacks.copy(),
             state_seq = copy.deepcopy(state_seq)
         )
-        
-        target_vector = np.array([1] + [0] * (len(PlayerAction) - 1))
-        payoffs = {action: 0 for action in PlayerAction}
 
         if DEBUG:
             print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")

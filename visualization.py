@@ -36,6 +36,10 @@ class DataCollector:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
+        # Créer le dossier visualizations si il n'existe pas
+        if not os.path.exists("visualizations"):
+            os.makedirs("visualizations")
+
         # Créer le dossier daté pour les visualisations
         self.viz_dir = os.path.join("visualizations", datetime.now().strftime("%Y-%m-%d_%Hh %Mm %Ss"))
         if not os.path.exists(self.viz_dir):
@@ -332,7 +336,7 @@ class Visualizer:
         ax1.set_xlabel('Episode')
         ax1.set_ylabel('mbb/hand')
         ax1.legend()
-        ax1.set_ylim(-60000, 60000)
+        ax1.set_ylim(-30000, 30000)
         
         ax1.set_facecolor('#F0F0F0')  # Fond légèrement gris
         ax1.grid(True, alpha=0.3)
@@ -553,11 +557,8 @@ class Visualizer:
         # Métriques spécifiques à tracer basées sur l'output de train_model
         metrics_to_plot = [
             ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)', None, None),
-            ('value_loss', 'Value Loss (MSE de la valeur d\'état)', 0.5, 0.0),
             ('total_loss', 'Total Loss', 0.55, 0.0),
             ('invalid_action_loss', 'Invalid Action Loss', None, None),
-            ('mean_predicted_value', 'Mean Predicted Value (moyenne des valeurs d\'état prédites)', None, None),
-            ('mean_target_value', 'Mean Target Value (moyenne des valeurs d\'état, récompense finale potentielle)', None, None)
         ]
 
         # Créer un subplot pour chaque métrique
@@ -996,12 +997,12 @@ class Visualizer:
         anomalies_x = []
         anomalies_y = []
         for x, y in zip(x_data, stack_sums):
-            if not np.isclose(y, 600):
+            if not np.isclose(y, 300):
                 anomalies_x.append(x)
                 anomalies_y.append(y)
         
         ax1.plot(x_data, stack_sums, label="Somme des Stacks", marker='o')
-        ax1.axhline(600, color='grey', linestyle='--', label="Stack attendu (600)")
+        ax1.axhline(300, color='grey', linestyle='--', label="Stack attendu (300)")
         if anomalies_x:
             ax1.scatter(anomalies_x, anomalies_y, color='red', s=100, zorder=5, label="Anomalie")
         

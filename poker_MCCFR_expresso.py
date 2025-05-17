@@ -133,7 +133,7 @@ class MCCFRTrainer:
             print('payoff_per_trajectory_action :', json.dumps({action.value: value for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
             print('----------------------------------')
 
-        print("======= FIN MONTERCARLO SIMULATIONS =======\n")
+            print("======= FIN MONTERCARLO SIMULATIONS =======\n")
         
         return target_vector, self.payoff_per_trajectory_action
     
