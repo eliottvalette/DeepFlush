@@ -1422,7 +1422,7 @@ class PokerGame:
         """
         current_player = self.players[seat_position]
         state = []
-        STATE_DEBUG = True
+        STATE_DEBUG = False
 
         # Correspondance des couleurs avec des nombres ♠, ♥, ♦, ♣
         suit_map = {
@@ -1695,31 +1695,31 @@ class PokerGame:
         final_state[52] = 0
         
         # 6. Mettre à jour les stacks des joueurs avec les stacks finaux
-        for i, player in enumerate(self.players):
+        for i, player in enumerate(3):
             final_state[53 + i] = final_stacks[player.name] / self.starting_stack
         
         # 7. Mettre les mises actuelles à 0
-        final_state[59:65] = 0
+        final_state[56:59] = 0
         
         # 8. Mettre l'état des joueurs à inactif (-1)
-        final_state[65:71] = -1
+        final_state[59:62] = -1
         
         # 9. Garder les positions relatives inchangées
-        # (indices 71-76 restent les mêmes)
+        # (indices 62-65 restent les mêmes)
         
         # 10. Désactiver toutes les actions disponibles
-        final_state[77:82] = -1
+        final_state[65:77] = -1
         
         # 11. Réinitialiser l'historique des actions
-        for i in range(6):  # Pour chaque joueur
-            final_state[82+i*5:82+(i+1)*5] = -1
+        for i in range(3):  # Pour chaque joueur
+            final_state[77+i*5:77+(i+1)*5] = -1
         
         # 12. Réinitialiser les informations stratégiques
-        final_state[112] = 0  # Probabilité de victoire
-        final_state[113] = 0  # Cotes du pot
+        final_state[92] = 0  # Probabilité de victoire
+        final_state[93] = 0  # Cotes du pot
         
         # 13-15. Réinitialiser les potentiels de tirage
-        final_state[114:] = 0
+        final_state[94:] = 0
 
         # Avant de retourner, conversion en tableau numpy
         final_state = np.array(final_state, dtype=np.float32)
@@ -2547,7 +2547,7 @@ class PokerGame:
                         
                         # 10. Actions disponibles
                         print("\n10. Actions disponibles:")
-                        actions = ["FOLD", "CHECK", "CALL", "RAISE", "ALL_IN"]
+                        actions = ["FOLD", "CHECK", "CALL", "RAISE", "raise-25%", "raise-50%", "raise-75%", "raise-100%", "raise-150%", "raise-200%", "raise-300%", "ALL_IN"]
                         for i, action in enumerate(actions):
                             print(f"{action}: {'Disponible' if state[65+i] == 1 else 'Indisponible'}")
                         

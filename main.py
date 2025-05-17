@@ -1,5 +1,5 @@
 # main.py
-from poker_train import main_training_loop
+from poker_train_expresso import main_training_loop
 from utils.config import set_seed, EPISODES, GAMMA, ALPHA, STATE_SIZE, RENDERING
 from poker_agents import PokerAgent
 from poker_bot import PokerBot
@@ -16,12 +16,12 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Forcer l'utilisation du CPU
 
 # Liste des noms des joueurs
-list_names = ["Player_0", "Player_1", "Player_2", "Player_3", "Player_4", "Player_5"]
+list_names = ["Player_0", "Player_1", "Player_2"]
 
 agent_list = []
 
 # Créer 6 agents IA
-for i in range(6):
+for i in range(3):
     agent = PokerAgent(
         state_size=STATE_SIZE,
         device=device,
@@ -47,7 +47,7 @@ if False:
         agent.memory = shared_memory
 
 # Test avec un seul Joueur avec un modèle et tous les autres jouent au hasard (ils gardent leur mémoire vide et donc n'apprennent jamais)
-elif True:
+elif False:
     for agent in agent_list[3:]:
         agent.memory = deque(maxlen=0)
 

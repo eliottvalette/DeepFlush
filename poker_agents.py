@@ -5,7 +5,7 @@ import torch.optim as optim
 import numpy as np
 from poker_model import PokerTransformerModel
 from poker_small_model import PokerSmallModel
-from poker_game import PlayerAction
+from poker_game_expresso import PlayerAction
 from utils.config import DEBUG
 import torch.nn.functional as F
 from collections import deque
@@ -75,7 +75,7 @@ class PokerAgent:
     def get_action(self, state, valid_actions, epsilon=0.0):
         """
         Sélectionne une action selon la politique epsilon-greedy.
-        Ici, 'state' est une séquence de vecteurs (shape: [n, 116]).
+        Ici, 'state' est une séquence de vecteurs (shape: [n, 106]).
 
         Retourne l'action choisie et une éventuelle pénalité si l'action était invalide.
         """
@@ -84,11 +84,6 @@ class PokerAgent:
         if not valid_actions:
             raise ValueError("valid_actions ne peut pas être vide")
         
-        # Vérifier que toutes les actions sont valides
-        for action in valid_actions:
-            if not isinstance(action, PlayerAction):
-                raise TypeError(f"Toutes les actions doivent être de type PlayerAction (reçu: {type(action)})")
-
         # Mapping des actions
         action_map = {
             PlayerAction.FOLD: 0,
@@ -104,7 +99,23 @@ class PokerAgent:
             PlayerAction.RAISE_3X_POT: 10,
             PlayerAction.ALL_IN: 11
         }
-        valid_indices = [action_map[a] for a in valid_actions]
+
+        action_map_str = {
+            PlayerAction.FOLD.value: 0,
+            PlayerAction.CHECK.value: 1,
+            PlayerAction.CALL.value: 2,
+            PlayerAction.RAISE.value: 3,
+            PlayerAction.RAISE_25_POT.value: 4,
+            PlayerAction.RAISE_50_POT.value: 5,
+            PlayerAction.RAISE_75_POT.value: 6,
+            PlayerAction.RAISE_100_POT.value: 7,
+            PlayerAction.RAISE_150_POT.value: 8,
+            PlayerAction.RAISE_2X_POT.value: 9,
+            PlayerAction.RAISE_3X_POT.value: 10,
+            PlayerAction.ALL_IN.value: 11
+        }
+
+        valid_indices = [action_map_str[a.value] for a in valid_actions]
         if len(valid_indices) == 0:
             raise ValueError(f"No valid actions found for state: {state}")
 

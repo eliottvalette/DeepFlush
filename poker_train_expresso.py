@@ -1,4 +1,4 @@
-# poker_train.py
+# poker_train_expresso.py
 import os
 import gc
 import numpy as np
@@ -9,13 +9,13 @@ import time
 import copy
 from visualization import DataCollector
 from poker_agents import PokerAgent
-from poker_game import PokerGame, GamePhase, PlayerAction
+from poker_game_expresso import PokerGame, GamePhase, PlayerAction
 from typing import List, Tuple
 import json
 from utils.config import EPISODES, EPS_DECAY, START_EPS, DEBUG, SAVE_INTERVAL, PLOT_INTERVAL, MC_SIMULATIONS
 from utils.renderer import handle_final_rendering, handle_rendering
 from utils.helping_funcs import save_models
-from poker_MCCFR import MCCFRTrainer
+from poker_MCCFR_expresso import MCCFRTrainer
 
 # Compteurs
 number_of_hand_per_game = 0
