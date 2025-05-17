@@ -11,7 +11,7 @@ import pandas as pd
 from datetime import datetime
 from utils.config import DEBUG
 
-PLAYERS = ['Player_0', 'Player_1', 'Player_2', 'Player_3', 'Player_4', 'Player_5']
+PLAYERS = ['Player_0', 'Player_1', 'Player_2']
 
 class DataCollector:
     def __init__(self, save_interval, plot_interval, start_epsilon, epsilon_decay, output_dir="viz_json"):
@@ -90,21 +90,21 @@ class DataCollector:
             },
             "game_phase": state_vector[47:52],  # One-hot encoding de la phase
             "current_max_bet": state_vector[52],  # Mise maximale normalisée
-            "player_stacks": [stack * 100 for stack in state_vector[53:59]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
-            "current_bets": [bet * 100 for bet in state_vector[59:65]],  # Mises actuelles normalisées
-            "player_activity": state_vector[65:71],  # État des joueurs (actif/inactif)
-            "relative_positions": state_vector[71:77],  # Position relative one-hot
-            "available_actions": state_vector[77:82],  # Actions disponibles
+            "player_stacks": [stack * 100 for stack in state_vector[53:56]],  # Stacks dénormalisés (Attention, c'est stack sont peut-etre réinitialisés si consultés au showdown, donc pas fiable)
+            "current_bets": [bet * 100 for bet in state_vector[56:59]],  # Mises actuelles normalisées
+            "player_activity": state_vector[59:62],  # État des joueurs (actif/inactif)
+            "relative_positions": state_vector[62:65],  # Position relative one-hot
+            "available_actions": state_vector[65:71],  # Actions disponibles
             "previous_actions": [
-                state_vector[82+i*5:87+i*5] for i in range(6)  # One-hot encoding des actions précédentes
+                state_vector[71+i*5:73+i*5] for i in range(3)  # One-hot encoding des actions précédentes
             ],
             "strategic_info": {
-                "preflop_win_prob": state_vector[112],  # Probabilité de victoire préflop
-                "pot_odds": state_vector[113]  # Cotes du pot
+                "preflop_win_prob": state_vector[92],  # Probabilité de victoire préflop
+                "pot_odds": state_vector[93]  # Cotes du pot
             },
             "hand_draw_potential": {
-                "straight_draw": state_vector[114],  # Potentiel de quinte
-                "flush_draw": state_vector[115]  # Potentiel de couleur
+                "straight_draw": state_vector[94],  # Potentiel de quinte
+                "flush_draw": state_vector[95]  # Potentiel de couleur
             }
         }
         """
@@ -120,7 +120,7 @@ class DataCollector:
                     "suit": state_vector[6:10]  # One-hot encoding de la couleur
                 }
             ],
-            "relative_positions": state_vector[71:77],  # Position relative one-hot
+            "relative_positions": state_vector[62:65],  # Position relative one-hot
         }
 
         # Mettre à jour state_info avec le vecteur d'état subdivisé
@@ -655,14 +655,14 @@ class Visualizer:
                     continue  # Skip inactive players for this episode
                 positions = state["state_vector"]["relative_positions"]
                 position_idx = positions.index(1.0)
-                position_name = ["SB", "BB", "UTG", "MP", "CO", "BTN"][position_idx]
+                position_name = ["SB", "BB", "BTN"][position_idx]
                 
                 position_games[player][position_name] += 1
                 if player == winner:
                     position_wins[player][position_name] += 1
         
         # Préparer les données pour le bar plot using active players
-        positions = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
+        positions = ["SB", "BB", "BTN"]
         bar_width = 0.15
         index = np.arange(len(players))
 
@@ -830,7 +830,7 @@ class Visualizer:
         Chaque heatmap représente le taux de victoire pour chaque combinaison de cartes,
         regroupé par position (SB, BB, UTG, MP, CO, BTN).
         """
-        positions_list = ["SB", "BB", "UTG", "MP", "CO", "BTN"]
+        positions_list = ["SB", "BB", "BTN"]
 
         # Initialiser les matrices pour chaque position
         pos_hand_matrix = {pos: np.zeros((13, 13)) for pos in positions_list}

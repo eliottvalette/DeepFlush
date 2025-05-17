@@ -16,8 +16,8 @@ RENDERING = False
 FPS = 3
 
 # Sauvegarde
-SAVE_INTERVAL = 50
-PLOT_INTERVAL = 100
+SAVE_INTERVAL = 5
+PLOT_INTERVAL = 10
 
 # Nombre de Simulations
 MC_SIMULATIONS = 50

@@ -149,6 +149,7 @@ class PokerAgent:
                 chosen_index = torch.argmax(masked_probs).item()
 
         reverse_action_map = {v: k for k, v in action_map.items()}
+
         return reverse_action_map[chosen_index], valid_action_mask, action_probs
 
     def remember(self, state_seq, target_vector, valid_action_mask):
