@@ -1151,7 +1151,7 @@ class PokerGameOptimized:
             player_state_seq = self.state_seq[current_player.name]
             
             # Prédiction avec une inférence classique du modèle
-            chosen_action, _, _ = current_player.agent.get_action(player_state_seq, valid_actions, epsilon = 0.0)
+            chosen_action = rd.choice(valid_actions)
             
             next_state = self.process_action(current_player, chosen_action)
             self.state_seq[current_player.name].append(next_state)

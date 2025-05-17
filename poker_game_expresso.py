@@ -759,7 +759,7 @@ class PokerGame:
         y_row0 = SCREEN_HEIGHT - 130
         start_x_row_1 = 315
         y_row1 = SCREEN_HEIGHT - 90
-        start_x_row2 = 380
+        start_x_row_2 = 380
         y_row2 = SCREEN_HEIGHT - 50
         btn_width = 120
         btn_height = 30
@@ -777,9 +777,9 @@ class PokerGame:
         buttons[PlayerAction.RAISE_100_POT] = Button(start_x_row_1 + btn_width + (btn_width + gap) * 3, y_row1, btn_width, btn_height, "100%Pot", pot_raise_color)
         
         # Deuxième rangée (5 boutons)
-        buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row2 + btn_width, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
-        buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row2 + btn_width + (btn_width + gap), y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
-        buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row2 + btn_width + (btn_width + gap) * 2, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
+        buttons[PlayerAction.RAISE_150_POT] = Button(start_x_row_2 + btn_width, y_row2, btn_width, btn_height, "150%Pot", pot_raise_color)
+        buttons[PlayerAction.RAISE_2X_POT]  = Button(start_x_row_2 + btn_width + (btn_width + gap), y_row2, btn_width, btn_height, "2xPot", pot_raise_color)
+        buttons[PlayerAction.RAISE_3X_POT]  = Button(start_x_row_2 + btn_width + (btn_width + gap) * 2, y_row2, btn_width, btn_height, "3xPot", pot_raise_color)
         
         return buttons
 
@@ -989,7 +989,6 @@ class PokerGame:
         }:
             action_text += f" {bet_amount}BB"
         elif action.value == PlayerAction.CALL.value:
-            call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
             action_text += f" {call_amount}BB"
 
         
@@ -2273,6 +2272,33 @@ class PokerGame:
             dealer_text = self.font.render("D", True, (0, 0, 0))
             dealer_rect = dealer_text.get_rect(center=(button_x, button_y))
             self.screen.blit(dealer_text, dealer_rect)
+
+        # Draw action history next to the player
+        actions = self.pygame_action_history.get(player.name, [])
+        if actions:
+            # Determine position based on player's position
+            # For players on the right side, show history on the left, and vice versa
+            if player.seat_position == 0:  # Bottom-right player
+                history_x = player.x + 110
+                history_y = player.y + 10
+            elif player.seat_position == 1:  # Bottom-left player
+                history_x = player.x - 160
+                history_y = player.y + 10
+            else:  # Top player
+                history_x = player.x - 160
+                history_y = player.y
+            
+            # Draw semi-transparent background for history
+            history_height = min(len(actions), 3) * 25 + 10
+            history_surface = pygame.Surface((150, history_height))
+            history_surface.set_alpha(160)
+            history_surface.fill((20, 20, 40))
+            self.screen.blit(history_surface, (history_x, history_y))
+            
+            # Draw recent actions
+            for i, action in enumerate(actions[-3:]):
+                action_text = self.font.render(action, True, (255, 255, 255))
+                self.screen.blit(action_text, (history_x + 10, history_y + 5 + i * 25))
     
     def _draw(self):
         """
@@ -2362,27 +2388,6 @@ class PokerGame:
         self.screen.blit(min_text, (self.pygame_bet_slider.x, SCREEN_HEIGHT - 125))
         self.screen.blit(max_text, (self.pygame_bet_slider.x, SCREEN_HEIGHT - 150))
         
-        # Draw action history in top right corner with better formatting
-        history_x = SCREEN_WIDTH - 300
-        history_y = 50
-        history_text = self.font.render("Action History:", True, (255, 255, 255))
-        self.screen.blit(history_text, (history_x, history_y - 30))
-        
-        y_offset = 0
-        for player_name, actions in self.pygame_action_history.items():
-            if actions:  # Only show players with actions
-                # Draw player name
-                player_text = self.font.render(f"{player_name}:", True, (255, 215, 0))  # Gold color
-                self.screen.blit(player_text, (history_x, history_y + y_offset))
-                y_offset += 25
-                
-                # Draw last 3 actions for this player
-                for action in actions[-3:]:
-                    action_text = self.font.render(f"  {action}", True, (255, 255, 255))
-                    self.screen.blit(action_text, (history_x + 20, history_y + y_offset))
-                    y_offset += 25
-                y_offset += 5  # Add spacing between players
-
         # Draw game info
         game_info_text = self.font.render(f"Game Info: {self.current_phase}", True, (255, 255, 255))
         self.screen.blit(game_info_text, (50, 50))
@@ -2480,6 +2485,9 @@ class PokerGame:
                         self.reset()
                     if event.key == pygame.K_c:
                         print(self.players)
+                    if event.key == pygame.K_m:
+                        # Run MCCFR simulation
+                        self._run_mccfr_simulation()
                     if event.key == pygame.K_s:
                         state = self.get_state(seat_position = self.current_player_seat)
                         print('\n=== État actuel du jeu ===')
@@ -2583,6 +2591,116 @@ class PokerGame:
             pygame.display.flip()
         
         pygame.quit()
+
+    def _run_mccfr_simulation(self):
+        """
+        Exécute une simulation MCCFR pour le joueur actuel et affiche les résultats
+        sur l'écran.
+        
+        Cette méthode utilise une importation tardive et un pattern factory pour éviter les importations circulaires.
+        """
+        # Obtenir les données d'état nécessaires avant l'importation
+        current_player = self.players[self.current_player_seat]
+        state = self.get_state(seat_position=self.current_player_seat)
+        hero_seat = self.current_player_seat
+        button_seat = self.button_seat_position
+        
+        num_active_players = sum(1 for p in self.players if p.is_active and not p.has_folded)
+        
+        # Obtenir les cartes du joueur
+        hero_cards = current_player.cards
+        
+        # Obtenir les cartes communes visibles
+        visible_community_cards = self.community_cards
+        
+        # Obtenir les stacks initiaux
+        initial_stacks = {player.name: player.stack for player in self.players}
+        
+        # Initialiser la séquence d'états pour chaque joueur
+        state_seq = {player.name: [state] for player in self.players}
+        
+        # Obtenir les actions valides
+        self._update_button_states()
+        valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
+        
+        # Vérifier si des actions sont disponibles
+        if not valid_actions:
+            print("Aucune action disponible pour la simulation MCCFR")
+            return
+        
+        # Importation tardive pour éviter les importations circulaires
+        try:
+            import sys
+            from importlib import reload
+            
+            # Importer de façon dynamique
+            import poker_MCCFR_expresso
+            # Recharger le module pour éviter les problèmes de cache
+            reload(poker_MCCFR_expresso)
+            
+            # Créer l'entraîneur MCCFR avec le module importé
+            num_simulations = 100  # Nombre de simulations à exécuter
+            agent_list = [p.agent for p in self.players]
+            trainer = poker_MCCFR_expresso.MCCFRTrainer(num_simulations, agent_list)
+            
+            # Calculer les gains attendus pour chaque action
+            target_vector, payoffs = trainer.compute_expected_payoffs_and_target_vector(
+                valid_actions,
+                state,
+                hero_seat,
+                button_seat,
+                hero_cards,  # Cards are already in the correct format
+                visible_community_cards,  # Cards are already in the correct format
+                num_active_players,
+                initial_stacks,
+                state_seq
+            )
+            
+            # Afficher les résultats dans la console
+            print("\n=== Résultats de la simulation MCCFR ===")
+            for action in valid_actions:
+                print(f"{action.value}: Gain attendu = {payoffs[action]:.2f}BB")
+            print("======================================\n")
+            
+            # Afficher les résultats sur l'écran
+            font = pygame.font.SysFont('Arial', 24)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(200)
+            overlay.fill((0, 0, 0))
+            self.screen.blit(overlay, (0, 0))
+            
+            title = font.render("Résultats MCCFR", True, (255, 255, 255))
+            self.screen.blit(title, (SCREEN_WIDTH//2 - 100, 50))
+            
+            y_pos = 100
+            for action in valid_actions:
+                index = list(PlayerAction).index(action)
+                prob = target_vector[index] if index < len(target_vector) else 0.0
+                text = font.render(f"{action.value}: Gain = {payoffs[action]:.2f}BB, Prob = {prob:.2%}", 
+                                  True, (255, 255, 255))
+                self.screen.blit(text, (SCREEN_WIDTH//2 - 200, y_pos))
+                y_pos += 30
+            
+            pygame.display.flip()
+            
+            # Attendre que l'utilisateur appuie sur une touche
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                        waiting = False
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
+        
+        except ImportError as e:
+            print(f"Module MCCFR non disponible: {e}")
+            return
+        except Exception as e:
+            print(f"Erreur lors de la simulation MCCFR: {e}")
+            import traceback
+            traceback.print_exc()
+            return
 
 class HumanPlayer(Player):
     def __init__(self, agent, name, stack, seat_position):

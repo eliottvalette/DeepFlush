@@ -5,7 +5,7 @@ import json
 import copy
 from utils.config import DEBUG
 from typing import List, Dict, Tuple
-from poker_game_expresso import PlayerAction, PokerGame, Card
+from poker_game_expresso import PlayerAction, Card
 from poker_game_optimized_expresso import PokerGameOptimized
 from poker_agents import PokerAgent
 import time
