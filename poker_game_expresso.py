@@ -828,17 +828,17 @@ class PokerGame:
             print(f"Mise actuelle du joueur : {player.current_player_bet}BB")
         
         #----- Traitement de l'action en fonction de son type -----
-        if action == PlayerAction.FOLD:
+        if action.value == PlayerAction.FOLD.value:
             # Le joueur se couche il n'est plus actif pour ce tour.
             player.has_folded = True
             if DEBUG : 
                 print(f"{player.name} se couche (Fold).")
         
-        elif action == PlayerAction.CHECK:
+        elif action.value == PlayerAction.CHECK.value:
             if DEBUG : 
                 print(f"{player.name} check.")
         
-        elif action == PlayerAction.CALL:
+        elif action.value == PlayerAction.CALL.value:
             if DEBUG : 
                 print(f"{player.name} call.")
             call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
@@ -854,7 +854,7 @@ class PokerGame:
             if DEBUG : 
                 print(f"{player.name} a call {call_amount}BB")
 
-        elif action == PlayerAction.RAISE:
+        elif action.value == PlayerAction.RAISE.value:
             if DEBUG : 
                 print(f"{player.name} raise.")
             # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
@@ -889,25 +889,25 @@ class PokerGame:
                 print(f"{player.name} a raise {bet_amount}BB")
         
         # --- Nouvelles actions pot-based ---
-        elif action in {
-            PlayerAction.RAISE_25_POT,
-            PlayerAction.RAISE_50_POT,
-            PlayerAction.RAISE_75_POT,
-            PlayerAction.RAISE_100_POT,
-            PlayerAction.RAISE_150_POT,
-            PlayerAction.RAISE_2X_POT,
-            PlayerAction.RAISE_3X_POT
+        elif action.value in {
+            PlayerAction.RAISE_25_POT.value,
+            PlayerAction.RAISE_50_POT.value,
+            PlayerAction.RAISE_75_POT.value,
+            PlayerAction.RAISE_100_POT.value,
+            PlayerAction.RAISE_150_POT.value,
+            PlayerAction.RAISE_2X_POT.value,
+            PlayerAction.RAISE_3X_POT.value
         }:
             raise_percentages = {
-                PlayerAction.RAISE_25_POT: 0.25,
-                PlayerAction.RAISE_50_POT: 0.50,
-                PlayerAction.RAISE_75_POT: 0.75,
-                PlayerAction.RAISE_100_POT: 1.00,
-                PlayerAction.RAISE_150_POT: 1.50,
-                PlayerAction.RAISE_2X_POT: 2.00,
-                PlayerAction.RAISE_3X_POT: 3.00
+                PlayerAction.RAISE_25_POT.value: 0.25,
+                PlayerAction.RAISE_50_POT.value: 0.50,
+                PlayerAction.RAISE_75_POT.value: 0.75,
+                PlayerAction.RAISE_100_POT.value: 1.00,
+                PlayerAction.RAISE_150_POT.value: 1.50,
+                PlayerAction.RAISE_2X_POT.value: 2.00,
+                PlayerAction.RAISE_3X_POT.value: 3.00
             }
-            percentage = raise_percentages[action]
+            percentage = raise_percentages[action.value]
             # Calcul de la raise additionnelle basée sur le pourcentage du pot
             custom_raise_amount = self._round_value(self.main_pot * percentage)
             # La nouvelle mise est : la mise actuelle + montant pour caller + raise additionnel
@@ -946,7 +946,7 @@ class PokerGame:
                 print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
         
         
-        elif action == PlayerAction.ALL_IN:
+        elif action.value == PlayerAction.ALL_IN.value:
             if DEBUG : 
                 print(f"{player.name} all-in.")
             # Si aucune valeur n'est passée pour bet_amount, on assigne automatiquement tout le stack
@@ -970,6 +970,8 @@ class PokerGame:
             player.is_all_in = True  # On indique que le joueur est all-in
             if DEBUG : 
                 print(f"{player.name} a all-in {bet_amount}BB")
+        else :
+            raise ValueError(f"Action invalide : {action}")
         
         player.has_acted = True
         self.check_phase_completion()
@@ -986,12 +988,10 @@ class PokerGame:
             PlayerAction.RAISE_3X_POT
         }:
             action_text += f" {bet_amount}BB"
-        elif action == PlayerAction.CALL:
+        elif action.value == PlayerAction.CALL.value:
             call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
             action_text += f" {call_amount}BB"
-        
-        else :
-            raise ValueError(f"Action invalide : {action}")
+
         
         # Add action to player's history
         self.pygame_action_history[player.name].append(action_text)
