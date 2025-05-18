@@ -104,9 +104,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # On récupère la sequence d'états du joueur actuel
         player_state_seq = state_seq[current_player.name]
 
-        # Prédiction avec une inférence classique du modèle
-        chosen_action, action_mask, action_probs = current_player.agent.get_action(player_state_seq, valid_actions, epsilon)
-
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state(seat_position = current_player.seat_position)
         if DEBUG:
@@ -128,6 +125,9 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         if DEBUG:
             print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
+
+        # Prédiction avec une inférence classique du modèle
+        chosen_action, action_mask, action_probs = current_player.agent.get_action(state = player_state_seq, valid_actions = valid_actions, target_vector = target_vector, epsilon = epsilon)
 
         review_state = env.get_state(seat_position = current_player.seat_position)
         if state.tolist() != review_state.tolist():

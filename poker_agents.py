@@ -16,7 +16,13 @@ import os
 class PokerAgent:
     """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
     
-    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.001, invalid_action_loss_coeff = 15, policy_loss_coeff=0.3, reward_norm_coeff=0.05, load_model=False, load_path=None, show_cards=False):
+    def __init__(self, device,state_size, action_size, gamma, learning_rate,
+                 entropy_coeff=0.1,
+                 value_loss_coeff=0.006,
+                 invalid_action_loss_coeff=2,
+                 policy_loss_coeff=0.4,
+                 reward_norm_coeff=0.5,
+                 load_model=False, load_path=None, show_cards=False):
         """
         Initialisation de l'agent
         :param state_size: Taille du vecteur d'état
@@ -25,6 +31,9 @@ class PokerAgent:
         :param learning_rate: Taux d'apprentissage
         :param entropy_coeff: Coefficient pour la régularisation par entropie
         :param value_loss_coeff: Coefficient pour la fonction de valeur
+        :param invalid_action_loss_coeff: Coefficient pour la perte des actions invalides
+        :param policy_loss_coeff: Coefficient pour la perte de la politique
+        :param reward_norm_coeff: Coefficient pour la normalisation des récompenses
         :param load_model: Si True, charge un modèle existant
         :param load_path: Chemin vers le modèle à charger
         """
@@ -75,7 +84,7 @@ class PokerAgent:
         except Exception as e:
             raise RuntimeError(f"Erreur lors du chargement du modèle: {str(e)}")
 
-    def get_action(self, state, valid_actions, epsilon=0.0):
+    def get_action(self, state, valid_actions, target_vector, epsilon=0.0):
         """
         Sélectionne une action selon la politique epsilon-greedy.
         Ici, 'state' est une séquence de vecteurs (shape: [n, 106]).
@@ -128,11 +137,15 @@ class PokerAgent:
             valid_action_mask[0, idx] = 1
 
         # Implement epsilon-greedy
-        if random.random() < epsilon or len(self.memory) == 0:  # With probability epsilon, choose random action
+        if random.random() < epsilon:  # With probability epsilon, choose random action
             chosen_index = random.choice(valid_indices)
             # Create uniform distribution for reporting
             action_probs = torch.zeros((1, self.action_size), device=self.device)
             action_probs[0, valid_indices] = 1.0/len(valid_indices)
+        elif len(self.memory) == 0: # Chose the highest probability action from the target vector
+            chosen_index = np.argmax(target_vector)
+            action_probs = torch.zeros((1, self.action_size), device=self.device)
+            action_probs[0, chosen_index] = 1.0
         else:
             # Convert numpy arrays to PyTorch tensors
             state_tensors = [torch.from_numpy(s).float() for s in state]
@@ -213,6 +226,10 @@ class PokerAgent:
         # Implement the loss function
         # Normalize rewards for stable training
         reward_norm = rewards_tensor * self.reward_norm_coeff
+        # Increase penalty when payoff is -100 (lost all money)
+        full_loss_multiplier = 2.0
+        full_loss_mask = (rewards_tensor <= -90.0)
+        reward_norm[full_loss_mask] *= full_loss_multiplier
 
         # Value loss: fit state values to normalized rewards
         state_values = state_values.squeeze()
