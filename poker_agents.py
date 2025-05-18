@@ -18,7 +18,7 @@ class PokerAgent:
     
     def __init__(self, device,state_size, action_size, gamma, learning_rate,
                  entropy_coeff=0.1,
-                 value_loss_coeff=0.006,
+                 value_loss_coeff=0.01,
                  invalid_action_loss_coeff=2,
                  policy_loss_coeff=0.4,
                  reward_norm_coeff=0.5,
