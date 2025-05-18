@@ -10,12 +10,13 @@ from utils.config import DEBUG
 import torch.nn.functional as F
 from collections import deque
 import random
+import time
 import os
 
 class PokerAgent:
     """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
     
-    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, invalid_action_loss_coeff = 5, policy_loss_coeff=0.3, load_model=False, load_path=None, show_cards=False):
+    def __init__(self, device,state_size, action_size, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.001, invalid_action_loss_coeff = 15, policy_loss_coeff=0.3, reward_norm_coeff=0.05, load_model=False, load_path=None, show_cards=False):
         """
         Initialisation de l'agent
         :param state_size: Taille du vecteur d'état
@@ -47,6 +48,7 @@ class PokerAgent:
         self.value_loss_coeff = value_loss_coeff
         self.invalid_action_loss_coeff = invalid_action_loss_coeff
         self.policy_loss_coeff = policy_loss_coeff
+        self.reward_norm_coeff = reward_norm_coeff
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size)
@@ -173,8 +175,8 @@ class PokerAgent:
                 'invalid_action_loss': None,
                 'value_loss': None,
                 'policy_loss': None,
-                'total_loss': None,
-                'mean_action_prob': None,
+                'entropy': None,
+                'total_loss': None
             }
 
         # Sample transitions and unpack including target_vectors
@@ -210,7 +212,7 @@ class PokerAgent:
 
         # Implement the loss function
         # Normalize rewards for stable training
-        reward_norm = rewards_tensor / 50
+        reward_norm = rewards_tensor * self.reward_norm_coeff
 
         # Value loss: fit state values to normalized rewards
         state_values = state_values.squeeze()
@@ -220,12 +222,21 @@ class PokerAgent:
         clamped_probs = action_probs.clamp(min=1e-8)
         policy_loss = - (target_tensors * torch.log(clamped_probs)).sum(dim=1).mean()
 
+        # Entropy bonus: encourage exploration
+        entropy = -(action_probs * torch.log(clamped_probs)).sum(dim=1).mean()
+
         # Invalid action loss: penalize probability mass on invalid actions
         invalid_probs = action_probs * (1 - valid_action_masks_tensor)
         invalid_action_loss = invalid_probs.sum(dim=1).mean()
 
-        # Total loss: weighted sum of components
-        total_loss = self.policy_loss_coeff * policy_loss + self.value_loss_coeff * value_loss + self.invalid_action_loss_coeff * invalid_action_loss
+        # Total loss: weighted sum of components + entropy
+        total_loss = (
+            - reward_norm.mean()
+          + self.policy_loss_coeff   * policy_loss
+          + self.value_loss_coeff    * value_loss
+          + self.invalid_action_loss_coeff * invalid_action_loss
+          - self.entropy_coeff       * entropy
+        )
 
         # Optimization step
         self.optimizer.zero_grad()
@@ -235,11 +246,11 @@ class PokerAgent:
         # Metrics for monitoring
         metrics = {
             'reward_norm_mean': reward_norm.mean().item(),
-            'invalid_action_loss': invalid_action_loss.item(),
-            'value_loss': value_loss.item(),
-            'policy_loss': policy_loss.item(),
-            'total_loss': total_loss.item(),
-            'mean_action_prob': action_probs.mean().item(),
+            'invalid_action_loss': invalid_action_loss.item() * self.invalid_action_loss_coeff,
+            'value_loss': value_loss.item() * self.value_loss_coeff,
+            'policy_loss': policy_loss.item() * self.policy_loss_coeff,
+            'entropy': entropy.item() * self.entropy_coeff,
+            'total_loss': total_loss.item()
         }
 
         return metrics

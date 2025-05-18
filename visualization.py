@@ -557,11 +557,11 @@ class Visualizer:
         # Métriques spécifiques à tracer basées sur l'output de train_model
         metrics_to_plot = [
             ('reward_norm_mean', 'Reward Normalisée Moyenne', None, None),
-            ('invalid_action_loss', 'Somme des probabilités d\'action sur les actions invalides', 0.55, 0.0),
+            ('invalid_action_loss', 'Somme des probabilités d\'action sur les actions invalides', 1.0, 0.0),
             ('value_loss', 'Value Loss (MSE entre la valeur estimée et la Reward Normalisée)', None, None),
             ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)', None, None),
-            ('total_loss', 'Total Loss', None, None),
-            ('mean_action_prob', 'Probabilité Moyenne des Actions', None, None),
+            ('entropy', 'Entropie', None, None),
+            ('total_loss', 'Total Loss', None, None)
         ]
 
         # Créer un subplot pour chaque métrique

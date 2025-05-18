@@ -43,25 +43,15 @@ class PokerSmallModel(nn.Module):
         
         # Traitement de l'état à travers les couches communes
         x = F.leaky_relu(self.bn1(self.fc1(x)))
-        if rd.random() < 0.0001 :
-            print('x_1', x.mean(), x.std(), x.max(), x.min())
         x = F.dropout(x, p=0.15)
         x = F.leaky_relu(self.bn2(self.fc2(x)))
-        if rd.random() < 0.0001 :
-            print('x_2', x.mean(), x.std(), x.max(), x.min())
         x = F.dropout(x, p=0.15)
         x = F.leaky_relu(self.bn3(self.fc3(x)))
-        if rd.random() < 0.0001 :
-            print('x_3', x.mean(), x.std(), x.max(), x.min())
         x = F.dropout(x, p=0.15)
         x = F.leaky_relu(self.bn4(self.fc4(x)))
-        if rd.random() < 0.0001 :
-            print('x_4', x.mean(), x.std(), x.max(), x.min())
         
         # Calcul des probabilités d'action (utilise softmax pour normaliser)
         action_probs = F.softmax(self.action_head(x), dim=-1)
-        if rd.random() < 0.0001 :
-            print('action_probs', action_probs)
         # Calcul de la valeur d'état
         state_value = self.value_head(x)
         

@@ -154,7 +154,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             data_collector.add_state(state_info)
 
             # Buffer experience (state_seq, action_index, mask) for later reward assignment
-            experiences.append((current_player.agent, player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector))
+            experiences.append((current_player.agent, player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase))
         
         else : # Cas spécifique au joueur qui déclenche le showdown par son action
             # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
@@ -166,7 +166,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             state_seq[current_player.name].append(next_state)
 
             # Stocker l'expérience
-            experiences.append((current_player.agent, previous_player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector))
+            experiences.append((current_player.agent, previous_player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase))
         
         # Rendu graphique si activé
         handle_rendering(env, rendering, episode, render_every)
@@ -195,9 +195,16 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         }
         data_collector.add_state(state_info)
     
-    # Store buffered experiences with final rewards
-    for agent, state_sequence, action_idx, valid_mask, target_vector in experiences:
-        reward = env.net_stack_changes[agent.name]
+    # Store buffered experiences with final rewards weighted by the phase
+    phase_weights = {
+        GamePhase.PREFLOP: 0.05,
+        GamePhase.FLOP: 0.1,
+        GamePhase.TURN: 0.3,
+        GamePhase.RIVER: 0.5,
+        GamePhase.SHOWDOWN: 1.0
+    }
+    for agent, state_sequence, action_idx, valid_mask, target_vector, phase in experiences:
+        reward = env.net_stack_changes[agent.name] * phase_weights[phase]
         agent.remember(state_seq=state_sequence, action_index=action_idx, valid_action_mask=valid_mask, reward=reward, target_vector=target_vector)
 
     metrics_list = []

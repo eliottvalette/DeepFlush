@@ -6,8 +6,8 @@ import torch
 EPISODES = 5_000
 GAMMA = 0.9985
 ALPHA = 0.001
-EPS_DECAY = 0.9985
-START_EPS = 1.0
+EPS_DECAY = 0.9988
+START_EPS = 0.4
 STATE_SIZE = 106
 
 # Paramètres de visualisation
