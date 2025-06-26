@@ -205,7 +205,7 @@ class PokerTransformerCriticModel(nn.Module):
         #    Q(s,a)=V+A-mean(A)
         Q = V + A - A.mean(dim=-1, keepdim=True)
 
-        return Q
+        return Q, V
 
 
 
