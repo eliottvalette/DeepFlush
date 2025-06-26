@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from poker_model import PokerTransformerModel
+from poker_model import PokerTransformerActorModel, PokerTransformerCriticModel
 from poker_small_model import PokerSmallModel
 from poker_game_expresso import PlayerAction
 from utils.config import DEBUG
@@ -14,8 +14,20 @@ import time
 import os
 
 class PokerAgent:
-    """Agent de poker utilisant un réseau de neurones Actor-Critic pour l'apprentissage par renforcement"""
-    
+    """
+    High-level wrapper that couples an **Actor** (policy π_θ) and a **Dueling Critic**
+    (Q_ϕ & V_ϕ).
+    Key features
+    ------------ 
+      • *Training loop*  
+        1. Actor produces π_θ(a | s) and selects actions (ε-greedy).  
+        2. Critic outputs Q(s,·) and V(s) → TD-target  
+           *td* = r + γ maxₐ′ Q(s′, a′).  
+        3. Losses  
+           – **Actor** : −log π_θ · Advantage  (A = Q−V)  − β H[π]  
+           – **Critic**: MSE(Q(s,a), td)  
+        4. Two independent Adam optimisers update θ and ϕ.
+    """
     def __init__(self, device,state_size, action_size, gamma, learning_rate,
                  entropy_coeff=0.1,
                  value_loss_coeff=0.01,
@@ -60,8 +72,10 @@ class PokerAgent:
         self.reward_norm_coeff = reward_norm_coeff
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
-        self.model = PokerTransformerModel(input_dim=state_size, output_dim=action_size)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self.actor_model = PokerTransformerActorModel(input_dim=state_size, output_dim=action_size)
+        self.critic_model = PokerTransformerCriticModel(input_dim=state_size, output_dim=action_size)
+        self.optimizer = optim.Adam(self.actor_model.parameters(), lr=self.learning_rate)
+        self.critic_optimizer = optim.Adam(self.critic_model.parameters(), lr=self.learning_rate * 0.1)
         self.memory = deque(maxlen=10_000)  # Buffer de replay
 
         if load_model:
@@ -175,12 +189,27 @@ class PokerAgent:
         # Store sequence of states, chosen action index, valid action mask, and final reward
         self.memory.append((state_seq, action_index, valid_action_mask, reward, target_vector))
 
-    def train_model(self):
+    def train_model(self, batch_size=32):
         """
-        Entraîne le modèle sur un batch de transitions en combinant reward
-        et indicateur d'action optimale issu de MCCFR.
+         One optimisation step on a mini-batch.
+
+        Workflow
+        --------
+            1.  Sample `batch_size` transitions from the chosen replay buffer
+                (short = on-policy, long = off-policy).  
+            2.  Compute
+                    π_θ(a|s)                         # Actor network
+                    Q_ϕ(s, ·), V_ϕ(s)                # Critic network (54 combinations)  
+                    Q_target(s′, ·)                  # Target critic network for TD  
+                    td_target = r + γ·maxₐ′ Q_target(s′, a′)  
+                    advantage = Q(s,a) − V(s)  
+            3.  Losses  
+                    critic_loss = Huber(Q(s,a), td_target)  
+                    actor_loss  = −E[log π(a|s) · advantage] − β entropy  
+            4.  Back-propagate and update the two optimisers.
+            5.  Update target network with polyak averaging.
         """
-        if len(self.memory) < 32:
+        if len(self.memory) < batch_size:
             if DEBUG:
                 print('Not enough data to train :', len(self.memory))
             return {
@@ -193,7 +222,7 @@ class PokerAgent:
             }
 
         # Sample transitions and unpack including target_vectors
-        batch = random.sample(self.memory, 32)
+        batch = random.sample(self.memory, batch_size)
         state_sequences, actions, valid_action_masks, rewards, target_vectors = zip(*batch)
 
         # Convert valid action masks to tensor
@@ -221,8 +250,8 @@ class PokerAgent:
         ]).to(self.device)
 
         # Forward pass through network
-        action_probs, state_values = self.model(padded_states) # action_probs shape: (batch_size, 12), state_values shape: (batch_size, 1)
-
+        action_probs = self.model(padded_states) # action_probs shape: (batch_size, 12), state_values shape: (batch_size, 1)
+        q_values, state_values = 
         # Implement the loss function
         # Normalize rewards for stable training
         reward_norm = rewards_tensor * self.reward_norm_coeff

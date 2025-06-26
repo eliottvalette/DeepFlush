@@ -46,7 +46,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 0]
-    if len(players_that_can_play) < 2 or number_of_hand_per_game > 1:  # Évite les heads-up
+    if len(players_that_can_play) < 2 or number_of_hand_per_game > 10:
         env.reset()
         number_of_hand_per_game = 0
         players_that_can_play = [p for p in env.players if p.stack > 0]
@@ -258,19 +258,6 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
             print(f"\nEpisode [{episode + 1}/{episodes}]")
             print(f"Randomness: {epsilon*100:.3f}%")
             print(f"Time taken: {time.time() - start_time:.2f} seconds")
-            
-            # Periodic memory cleanup every 100 episodes
-            if episode % 100 == 0:
-                print("Performing periodic memory cleanup...")
-                gc.collect()
-                try:
-                    torch.cuda.empty_cache()
-                except:
-                    pass
-                try:
-                    torch.mps.empty_cache()
-                except:
-                    pass
             
         # Save models at end of training
         if episode == episodes - 1:
