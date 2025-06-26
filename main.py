@@ -28,7 +28,7 @@ for i in range(3):
         action_size=12,
         gamma=GAMMA,
         learning_rate=ALPHA,
-        load_model=True, # if i >= 3 else True,
+        load_model=False, # if i >= 3 else True,
         load_path=f"saved_models/poker_agent_{list_names[i]}.pth",
         show_cards=True
     )

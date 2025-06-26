@@ -59,7 +59,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Initialiser un dictionnaire qui associe à chaque agent (par son nom) la séquence d'états
     state_seq = {player.name: [] for player in env.players}
-    initial_state = env.get_state(seat_position = env.current_player_seat)  # état initial (vecteur de dimension 116)
+    initial_state = env.get_state(seat_position = env.current_player_seat)  # état initial
 
     # Assurez-vous que chaque joueur a déjà son nom attribué dans l'environnement avant d'initialiser
     for player in env.players:
@@ -153,7 +153,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
                 }
             data_collector.add_state(state_info)
 
-            # Buffer experience (state_seq, action_index, mask) for later reward assignment
+            # Create next state sequence for learning
+            next_state_seq = player_state_seq.copy()
+            next_state_seq.append(next_state)
+            
+            # Buffer experience for later reward assignment
             experiences.append((current_player.agent, player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase))
         
         else : # Cas spécifique au joueur qui déclenche le showdown par son action
@@ -164,6 +168,10 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
             # On ajoute le nouvel état à la fin de la séquence (car dans ce cas, c'est un state issu d'une action)
             state_seq[current_player.name].append(next_state)
+            
+            # Create next state sequence containing the final state for learning
+            next_state_seq = previous_player_state_seq.copy()
+            next_state_seq.append(next_state)
 
             # Stocker l'expérience
             experiences.append((current_player.agent, previous_player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase))
@@ -205,7 +213,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
     }
     for agent, state_sequence, action_idx, valid_mask, target_vector, phase in experiences:
         reward = env.net_stack_changes[agent.name] * phase_weights[phase]
-        agent.remember(state_seq=state_sequence, action_index=action_idx, valid_action_mask=valid_mask, reward=reward, target_vector=target_vector)
+        # Setting done flag to True for the last phase, False otherwise
+        done = (phase == GamePhase.SHOWDOWN)
+        # For next_state_seq, we use the same sequence but shifted by one if possible
+        next_state_seq = state_sequence[1:] if len(state_sequence) > 1 else state_sequence
+        agent.remember(state_seq=state_sequence, action_index=action_idx, valid_action_mask=valid_mask, reward=reward, target_vector=target_vector, done=done, next_state_seq=next_state_seq)
 
     metrics_list = []
     for player in env.players:

@@ -545,8 +545,8 @@ class Visualizer:
         """
         Génère des visualisations des métriques d'entraînement à partir du fichier metrics_history.json
         """
-        # Créer une figure avec 6 sous-graphiques (2x3)
-        fig = plt.figure(figsize=(20, 15))
+        # Créer une figure avec 9 sous-graphiques (3x3)
+        fig = plt.figure(figsize=(24, 20))
         
         # Définir une palette de couleurs pastel
         pastel_colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
@@ -558,15 +558,18 @@ class Visualizer:
         metrics_to_plot = [
             ('reward_norm_mean', 'Reward Normalisée Moyenne', None, None),
             ('invalid_action_loss', 'Somme des probabilités d\'action sur les actions invalides', 1.0, 0.0),
-            ('value_loss', 'Value Loss (MSE entre la valeur estimée et la Reward Normalisée)', None, None),
-            ('policy_loss', 'Policy Loss (MSE entre les probabilités d\'action et le vecteur cible)', None, None),
+            ('critic_loss', 'Critic Loss (MSE entre Q-Value et TD-Target)', None, None),
+            ('state_value_loss', 'State Value Loss (MSE entre V(s) et TD-Target)', None, None),
+            ('policy_loss', 'Policy Loss (Log-Prob * Advantage)', None, None),
+            ('target_match_loss', 'Target Match Loss (KL avec MCCFR)', None, None),
             ('entropy', 'Entropie', None, None),
-            ('total_loss', 'Total Loss', None, None)
+            ('total_actor_loss', 'Total Actor Loss', None, None),
+            ('total_critic_loss', 'Total Critic Loss', None, None)
         ]
 
         # Créer un subplot pour chaque métrique
         for idx, (metric_name, display_name, y_max, y_min) in enumerate(metrics_to_plot):
-            ax = plt.subplot(2, 3, idx + 1)
+            ax = plt.subplot(3, 3, idx + 1)
             
             # Préparer les données pour chaque agent
             for agent_idx, agent in enumerate(agents):
