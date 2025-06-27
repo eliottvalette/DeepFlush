@@ -516,7 +516,6 @@ class Visualizer:
         ax6.set_xlabel('Episode')
         ax6.set_ylabel('Winrate')
         ax6.legend()
-        ax6.set_ylim(0, 1)
 
         ax6.set_facecolor('#F0F0F0')
         ax6.grid(True, alpha=0.3)
@@ -557,7 +556,7 @@ class Visualizer:
         # Métriques spécifiques à tracer basées sur l'output de train_model
         metrics_to_plot = [
             ('reward_norm_mean', 'Reward Normalisée Moyenne', None, None),
-            ('invalid_action_loss', 'Somme des probabilités d\'action sur les actions invalides', 1.0, 0.0),
+            ('invalid_action_loss', 'Somme des probabilités d\'action sur les actions invalides', None, None),
             ('critic_loss', 'Critic Loss (MSE entre Q-Value et TD-Target)', None, None),
             ('state_value_loss', 'State Value Loss (MSE entre V(s) et TD-Target)', None, None),
             ('policy_loss', 'Policy Loss (Log-Prob * Advantage)', None, None),

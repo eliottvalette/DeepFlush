@@ -3,7 +3,7 @@ import numpy as np
 import random as rd
 import json
 import copy
-from utils.config import DEBUG
+from utils.config import DEBUG_MCCFR
 from typing import List, Dict, Tuple
 from poker_game_expresso import PlayerAction, Card
 from poker_game_optimized_expresso import PokerGameOptimized
@@ -24,7 +24,7 @@ class MCCFRTrainer:
         """
         Simule le futur d'une partie en parcourant les trajectoires des actions valides.
         """
-        if DEBUG:
+        if DEBUG_MCCFR:
             print("[MCCFR] ======= DEBUT MONTERCARLO SIMULATIONS =======\n")
 
         # Initialiser a None pour toutes les actions non valides et 0 pour les actions valides
@@ -51,7 +51,7 @@ class MCCFRTrainer:
             
             # Filtrer les raises disponibles
             available_raises = [action for action in valid_actions if action.value.startswith("raise")]
-            if DEBUG :
+            if DEBUG_MCCFR :
                 print('[MCCFR] available_raises :', available_raises)
             
             if available_raises:
@@ -85,11 +85,11 @@ class MCCFRTrainer:
                 valid_actions = [action for action in valid_actions if not action.value.startswith("raise") or action in raise_actions]
 
         # Simulation des trajectoires
-        if DEBUG:
+        if DEBUG_MCCFR:
             print(f"[MCCFR] Hero cards: {hero_cards}")
         start_time = time.time()
         for simulation_index in range(self.num_simulations):
-            if DEBUG:
+            if DEBUG_MCCFR:
                 print(f"[MCCFR] Simulation [{simulation_index + 1}/{self.num_simulations}] pour {len(valid_actions)} actions")
                 print('[MCCFR] valid_actions :', valid_actions)
             rd_opponents_cards, rd_missing_community_cards = self.get_opponent_hands_and_community_cards(hero_cards = hero_cards.copy(), visible_community_cards = visible_community_cards.copy(), num_active_players = num_active_players)
@@ -112,13 +112,13 @@ class MCCFRTrainer:
 
         end_time = time.time()
 
-        if DEBUG:
+        if DEBUG_MCCFR:
             print('----------------------------------')
             print('[MCCFR] real valid actions:', [real_valid_action.value for real_valid_action in real_valid_actions])
             print('[MCCFR] explored actions:', [valid_action.value for valid_action in valid_actions])
             print('[MCCFR] payoff_per_trajectory_action non mappé:', json.dumps({action.value: float(value) if value is not None else None for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
 
-        # Afficher le temps de simulation (Non debug)
+        # Afficher le temps de simulation (Non DEBUG_MCCFR)
         print(f"[MCCFR] Temps de simulation: {(end_time - start_time)*1000:.2f} ms")
 
         # Appliquer les payoffs aux raises non simulées
@@ -128,7 +128,7 @@ class MCCFRTrainer:
 
         target_vector = self.compute_target_probability_vector(self.payoff_per_trajectory_action)
         
-        if DEBUG:
+        if DEBUG_MCCFR:
             print('[MCCFR] target_vector :', target_vector)
             print('[MCCFR] payoff_per_trajectory_action :', json.dumps({action.value: float(value) if value is not None else None for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
             print('----------------------------------')

@@ -1,4 +1,4 @@
-# poker_train.py
+# poker_test.py
 import numpy as np 
 import random as rd
 import pygame

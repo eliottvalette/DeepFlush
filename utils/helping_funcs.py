@@ -28,7 +28,7 @@ def save_models(players, episode, models_dir="saved_models"):
             
             torch.save(
                 checkpoint,
-                f"{models_dir}/poker_agent_{player.name}_{episode}.pth"
+                f"{models_dir}/poker_agent_{player.name}_epoch_{episode}.pth"
             )
     print("Models saved successfully!")
 

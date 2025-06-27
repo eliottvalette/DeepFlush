@@ -20,7 +20,7 @@ from poker_MCCFR_expresso import MCCFRTrainer
 from utils.config import DEBUG
 
 # Compteurs
-number_of_hand_per_game = 0
+number_of_consecutive_hands= 0
 
 def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector, mccfr_trainer: MCCFRTrainer) -> Tuple[List[float], List[dict]]:
     """
@@ -38,7 +38,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         Tuple[List[float], List[dict]]: Récompenses finales et métriques d'entraînement
     """
 
-    global number_of_hand_per_game  # Ajout de cette ligne pour référencer et mettre à jour la variable globale
+    global number_of_consecutive_hands # Ajout de cette ligne pour référencer et mettre à jour la variable globale
 
      # Nettoyage des caches
     if episode % 100 == 0:
@@ -48,13 +48,13 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
     # Vérification du nombre minimum de joueurs
     players_that_can_play = [p for p in env.players if p.stack > 2] # On ne compte pas les joueurs avec moins de 2BB dans leur stack
-    if len(players_that_can_play) < 2 or number_of_hand_per_game > 10:
+    if len(players_that_can_play) < 2 or number_of_consecutive_hands> 3:
         env.reset()
-        number_of_hand_per_game = 0
+        number_of_consecutive_hands= 0
         players_that_can_play = [p for p in env.players if p.stack > 0]
     else:
         env.start_new_hand()
-        number_of_hand_per_game += 1    
+        number_of_consecutive_hands+= 1    
 
     # Initialiser un dictionnaire qui associe à chaque agent son stack initial
     initial_stacks = {player.name: player.stack for player in env.players}
@@ -209,21 +209,30 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         }
         data_collector.add_state(state_info)
     
-    # Store buffered experiences with final rewards weighted by the phase
-    phase_weights = {
-        GamePhase.PREFLOP: 0.05,
-        GamePhase.FLOP: 0.1,
-        GamePhase.TURN: 0.3,
-        GamePhase.RIVER: 0.5,
-        GamePhase.SHOWDOWN: 1.0
-    }
-    for agent, state_sequence, action_idx, valid_mask, target_vector, phase in experiences:
-        reward = env.net_stack_changes[agent.name] * phase_weights[phase]
-        # Setting done flag to True for the last phase, False otherwise
-        done = (phase == GamePhase.SHOWDOWN)
-        # For next_state_seq, we use the same sequence but shifted by one if possible
+    # Repérer la dernière transition pour chaque agent
+    last_transition = {}
+    for exp in experiences:  # exp = (agent, state_seq, action_idx, valid_mask, target_vector, phase)
+        last_transition[exp[0]] = exp  # en écrasant à chaque passage, il ne reste que la plus récente
+
+    # Pousser toutes les transitions dans la mémoire, reward uniquement sur la dernière
+    for exp in experiences:
+        agent, state_sequence, action_idx, valid_mask, target_vector, _ = exp
+        is_final = (exp is last_transition[agent])
+        reward   = env.net_stack_changes[agent.name] if is_final else 0.0
+        if DEBUG:
+            print(f"[TRAIN] agent : {agent.name}, length of state_sequence : {len(state_sequence)}, reward : {reward}")
+        done     = is_final
         next_state_seq = state_sequence[1:] if len(state_sequence) > 1 else state_sequence
-        agent.remember(state_seq=state_sequence, action_index=action_idx, valid_action_mask=valid_mask, reward=reward, target_vector=target_vector, done=done, next_state_seq=next_state_seq)
+
+        agent.remember(
+            state_seq         = state_sequence,
+            action_index      = action_idx,
+            valid_action_mask = valid_mask,
+            reward            = reward,
+            target_vector     = target_vector,
+            done              = done,
+            next_state_seq    = next_state_seq
+        )
 
     metrics_list = []
     for player in env.players:

@@ -690,7 +690,7 @@ class PokerGame:
         # Désactiver call si pas de mise à suivre ou pas assez de jetons
         if current_player.current_player_bet == self.current_maximum_bet:  # Si le joueur a égalisé la mise maximale, il ne peut pas call
             self.action_buttons[PlayerAction.CALL].enabled = False
-        elif current_player.stack < (self.current_maximum_bet - current_player.current_player_bet): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call
+        elif current_player.stack < (self.current_maximum_bet - current_player.current_player_bet + 1e-4): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call (1e-4 pour éviter les erreurs d'arrondi)
             self.action_buttons[PlayerAction.CALL].enabled = False
             # Activer all-in si le joueur a des jetons même si insuffisants pour call
             if current_player.stack > 0:

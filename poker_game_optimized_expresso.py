@@ -376,7 +376,7 @@ class PokerGameOptimized:
         # Désactiver call si pas de mise à suivre ou pas assez de jetons
         if current_player.current_player_bet == self.current_maximum_bet:  # Si le joueur a égalisé la mise maximale, il ne peut pas call
             self.action_buttons[PlayerAction.CALL].enabled = False
-        elif current_player.stack < (self.current_maximum_bet - current_player.current_player_bet): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call
+        elif current_player.stack < (self.current_maximum_bet - current_player.current_player_bet + 1e-4): # Si le joueur n'a pas assez de jetons pour suivre la mise maximale, il ne peut pas call (1e-4 pour éviter les erreurs d'arrondi)
             self.action_buttons[PlayerAction.CALL].enabled = False
             # Activer all-in si le joueur a des jetons même si insuffisants pour call
             if current_player.stack > 0:
@@ -516,6 +516,8 @@ class PokerGameOptimized:
                 print(f"[GAME_OPTI] {player.name} call.")
             call_amount = self.current_maximum_bet - player.current_player_bet
             if call_amount > player.stack: 
+                print(f"[GAME_OPTI] {player.name} a {player.stack}BB tandis que le montant "
+                    f"additionnel requis est {call_amount}BB. Mise minimum requise : {self.current_maximum_bet}BB.")
                 raise ValueError(f"[GAME_OPTI] {player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
         
             player.stack -= call_amount

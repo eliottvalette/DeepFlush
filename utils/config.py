@@ -12,6 +12,7 @@ STATE_SIZE = 106
 
 # Paramètres de visualisation
 DEBUG = False
+DEBUG_MCCFR = False
 DEBUG_OPTI = False
 DEBUG_OPTI_ULTIMATE = False
 RENDERING = False
