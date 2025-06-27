@@ -696,8 +696,7 @@ class Visualizer:
         ax1.set_xticks(index + bar_width * (len(positions)-1) / 2)
         ax1.set_xticklabels(players)
         ax1.legend(title='Position')
-        ax1.set_ylim(0,1)
-        
+                
         plt.tight_layout()
         plt.savefig(os.path.join(self.viz_dir, 'Poker_analytics.jpg'), dpi=dpi, bbox_inches='tight')
         plt.close()

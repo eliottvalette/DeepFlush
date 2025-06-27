@@ -35,21 +35,45 @@ def updated_saved_models():
     files = os.listdir(saved_models_dir)  # Get updated file list
     pattern = r'(poker_agent_Player_\d+)_epoch_\d+(.pth)'
     
+    # Group files by player to find the most recent epoch
+    player_files = {}
     for file in files:
         match = re.match(pattern, file)
         if match:
-            old_path = os.path.join(saved_models_dir, file)
-            new_name = f"{match.group(1)}.pth"
-            new_path = os.path.join(saved_models_dir, new_name)
+            player_name = match.group(1)
+            epoch_match = re.search(r'epoch_(\d+)', file)
+            epoch = int(epoch_match.group(1)) if epoch_match else 0
             
+            if player_name not in player_files or epoch > player_files[player_name]["epoch"]:
+                player_files[player_name] = {
+                    "filename": file,
+                    "epoch": epoch
+                }
+    
+    # Rename only the most recent file for each player
+    for player_name, file_info in player_files.items():
+        old_path = os.path.join(saved_models_dir, file_info["filename"])
+        new_name = f"{player_name}.pth"
+        new_path = os.path.join(saved_models_dir, new_name)
+        
+        try:
+            # If destination file exists, remove it first
+            if os.path.exists(new_path):
+                os.remove(new_path)
+            os.rename(old_path, new_path)
+            print(f"Renamed latest ({file_info['epoch']}): {file_info['filename']} -> {new_name}")
+        except Exception as e:
+            print(f"Error renaming {file_info['filename']}: {e}")
+            
+    # Remove any remaining epoch files that weren't the latest
+    for file in os.listdir(saved_models_dir):
+        if 'epoch' in file.lower():
+            file_path = os.path.join(saved_models_dir, file)
             try:
-                # If destination file exists, remove it first
-                if os.path.exists(new_path):
-                    os.remove(new_path)
-                os.rename(old_path, new_path)
-                print(f"Renamed: {file} -> {new_name}")
+                os.remove(file_path)
+                print(f"Deleted older epoch file: {file}")
             except Exception as e:
-                print(f"Error renaming {file}: {e}")
+                print(f"Error deleting {file}: {e}")
 
 def purify_saved_models():
     # Path to saved_models directory

@@ -276,6 +276,7 @@ class PokerGame:
             player.cards = []
             player.is_active = True
             player.has_folded = False
+            player.has_acted = False
             player.is_all_in = False
             player.range = None        
         
@@ -317,8 +318,10 @@ class PokerGame:
             player.cards = []
             player.current_player_bet = 0
             player.total_bet = 0
+
             player.is_all_in = False
             player.has_folded = False
+            player.has_acted = False
             player.range = None
             player.is_active = player.stack > 0
 
@@ -812,7 +815,8 @@ class PokerGame:
         
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if action not in valid_actions:
-            raise ValueError(f"{player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
+            raise ValueError(f"{player.name} n'a pas le droit de faire cette action: {action}, actions valides : {valid_actions}")
+
         
         #----- Affichage de débogage (pour le suivi durant l'exécution) -----
         if DEBUG:

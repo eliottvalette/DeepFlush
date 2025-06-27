@@ -99,6 +99,7 @@ class PokerAgent:
             self.critic_model.load_state_dict(checkpoint['critic_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+            print(f"Modèle chargé avec succès: {load_path}")
         except Exception as e:
             raise RuntimeError(f"Erreur lors du chargement du modèle: {str(e)}")
 
@@ -160,10 +161,39 @@ class PokerAgent:
             # Créer une distribution uniforme pour le rapport
             action_probs = torch.zeros((1, self.action_size), device=self.device)
             action_probs[0, valid_indices] = 1.0/len(valid_indices)
-        elif len(self.memory) == 0: # Choisir l'action avec la plus haute probabilité du vecteur cible
-            chosen_index = np.argmax(target_vector)
-            action_probs = torch.zeros((1, self.action_size), device=self.device)
-            action_probs[0, chosen_index] = 1.0
+        elif len(self.memory) == 0:
+            if random.random() < 0.25: # 25% de chance de choisir l'action avec la plus haute probabilité du vecteur cible
+                chosen_index = np.argmax(target_vector)
+                action_probs = torch.zeros((1, self.action_size), device=self.device)
+                action_probs[0, chosen_index] = 1.0
+                if DEBUG:
+                    print(f"highest proba from target vector")
+            elif random.random() < 0.5: # 25% de chance de choisir une action aléatoire parmi les actions valides
+                chosen_index = random.choice(valid_indices)
+                action_probs = torch.zeros((1, self.action_size), device=self.device)
+                action_probs[0, chosen_index] = 1.0
+                if DEBUG:
+                    print(f"random choice from valid actions")
+            else: # 50% de faire choisir le dernier agent saved (les agents avec des self.memory == 0 sont ceux pour lequels on a load_model = True mais qu'on a pas ré-entrainé par la suite)
+                # Convertir les arrays numpy en tenseurs PyTorch
+                state_tensors = [torch.from_numpy(s).float().to(self.device) for s in state]
+                state_tensor = torch.stack(state_tensors).unsqueeze(0)
+                
+                self.actor_model.eval()
+                with torch.no_grad():
+                    action_probs = self.actor_model(state_tensor)
+                    if round(action_probs.sum().item(), 2) != 1:
+                        raise ValueError(f"Le modèle a prédit une probabilité de {round(action_probs.sum().item(), 2)} pour toutes les actions valides, état: {state}")
+                masked_probs = action_probs * valid_action_mask
+                
+                if masked_probs.sum().item() == 0:
+                    raise ValueError(f"Le modèle a prédit une probabilité de 0 pour toutes les actions valides, état: {state}")
+                else:
+                    masked_probs = masked_probs / masked_probs.sum()
+                    chosen_index = torch.argmax(masked_probs).item()
+                if DEBUG:
+                    print(f"random choice from saved model")
+
         else:
             # Convertir les arrays numpy en tenseurs PyTorch
             state_tensors = [torch.from_numpy(s).float().to(self.device) for s in state]

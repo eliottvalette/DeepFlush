@@ -106,10 +106,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state(seat_position = current_player.seat_position)
-        if DEBUG:
-            print(f"state : {state}")
-            print(f"\ncurrent_player.name : {current_player.name}, current_phase : {env.current_phase}, chosen_action : {chosen_action}\n")
-            print(f"current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
+        
         
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
             valid_actions = valid_actions, 
@@ -129,6 +126,11 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         # Prédiction avec une inférence classique du modèle
         chosen_action, action_mask, action_probs = current_player.agent.get_action(state = player_state_seq, valid_actions = valid_actions, target_vector = target_vector, epsilon = epsilon)
 
+        if DEBUG:
+            print(f"state : {state}")
+            print(f"current_player.name : {current_player.name}, current_phase : {env.current_phase}")
+            print(f"current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
+        
         review_state = env.get_state(seat_position = current_player.seat_position)
         if state.tolist() != review_state.tolist():
             raise ValueError(f"state != review_state => {state.tolist()} != {review_state.tolist()}")
@@ -243,7 +245,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
         render_every (int): Fréquence de mise à jour du rendu graphique
     """
     # Initialisation des historiques et de l'environnement
-    env = PokerGame(agents = agent_list, rendering=rendering)
+    env = PokerGame(agents=agent_list, rendering=rendering)
     
     # Configuration du collecteur de données
     data_collector = DataCollector(

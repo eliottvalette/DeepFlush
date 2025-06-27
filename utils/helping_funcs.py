@@ -16,11 +16,19 @@ def save_models(players, episode, models_dir="saved_models"):
         os.makedirs(models_dir)
     
     for player in players:
-        # Only save agents that have a model (not bots)
-        if hasattr(player.agent, 'model'):
+        # Only save agents that have actor and critic models
+        if hasattr(player.agent, 'actor_model') and hasattr(player.agent, 'critic_model'):
+            # Create a dictionary containing both models' state dicts
+            checkpoint = {
+                'actor_state_dict': player.agent.actor_model.state_dict(),
+                'critic_state_dict': player.agent.critic_model.state_dict(),
+                'optimizer_state_dict': player.agent.optimizer.state_dict(),
+                'critic_optimizer_state_dict': player.agent.critic_optimizer.state_dict()
+            }
+            
             torch.save(
-                player.agent.model.state_dict(),
-                f"{models_dir}/poker_agent_{player.name}_epoch_{episode+1}.pth"
+                checkpoint,
+                f"{models_dir}/poker_agent_{player.name}_{episode}.pth"
             )
     print("Models saved successfully!")
 

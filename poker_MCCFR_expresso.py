@@ -116,7 +116,7 @@ class MCCFRTrainer:
             print('----------------------------------')
             print('real valid actions:', [real_valid_action.value for real_valid_action in real_valid_actions])
             print('explored actions:', [valid_action.value for valid_action in valid_actions])
-            print('payoff_per_trajectory_action non mappé:', json.dumps({action.value: value for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
+            print('payoff_per_trajectory_action non mappé:', json.dumps({action.value: float(value) if value is not None else None for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
 
         # Afficher le temps de simulation (Non debug)
         print(f"Temps de simulation: {(end_time - start_time)*1000:.2f} ms")
@@ -130,7 +130,7 @@ class MCCFRTrainer:
         
         if DEBUG:
             print('target_vector :', target_vector)
-            print('payoff_per_trajectory_action :', json.dumps({action.value: value for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
+            print('payoff_per_trajectory_action :', json.dumps({action.value: float(value) if value is not None else None for action, value in self.payoff_per_trajectory_action.items()}, indent=2))
             print('----------------------------------')
 
             print("======= FIN MONTERCARLO SIMULATIONS =======\n")
