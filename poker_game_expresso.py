@@ -383,12 +383,12 @@ class PokerGame:
 
         # In poker_game.py, inside start_new_hand() after resetting players:
         if DEBUG:
-            print("Player positions and roles for the new hand:")
+            print("[GAME] Player positions and roles for the new hand:")
             for p in self.players:
                 if p.is_active:
-                    print(f"{p.name}: seat={p.seat_position}, role={p.role_position}, stack={p.stack}")
+                    print(f"[GAME] {p.name}: seat={p.seat_position}, role={p.role_position}, stack={p.stack}")
                 else :
-                    print(f"{p.name}: seat={p.seat_position}, role=(inactive), stack={p.stack}")
+                    print(f"[GAME] {p.name}: seat={p.seat_position}, role=(inactive), stack={p.stack}")
 
         return self.get_state(seat_position = self.current_player_seat)
 
@@ -424,8 +424,8 @@ class PokerGame:
 
         if self.current_phase == GamePhase.PREFLOP:
             raise ValueError(
-                "Erreur d'état : Distribution des community cards pendant le pré-flop. "
-                "Les cartes communes ne doivent être distribuées qu'après le pré-flop."
+                "[GAME] Erreur d'état : Distribution des community cards pendant le pré-flop. "
+                "[GAME] Les cartes communes ne doivent être distribuées qu'après le pré-flop."
             )
         
         if self.current_phase == GamePhase.FLOP:
@@ -444,7 +444,7 @@ class PokerGame:
         
         if sb_player is None or bb_player is None:
             raise ValueError(
-                f"Impossible de déterminer la position de la Small Blind ou Big Blind : "
+                f"[GAME] Impossible de déterminer la position de la Small Blind ou Big Blind : "
                 f"sb_player={sb_player}, bb_player={bb_player}. Vérifiez l'assignation des rôles des joueurs."
             )
         
@@ -513,8 +513,8 @@ class PokerGame:
                 # Affiche l'état de chaque joueur pour faciliter le débogage
                 details = [(p.name, p.is_active, p.has_folded, p.is_all_in) for p in self.players]
                 raise RuntimeError(
-                    "Aucun joueur valide trouvé. Cela signifie que tous les joueurs sont inactifs, foldés ou all-in. "
-                    f"Détails des joueurs : {details}"
+                    "[GAME] Aucun joueur valide trouvé. Cela signifie que tous les joueurs sont inactifs, foldés ou all-in. "
+                    f"[GAME] Détails des joueurs : {details}"
                 )
 
     def check_phase_completion(self):
@@ -534,7 +534,7 @@ class PokerGame:
         # Vérifier s'il ne reste qu'un seul joueur actif
         if len(in_game_players) == 1:
             if DEBUG:
-                print("Moving to showdown (only one player remains)")
+                print("[GAME] Moving to showdown (only one player remains)")
             self.handle_showdown()
             return
 
@@ -552,7 +552,7 @@ class PokerGame:
         # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
         if (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
             if DEBUG:
-                print("Moving to showdown (all remaining players are all-in)")
+                print("[GAME] Moving to showdown (all remaining players are all-in)")
             while len(self.community_cards) < 5:
                 self.community_cards.append(self.deck.pop())
             self.handle_showdown()
@@ -562,27 +562,27 @@ class PokerGame:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player.has_acted:
                 if DEBUG:
-                    print(f'{player.name} n\'a pas encore agi')
+                    print(f'[GAME] {player.name} n\'a pas encore agi')
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
 
             # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le tour n'est pas terminé
             if player.current_player_bet < self.current_maximum_bet and not player.is_all_in:
                 if DEBUG:
-                    print('Un des joueurs en jeu n\'a pas égalisé la mise maximale')
+                    print('[GAME] Un des joueurs en jeu n\'a pas égalisé la mise maximale')
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         
         # Atteindre cette partie du code signifie que la phase est terminée
         if self.current_phase == GamePhase.RIVER:
             if DEBUG:
-                print("River complete - going to showdown")
+                print("[GAME] River complete - going to showdown")
             self.handle_showdown()
             return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         else:
             self.advance_phase()
             if DEBUG:
-                print(f"Advanced to {self.current_phase}")
+                print(f"[GAME] Advanced to {self.current_phase}")
             # Réinitialiser has_acted pour tous les joueurs actifs et non fold au début d'une nouvelle phase
             for p in self.players:
                 if p.is_active and not p.has_folded and not p.is_all_in:
@@ -596,12 +596,12 @@ class PokerGame:
                      current_player.current_player_bet == self.big_blind)):
                 if self.current_phase == GamePhase.RIVER:
                     if DEBUG:
-                        print("River complete - going to showdown")
+                        print("[GAME] River complete - going to showdown")
                     self.handle_showdown()
                 else:
                     self.advance_phase()
                     if DEBUG:
-                        print(f"Advanced to {self.current_phase}")
+                        print(f"[GAME] Advanced to {self.current_phase}")
                     for p in self.players:
                         if p.is_active and not p.has_folded and not p.is_all_in:
                             p.has_acted = False
@@ -615,7 +615,7 @@ class PokerGame:
         non_all_in_players = [p for p in in_game_players if not p.is_all_in]
         if len(non_all_in_players) == 1 and len(in_game_players) > 1:
             if DEBUG:
-                print("Moving to showdown (only one non all-in player remains)")
+                print("[GAME] Moving to showdown (only one non all-in player remains)")
             while len(self.community_cards) < 5:
                 self.community_cards.append(self.deck.pop())
             self.handle_showdown()
@@ -627,7 +627,7 @@ class PokerGame:
         Distribue les cartes communes appropriées et réinitialise les mises.
         """
         if DEBUG:
-            print(f"current_phase {self.current_phase}")
+            print(f"[GAME] current_phase {self.current_phase}")
         self.last_raiser = None  # Réinitialiser le dernier raiser pour la nouvelle phase
         
         # Normal phase progression
@@ -806,48 +806,48 @@ class PokerGame:
         if player.seat_position != self.current_player_seat:
             current_turn_player = self.players[self.current_player_seat].name
             raise ValueError(
-                f"Erreur d'action : Ce n'est pas le tour de {player.name}. "
-                f"C'est au tour de {current_turn_player} d'agir."
+                f"[GAME] Erreur d'action : Ce n'est pas le tour de {player.name}. "
+                f"[GAME] C'est au tour de {current_turn_player} d'agir."
             )
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
-            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
+            raise ValueError(f"[GAME] {player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
         
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if action not in valid_actions:
-            raise ValueError(f"{player.name} n'a pas le droit de faire cette action: {action}, actions valides : {valid_actions}")
+            raise ValueError(f"[GAME] {player.name} n'a pas le droit de faire cette action: {action}, actions valides : {valid_actions}")
 
         
         #----- Affichage de débogage (pour le suivi durant l'exécution) -----
         if DEBUG:
-            print(f"\n=== Action par {player.name} ===")
-            print(f"Joueur actif : {player.is_active}")
-            print(f"Action choisie : {action.value}")
-            print(f"Phase actuelle : {self.current_phase}")
-            print(f"Pot actuel : {self.main_pot}BB")
-            print(f"A agi : {player.has_acted}")
-            print(f"Est all-in : {player.is_all_in}")
-            print(f"Mise maximale actuelle : {self.current_maximum_bet}BB")
-            print(f"Stack du joueur avant action : {player.stack}BB")
-            print(f"Mise actuelle du joueur : {player.current_player_bet}BB")
+            print(f"\n[GAME] === Action par {player.name} ===")
+            print(f"[GAME] Joueur actif : {player.is_active}")
+            print(f"[GAME] Action choisie : {action.value}")
+            print(f"[GAME] Phase actuelle : {self.current_phase}")
+            print(f"[GAME] Pot actuel : {self.main_pot}BB")
+            print(f"[GAME] A agi : {player.has_acted}")
+            print(f"[GAME] Est all-in : {player.is_all_in}")
+            print(f"[GAME] Mise maximale actuelle : {self.current_maximum_bet}BB")
+            print(f"[GAME] Stack du joueur avant action : {player.stack}BB")
+            print(f"[GAME] Mise actuelle du joueur : {player.current_player_bet}BB")
         
         #----- Traitement de l'action en fonction de son type -----
         if action.value == PlayerAction.FOLD.value:
             # Le joueur se couche il n'est plus actif pour ce tour.
             player.has_folded = True
             if DEBUG : 
-                print(f"{player.name} se couche (Fold).")
+                print(f"[GAME] {player.name} se couche (Fold).")
         
         elif action.value == PlayerAction.CHECK.value:
             if DEBUG : 
-                print(f"{player.name} check.")
+                print(f"[GAME] {player.name} check.")
         
         elif action.value == PlayerAction.CALL.value:
             if DEBUG : 
-                print(f"{player.name} call.")
+                print(f"[GAME] {player.name} call.")
             call_amount = self._round_value(self.current_maximum_bet - player.current_player_bet)
             if call_amount > player.stack: 
-                raise ValueError(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
+                raise ValueError(f"[GAME] {player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
         
             player.stack = self._round_value(player.stack - call_amount)
             player.current_player_bet = self._round_value(player.current_player_bet + call_amount)
@@ -856,11 +856,11 @@ class PokerGame:
             if player.stack == 0:
                 player.is_all_in = True
             if DEBUG : 
-                print(f"{player.name} a call {call_amount}BB")
+                print(f"[GAME] {player.name} a call {call_amount}BB")
 
         elif action.value == PlayerAction.RAISE.value:
             if DEBUG : 
-                print(f"{player.name} raise.")
+                print(f"[GAME] {player.name} raise.")
             # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
@@ -874,7 +874,7 @@ class PokerGame:
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
             if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
-                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"[GAME] Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
                     f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
         
@@ -890,7 +890,7 @@ class PokerGame:
             player.is_all_in = player.is_active and (player.stack == 0)
         
             if DEBUG : 
-                print(f"{player.name} a raise {bet_amount}BB")
+                print(f"[GAME] {player.name} a raise {bet_amount}BB")
         
         # --- Nouvelles actions pot-based ---
         elif action.value in {
@@ -931,7 +931,7 @@ class PokerGame:
             # Vérifier que le joueur a suffisamment de jetons pour cette raise
             if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
-                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"[GAME] Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
                     f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
         
@@ -947,18 +947,18 @@ class PokerGame:
             player.is_all_in = player.is_active and (player.stack == 0)
         
             if DEBUG : 
-                print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
+                print(f"[GAME] {player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
         
         
         elif action.value == PlayerAction.ALL_IN.value:
             if DEBUG : 
-                print(f"{player.name} all-in.")
+                print(f"[GAME] {player.name} all-in.")
             # Si aucune valeur n'est passée pour bet_amount, on assigne automatiquement tout le stack
             if bet_amount is None:
                 bet_amount = player.stack
             elif bet_amount != player.stack:
                 raise ValueError(
-                    f"Erreur ALL-IN : {player.name} doit miser exactement tout son stack ({player.stack}BB)."
+                    f"[GAME] Erreur ALL-IN : {player.name} doit miser exactement tout son stack ({player.stack}BB)."
                 )
             
             # Mise à jour de la mise maximale seulement si l'all-in est supérieur
@@ -973,9 +973,9 @@ class PokerGame:
             player.total_bet += bet_amount  # On ajoute le all-in à la mise totale du joueur
             player.is_all_in = True  # On indique que le joueur est all-in
             if DEBUG : 
-                print(f"{player.name} a all-in {bet_amount}BB")
+                print(f"[GAME] {player.name} a all-in {bet_amount}BB")
         else :
-            raise ValueError(f"Action invalide : {action}")
+            raise ValueError(f"[GAME] Action invalide : {action}")
         
         player.has_acted = True
         self.check_phase_completion()
@@ -1007,14 +1007,14 @@ class PokerGame:
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
         if not player.cards:
             raise ValueError(
-                f"Erreur d'évaluation : le joueur {player.name} n'a pas de cartes pour évaluer sa main. "
+                f"[GAME] Erreur d'évaluation : le joueur {player.name} n'a pas de cartes pour évaluer sa main. "
                 "Assurez-vous que les cartes ont été distribuées correctement."
             )
         """
         Évalue la meilleure main possible d'un joueur.
         """
         if not player.cards:
-            raise ValueError("Cannot evaluate hand - player has no cards")
+            raise ValueError("[GAME] Cannot evaluate hand - player has no cards")
         
         # Combine les cartes du joueur avec les cartes communes
         all_cards = player.cards + self.community_cards
@@ -1118,12 +1118,12 @@ class PokerGame:
         Gère la phase de showdown en tenant compte correctement des side pots.
         """
         if DEBUG:
-            print("\n=== DÉBUT SHOWDOWN ===")
+            print("\n[GAME] === DÉBUT SHOWDOWN ===")
         self.current_phase = GamePhase.SHOWDOWN
         # On considère ici TOUS les joueurs qui ont contribué (même s'ils ont foldé)
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
         if DEBUG:
-            print(f"Joueurs actifs au showdown: {[p.name for p in active_players]}")
+            print(f"[GAME] Joueurs actifs au showdown: {[p.name for p in active_players]}")
         
         # Désactiver tous les boutons pendant le showdown
         for button in self.action_buttons.values():
@@ -1133,13 +1133,13 @@ class PokerGame:
         while len(self.community_cards) < 5:
             self.community_cards.append(self.deck.pop())
         if DEBUG:
-            print(f"Cartes communes finales: {[str(card) for card in self.community_cards]}")
+            print(f"[GAME] Cartes communes finales: {[str(card) for card in self.community_cards]}")
         
         # Afficher les mains des joueurs actifs
         if DEBUG:
-            print("\nMains des joueurs actifs:")
+            print("\n[GAME] Mains des joueurs actifs:")
             for player in active_players:
-                print(f"- {player.name}: {[str(card) for card in player.cards]}")
+                print(f"[GAME] - {player.name}: {[str(card) for card in player.cards]}")
         
         # --- Distribution des gains ---
         # Cas particulier : victoire par fold (il ne reste qu'un joueur actif)
@@ -1148,7 +1148,7 @@ class PokerGame:
             contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
             total_pot = sum(contributions.values())
             if DEBUG:
-                print(f"\nVictoire par fold - {winner.name} gagne {total_pot:.2f}BB")
+                print(f"\n[GAME] Victoire par fold - {winner.name} gagne {total_pot:.2f}BB")
             winner.stack += total_pot
             self.pygame_winner_info = f"{winner.name} gagne {total_pot:.2f}BB (tous les autres joueurs ont fold)"
         else:
@@ -1158,9 +1158,9 @@ class PokerGame:
             contributions = {player: player.total_bet for player in self.players if player.total_bet > 0}
             
             if DEBUG:
-                print("\nContributions totales (tous joueurs ayant misé):")
+                print("\n[GAME] Contributions totales (tous joueurs ayant misé):")
                 for player, amount in contributions.items():
-                    print(f"- {player.name}: {amount:.2f}BB")
+                    print(f"[GAME] - {player.name}: {amount:.2f}BB")
             
             pots = []
             pot_index = 0
@@ -1186,11 +1186,11 @@ class PokerGame:
                 })
                 
                 if DEBUG:
-                    print(f"\n{pot_name} calculé:")
-                    print(f"- Contribution minimale: {min_contrib:.2f}BB")
-                    print(f"- Nombre total de contributeurs: {len(current_contributors)}")
-                    print(f"- Montant du pot: {pot_amount:.2f}BB")
-                    print(f"- Joueurs éligibles: {[p.name for p in eligible]}")
+                    print(f"\n[GAME] {pot_name} calculé:")
+                    print(f"[GAME] - Contribution minimale: {min_contrib:.2f}BB")
+                    print(f"[GAME] - Nombre total de contributeurs: {len(current_contributors)}")
+                    print(f"[GAME] - Montant du pot: {pot_amount:.2f}BB")
+                    print(f"[GAME] - Joueurs éligibles: {[p.name for p in eligible]}")
                 
                 # Déduire la contribution minimale de tous les joueurs contributeurs
                 for player in contributions:
@@ -1200,19 +1200,19 @@ class PokerGame:
             
             # --- Distribution des gains pour chaque pot ---
             if DEBUG: 
-                print("\nDistribution des gains par pot:")
+                print("\n[GAME] Distribution des gains par pot:")
             for pot in pots:
                 if DEBUG:
-                    print(f"\nÉvaluation du {pot['name']} ({pot['amount']:.2f}BB):")
+                    print(f"\n[GAME] Évaluation du {pot['name']} ({pot['amount']:.2f}BB):")
                 if not pot["eligible"]:
                     if DEBUG:
-                        print("Aucun joueur éligible pour ce pot.")
+                        print("[GAME] Aucun joueur éligible pour ce pot.")
                     continue
                 
                 best_eval = None
                 winners = []
                 if DEBUG:
-                    print("Évaluation des mains:")
+                    print("[GAME] Évaluation des mains:")
                 for player in pot["eligible"]:
                     hand_eval = self.evaluate_final_hand(player)
                     # Création d'une description textuelle de la main (exemple simplifié)
@@ -1238,7 +1238,7 @@ class PokerGame:
                         hand_str = f"Carte haute: {', '.join(str(x) for x in hand_eval[1])}"
         
                     if DEBUG:
-                        print(f"- {player.name}: {hand_str}")
+                        print(f"[GAME] - {player.name}: {hand_str}")
                     current_key = (hand_eval[0].value, tuple(hand_eval[1]))
                     if best_eval is None or current_key > best_eval:
                         best_eval = current_key
@@ -1249,13 +1249,13 @@ class PokerGame:
                 if winners:
                     share = self._round_value(pot['amount'] / len(winners))
                     if DEBUG:
-                        print(f"Gagnant(s): {[w.name for w in winners]}, {share:.2f}BB chacun")
+                        print(f"[GAME] Gagnant(s): {[w.name for w in winners]}, {share:.2f}BB chacun")
                     for winner in winners:
                         winner.stack = self._round_value(winner.stack + share)
                 else:
                     share = 0
                     if DEBUG:
-                        print("Aucun gagnant déterminé pour ce pot.")
+                        print("[GAME] Aucun gagnant déterminé pour ce pot.")
         
             # (Optionnel) Mettre à jour l'info affichée par Pygame
             self.pygame_winner_info = "\n".join(
@@ -1264,22 +1264,22 @@ class PokerGame:
             )
         
             if DEBUG:
-                print("\nStacks initiaux:")
+                print("\n[GAME] Stacks initiaux:")
                 for player in self.players:
-                    print(f"- {player.name}: {self.initial_stacks[player.name]}BB")
+                    print(f"[GAME] - {player.name}: {self.initial_stacks[player.name]}BB")
         
             if DEBUG:
-                print("\nStacks finaux:")
+                print("\n[GAME] Stacks finaux:")
                 for player in self.players:
-                    print(f"- {player.name}: {player.stack:.2f}BB")
+                    print(f"[GAME] - {player.name}: {player.stack:.2f}BB")
         if DEBUG:
-            print("\nVariations :")
+            print("\n[GAME] Variations :")
         for player in self.players:
             initial = self.initial_stacks.get(player.name, 0)
             variation = player.stack - initial
             signe = "+" if variation >= 0 else ""
             if DEBUG :
-                print(f"- {player.name}: {signe}{variation:.2f}BB")
+                print(f"[GAME] - {player.name}: {signe}{variation:.2f}BB")
         
         # Calcul des changements nets de piles
         self.net_stack_changes = {player.name: (player.stack - self.initial_stacks.get(player.name, 0)) for player in self.players}
@@ -1293,7 +1293,7 @@ class PokerGame:
         self.pygame_winner_display_start = pygame.time.get_ticks()
         self.pygame_winner_display_duration = 2000  # 2 secondes
         if DEBUG:
-            print("=== FIN SHOWDOWN ===\n")
+            print("[GAME] === FIN SHOWDOWN ===\n")
 
     def _create_deck(self) -> List[Card]:
         """
@@ -1453,7 +1453,7 @@ class PokerGame:
             state.extend([-1] * 4) # couleur manquante
         
         if STATE_DEBUG:
-            print("step 1", len(state))
+            print("[GAME] step 1", len(state))
         
         # 2. Cartes communes [10:35]
         for i, card in enumerate(self.community_cards):
@@ -1469,7 +1469,7 @@ class PokerGame:
             state.extend([-1] * 4)   # couleur manquante
         
         if STATE_DEBUG:
-            print("step 2", len(state))
+            print("[GAME] step 2", len(state))
 
         # 3. Rang de la main actuelle (si assez de cartes sont visibles) [35:47]
         kicker_idx_map = {
@@ -1501,7 +1501,7 @@ class PokerGame:
             state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
 
         if STATE_DEBUG:
-            print("step 3", len(state))
+            print("[GAME] step 3", len(state))
 
         # 4. Informations sur le tour [47:52]
         phase_values = {
@@ -1517,34 +1517,34 @@ class PokerGame:
         state.extend(phase_range)
 
         if STATE_DEBUG:
-            print("step 4", len(state))
+            print("[GAME] step 4", len(state))
 
         # 5. Mise actuelle normalisée par le stack initial [52:53]
         state.append(self.current_maximum_bet / self.starting_stack)  # Normalisation de la mise (taille = 1)
 
         if STATE_DEBUG:
-            print("step 5", len(state))
+            print("[GAME] step 5", len(state))
 
         # 6. Argent restant (tailles des stacks normalisées par le stack initial) [53:56]
         for player in self.players:
             state.append(player.stack / self.starting_stack) # (taille = 3)
 
         if STATE_DEBUG:
-            print("step 6", len(state))
+            print("[GAME] step 6", len(state))
 
         # 7. Informations sur les mises (normalisées par le stack initial) [56:59]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack) # (taille = 3)
 
         if STATE_DEBUG:
-            print("step 7", len(state))
+            print("[GAME] step 7", len(state))
 
         # 8. Informations sur l'activité [59:62]
         for player in self.players:
             state.append(1 if player.is_active else -1) # (taille = 3)
 
         if STATE_DEBUG:
-            print("step 8", len(state))
+            print("[GAME] step 8", len(state))
 
         # 9. Informations sur la position (encodage one-hot des positions relatives) [62:65]
         relative_positions = [-1] * self.num_players
@@ -1553,7 +1553,7 @@ class PokerGame:
         state.extend(relative_positions) # (taille = 3)
 
         if STATE_DEBUG:
-            print("step 9", len(state))
+            print("[GAME] step 9", len(state))
 
         # 10. Actions disponibles (binaire extrême : disponible/indisponible) [65:77]
         action_availability = []
@@ -1565,7 +1565,7 @@ class PokerGame:
         state.extend(action_availability) # (taille = 12)
 
         if STATE_DEBUG:
-            print("step 10", len(state))
+            print("[GAME] step 10", len(state))
 
         # 11. Update action encoding for previous actions [77:92]    
         action_encoding = {
@@ -1595,7 +1595,7 @@ class PokerGame:
         state.extend([val for sublist in last_actions for val in sublist])
 
         if STATE_DEBUG:
-            print("step 11", len(state))
+            print("[GAME] step 11", len(state))
 
         # 12 Probabilité de victoire de la main au préflop [92:94]
         hand_win_prob = self._evaluate_preflop_strength(current_player.cards)
@@ -1605,7 +1605,7 @@ class PokerGame:
         state.append(pot_odds) # (taille = 1)
 
         if STATE_DEBUG:
-            print("step 12", len(state))
+            print("[GAME] step 12", len(state))
 
         # 13. Potentiel de quinte et de couleur [94:96]
         straight_draw, flush_draw = self.compute_hand_draw_potential(current_player)
@@ -1613,34 +1613,34 @@ class PokerGame:
         state.append(flush_draw)
 
         if STATE_DEBUG:
-            print("step 13", len(state))
+            print("[GAME] step 13", len(state))
 
         # 14. Main pot [96:97]
         state.append(self.main_pot / self.starting_stack)
 
         if STATE_DEBUG:
-            print("step 14", len(state))
+            print("[GAME] step 14", len(state))
 
         # 15. Contribution des joueurs [97:100]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack)
 
         if STATE_DEBUG:
-            print("step 15", len(state))
+            print("[GAME] step 15", len(state))
 
         # 16. has_acted status [100:103]
         for player in self.players:
             state.append(1 if player.has_acted else -1)
 
         if STATE_DEBUG:
-            print("step 16", len(state))
+            print("[GAME] step 16", len(state))
 
         # 17. Informations sur les mises du round actuel [103:106]
         for player in self.players:
             state.append(player.current_player_bet / self.starting_stack) # (taille = 3)
 
         if STATE_DEBUG:
-            print("step 17", len(state))
+            print("[GAME] step 17", len(state))
 
         # Avant de retourner, conversion en tableau numpy.
         state = np.array(state, dtype=np.float32)
@@ -2253,21 +2253,21 @@ class PokerGame:
                     if event.key == pygame.K_r:
                         self.reset()
                     if event.key == pygame.K_c:
-                        print(self.players)
+                        print("[GAME]", self.players)
                     if event.key == pygame.K_m:
                         # Run MCCFR simulation
                         self._run_mccfr_simulation()
                     if event.key == pygame.K_s:
                         state = self.get_state(seat_position = self.current_player_seat)
-                        print('\n=== État actuel du jeu ===')
+                        print('\n[GAME] === État actuel du jeu ===')
                         
                         # Affichage complet du state pour vérifier toutes les informations (par ex. si les cartes sont suited ou non)
-                        print("\n[DEBUG] Contenu complet du state:")
-                        print(state.tolist())
-                        print('Longueur totale :', len(state))
+                        print("\n[GAME] [DEBUG] Contenu complet du state:")
+                        print("[GAME]", state.tolist())
+                        print('[GAME] Longueur totale :', len(state))
                         
                         # 1. Cartes du joueur
-                        print("\n1. Cartes du joueur:")
+                        print("\n[GAME] 1. Cartes du joueur:")
                         cards_suits = []
                         for i in range(2):
                             base_idx = i * 5
@@ -2276,19 +2276,19 @@ class PokerGame:
                             couleur_idx = suit_vector.index(1) if 1 in suit_vector else -1
                             couleur = ["♠", "♥", "♦", "♣"][couleur_idx] if couleur_idx != -1 else "?"
                             cards_suits.append(couleur)
-                            print(f"Carte {i+1}: {int(valeur)}{couleur}")
+                            print(f"[GAME] Carte {i+1}: {int(valeur)}{couleur}")
                         
                         # Vérification de si les cartes sont suited
                         if len(cards_suits) == 2:
                             if cards_suits[0] == cards_suits[1]:
-                                print("=> Les cartes du joueur sont SUITED.")
+                                print("[GAME] => Les cartes du joueur sont SUITED.")
                             else:
-                                print("=> Les cartes du joueur ne sont PAS suited.")
+                                print("[GAME] => Les cartes du joueur ne sont PAS suited.")
                         else:
-                            print("=> Informations insuffisantes pour déterminer le suited.")
+                            print("[GAME] => Informations insuffisantes pour déterminer le suited.")
                         
                         # 2. Cartes communes
-                        print("\n2. Cartes communes:")
+                        print("\n[GAME] 2. Cartes communes:")
                         for i in range(5):
                             base_idx = 10 + (i * 5)
                             if state[base_idx] != -1:
@@ -2296,58 +2296,58 @@ class PokerGame:
                                 suit_vector = state[base_idx+1:base_idx+5].tolist()
                                 couleur_idx = suit_vector.index(1) if 1 in suit_vector else -1
                                 couleur = ["♠", "♥", "♦", "♣"][couleur_idx] if couleur_idx != -1 else "?"
-                                print(f"Carte {i+1}: {int(valeur)}{couleur}")
+                                print(f"[GAME] Carte {i+1}: {int(valeur)}{couleur}")
                         
                         # 3. Information sur la main
-                        print("\n3. Information sur la main:")
+                        print("\n[GAME] 3. Information sur la main:")
                         hand_rank_idx = state[35:45].tolist().index(1) if 1 in state[35:45].tolist() else -1
-                        print(f"Rang de la main: {HandRank(hand_rank_idx).name if hand_rank_idx != -1 else 'Inconnu'}")
-                        print(f"Kicker: {int(state[45] * 13 + 2)}")
-                        print(f"Rang normalisé: {state[46]:.2f}")
+                        print(f"[GAME] Rang de la main: {HandRank(hand_rank_idx).name if hand_rank_idx != -1 else 'Inconnu'}")
+                        print(f"[GAME] Kicker: {int(state[45] * 13 + 2)}")
+                        print(f"[GAME] Rang normalisé: {state[46]:.2f}")
                         
                         # 4. Phase de jeu
-                        print("\n4. Phase de jeu:")
+                        print("\n[GAME] 4. Phase de jeu:")
                         phase_idx = state[47:52].tolist().index(1) if 1 in state[47:52].tolist() else -1
                         phases = ["PREFLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"]
-                        print(f"Phase actuelle: {phases[phase_idx] if phase_idx != -1 else 'Inconnu'}")
+                        print(f"[GAME] Phase actuelle: {phases[phase_idx] if phase_idx != -1 else 'Inconnu'}")
                         
                         # 5-8. Informations sur les joueurs
-                        print("\n5-8. Informations sur les joueurs:")
+                        print("\n[GAME] 5-8. Informations sur les joueurs:")
                         for i in range(3):
-                            print(f"\nJoueur {i+1}:")
-                            print(f"Stack: {state[53+i]:.2f}")
-                            print(f"Mise actuelle: {state[56+i]:.3f}")
-                            print(f"État: {'Actif' if state[59+i] == 1 else 'Inactif/Fold'}")
+                            print(f"\n[GAME] Joueur {i+1}:")
+                            print(f"[GAME] Stack: {state[53+i]:.2f}")
+                            print(f"[GAME] Mise actuelle: {state[56+i]:.3f}")
+                            print(f"[GAME] État: {'Actif' if state[59+i] == 1 else 'Inactif/Fold'}")
                         
                         # 9. Position relative
-                        print("\n9. Position relative:")
+                        print("\n[GAME] 9. Position relative:")
                         pos_idx = state[62:65].tolist().index(1) if 1 in state[62:65].tolist() else -1
                         positions = ["SB", "BB", "UTG", "HJ", "CO", "BTN"]
-                        print(f"Position: {positions[pos_idx] if pos_idx != -1 else 'Inconnu'}")
+                        print(f"[GAME] Position: {positions[pos_idx] if pos_idx != -1 else 'Inconnu'}")
                         
                         # 10. Actions disponibles
-                        print("\n10. Actions disponibles:")
+                        print("\n[GAME] 10. Actions disponibles:")
                         actions = ["FOLD", "CHECK", "CALL", "RAISE", "raise-25%", "raise-50%", "raise-75%", "raise-100%", "raise-150%", "raise-200%", "raise-300%", "ALL_IN"]
                         for i, action in enumerate(actions):
-                            print(f"{action}: {'Disponible' if state[65+i] == 1 else 'Indisponible'}")
+                            print(f"[GAME] {action}: {'Disponible' if state[65+i] == 1 else 'Indisponible'}")
                         
                         # 11. Historique des actions
-                        print("\n11. Historique des dernières actions:")
+                        print("\n[GAME] 11. Historique des dernières actions:")
                         for i in range(3):
                             base_idx = 77 + (i * 5)
                             action_vector = state[base_idx:base_idx+5]
                             action_idx = action_vector.tolist().index(1) if 1 in action_vector.tolist() else -1
                             if action_idx != -1:
-                                print(f"Joueur {i+1}: {actions[action_idx]}")
+                                print(f"[GAME] Joueur {i+1}: {actions[action_idx]}")
                             else:
-                                print(f"Joueur {i+1}: Aucune action")
+                                print(f"[GAME] Joueur {i+1}: Aucune action")
                         
                         # 12. Informations stratégiques
-                        print("\n12. Informations stratégiques:")
-                        print(f"Probabilité de victoire préflop: {state[92]:.3f}")
-                        print(f"Cotes du pot: {state[93]:.3f}")
+                        print("\n[GAME] 12. Informations stratégiques:")
+                        print(f"[GAME] Probabilité de victoire préflop: {state[92]:.3f}")
+                        print(f"[GAME] Cotes du pot: {state[93]:.3f}")
                         
-                        print('\n=== Fin de l\'état ===\n')
+                        print('\n[GAME] === Fin de l\'état ===\n')
                 
                 self.handle_input(event)
                 

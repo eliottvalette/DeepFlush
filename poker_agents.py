@@ -29,7 +29,7 @@ class PokerAgent:
         4. Deux optimiseurs Adam indépendants mettent à jour θ et ϕ.
     """
     def __init__(self, device,state_size, action_size, gamma, learning_rate,
-                 entropy_coeff=0.1,
+                 entropy_coeff=0.5,
                  value_loss_coeff=0.01,
                  invalid_action_loss_coeff=2,
                  policy_loss_coeff=0.4,
@@ -51,11 +51,11 @@ class PokerAgent:
         """
         # Vérification des paramètres
         if state_size <= 0 or action_size <= 0:
-            raise ValueError(f"state_size et action_size doivent être positifs (reçu: {state_size}, {action_size})")
+            raise ValueError(f"[AGENT] state_size et action_size doivent être positifs (reçu: {state_size}, {action_size})")
         if not 0 <= gamma <= 1:
-            raise ValueError(f"gamma doit être entre 0 et 1 (reçu: {gamma})")
+            raise ValueError(f"[AGENT] gamma doit être entre 0 et 1 (reçu: {gamma})")
         if learning_rate <= 0:
-            raise ValueError(f"learning_rate doit être positif (reçu: {learning_rate})")
+            raise ValueError(f"[AGENT] learning_rate doit être positif (reçu: {learning_rate})")
         
         if load_model and (load_path is None or not isinstance(load_path, str)):
             raise ValueError("load_path doit être spécifié et être une chaîne de caractères quand load_model est True")
@@ -89,9 +89,9 @@ class PokerAgent:
         Charge un modèle sauvegardé
         """
         if not isinstance(load_path, str):
-            raise TypeError(f"load_path doit être une chaîne de caractères (reçu: {type(load_path)})")
+            raise TypeError(f"[AGENT] load_path doit être une chaîne de caractères (reçu: {type(load_path)})")
         if not os.path.exists(load_path):
-            raise FileNotFoundError(f"Le fichier {load_path} n'existe pas")
+            raise FileNotFoundError(f"[AGENT] Le fichier {load_path} n'existe pas")
         
         try:
             checkpoint = torch.load(load_path)
@@ -99,9 +99,9 @@ class PokerAgent:
             self.critic_model.load_state_dict(checkpoint['critic_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-            print(f"Modèle chargé avec succès: {load_path}")
+            print(f"[AGENT] Modèle chargé avec succès: {load_path}")
         except Exception as e:
-            raise RuntimeError(f"Erreur lors du chargement du modèle: {str(e)}")
+            raise RuntimeError(f"[AGENT] Erreur lors du chargement du modèle: {str(e)}")
 
     def get_action(self, state, valid_actions, target_vector, epsilon=0.0):
         """
@@ -111,9 +111,9 @@ class PokerAgent:
         Retourne l'action choisie et une éventuelle pénalité si l'action était invalide.
         """
         if not isinstance(state, (list, np.ndarray)):
-            raise TypeError(f"state doit être une liste ou un numpy array (reçu: {type(state)})")
+            raise TypeError(f"[AGENT] state doit être une liste ou un numpy array (reçu: {type(state)})")
         if not valid_actions:
-            raise ValueError("valid_actions ne peut pas être vide")
+            raise ValueError("[AGENT] valid_actions ne peut pas être vide")
         
         # Mapping des actions
         action_map = {
@@ -148,7 +148,7 @@ class PokerAgent:
 
         valid_indices = [action_map_str[a.value] for a in valid_actions]
         if len(valid_indices) == 0:
-            raise ValueError(f"Aucune action valide trouvée pour l'état: {state}")
+            raise ValueError(f"[AGENT] Aucune action valide trouvée pour l'état: {state}")
 
         # Création d'un masque pour ne considérer que les actions valides
         valid_action_mask = torch.zeros((1, self.action_size), device=self.device)
@@ -167,13 +167,13 @@ class PokerAgent:
                 action_probs = torch.zeros((1, self.action_size), device=self.device)
                 action_probs[0, chosen_index] = 1.0
                 if DEBUG:
-                    print(f"highest proba from target vector")
+                    print(f"[AGENT] Action choisie avec la plus haute probabilité du vecteur cible")
             elif random.random() < 0.5: # 25% de chance de choisir une action aléatoire parmi les actions valides
                 chosen_index = random.choice(valid_indices)
                 action_probs = torch.zeros((1, self.action_size), device=self.device)
                 action_probs[0, chosen_index] = 1.0
                 if DEBUG:
-                    print(f"random choice from valid actions")
+                    print(f"[AGENT] Action choisie aléatoirement parmi les actions valides")
             else: # 50% de faire choisir le dernier agent saved (les agents avec des self.memory == 0 sont ceux pour lequels on a load_model = True mais qu'on a pas ré-entrainé par la suite)
                 # Convertir les arrays numpy en tenseurs PyTorch
                 state_tensors = [torch.from_numpy(s).float().to(self.device) for s in state]
@@ -183,16 +183,16 @@ class PokerAgent:
                 with torch.no_grad():
                     action_probs = self.actor_model(state_tensor)
                     if round(action_probs.sum().item(), 2) != 1:
-                        raise ValueError(f"Le modèle a prédit une probabilité de {round(action_probs.sum().item(), 2)} pour toutes les actions valides, état: {state}")
+                        raise ValueError(f"[AGENT] Le modèle a prédit une probabilité de {round(action_probs.sum().item(), 2)} pour toutes les actions valides, état: {state}")
                 masked_probs = action_probs * valid_action_mask
                 
                 if masked_probs.sum().item() == 0:
-                    raise ValueError(f"Le modèle a prédit une probabilité de 0 pour toutes les actions valides, état: {state}")
+                    raise ValueError(f"[AGENT] Le modèle a prédit une probabilité de 0 pour toutes les actions valides, état: {state}")
                 else:
                     masked_probs = masked_probs / masked_probs.sum()
                     chosen_index = torch.argmax(masked_probs).item()
                 if DEBUG:
-                    print(f"random choice from saved model")
+                    print(f"[AGENT] Action choisie aléatoirement parmi les actions valides")
 
         else:
             # Convertir les arrays numpy en tenseurs PyTorch
@@ -203,11 +203,11 @@ class PokerAgent:
             with torch.no_grad():
                 action_probs = self.actor_model(state_tensor)
                 if round(action_probs.sum().item(), 2) != 1:
-                    raise ValueError(f"Le modèle a prédit une probabilité de {round(action_probs.sum().item(), 2)} pour toutes les actions valides, état: {state}")
+                    raise ValueError(f"[AGENT] Le modèle a prédit une probabilité de {round(action_probs.sum().item(), 2)} pour toutes les actions valides, état: {state}")
             masked_probs = action_probs * valid_action_mask
             
             if masked_probs.sum().item() == 0:
-                raise ValueError(f"Le modèle a prédit une probabilité de 0 pour toutes les actions valides, état: {state}")
+                raise ValueError(f"[AGENT] Le modèle a prédit une probabilité de 0 pour toutes les actions valides, état: {state}")
             else:
                 masked_probs = masked_probs / masked_probs.sum()
                 chosen_index = torch.argmax(masked_probs).item()
@@ -310,10 +310,10 @@ class PokerAgent:
         advantages = chosen_action_q_values - state_values.squeeze(1).detach()                # A = Q - V Positif signifie que l'action est meilleure que prévu.
 
         if random.random() < 0.001:
-            print(f'state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
-            print(f'rewards, mean : {rewards_tensor.mean()}, max : {rewards_tensor.max()}, min : {rewards_tensor.min()}')
-            print(f'next_state_values, mean : {next_state_values.mean()}, max : {next_state_values.max()}, min : {next_state_values.min()}')
-            print(f'advantages, mean : {advantages.mean()}, max : {advantages.max()}, min : {advantages.min()}')
+            print(f'[AGENT] state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
+            print(f'[AGENT] rewards, mean : {rewards_tensor.mean()}, max : {rewards_tensor.max()}, min : {rewards_tensor.min()}')
+            print(f'[AGENT] next_state_values, mean : {next_state_values.mean()}, max : {next_state_values.max()}, min : {next_state_values.min()}')
+            print(f'[AGENT] advantages, mean : {advantages.mean()}, max : {advantages.max()}, min : {advantages.min()}')
 
         # Perte du critique: MSE entre les Q-values prédites et les cibles TD
         critic_loss = F.mse_loss(chosen_action_q_values, td_targets.detach())

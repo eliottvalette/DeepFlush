@@ -16,6 +16,7 @@ from utils.config import EPISODES, EPS_DECAY, START_EPS, DEBUG, SAVE_INTERVAL, P
 from utils.renderer import handle_final_rendering, handle_rendering
 from utils.helping_funcs import save_models
 from poker_MCCFR_expresso import MCCFRTrainer
+from utils.config import DEBUG
 
 # Compteurs
 number_of_hand_per_game = 0
@@ -94,6 +95,9 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         PlayerAction.ALL_IN: 11
     }
 
+    if DEBUG:
+        print(f"[TRAIN] Début de la main")
+
     #### Boucle principale du jeu ####
     while env.current_phase != GamePhase.SHOWDOWN:
         # Récupération du joueur actuel et mise à jour des boutons   
@@ -106,7 +110,6 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
 
         # Génération du vecteur de probabilités cible avec MCCFR à partir de l'état simplifié du jeu
         state = env.get_state(seat_position = current_player.seat_position)
-        
         
         target_vector, payoffs = mccfr_trainer.compute_expected_payoffs_and_target_vector(
             valid_actions = valid_actions, 
@@ -121,19 +124,19 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         )
 
         if DEBUG:
-            print(f"hero_name : {current_player.name}\ntarget_vector : {target_vector}\n payoffs : {payoffs.values()}")
+            print(f"[TRAIN] hero_name : {current_player.name}\n[TRAIN] target_vector : {target_vector}\n[TRAIN] payoffs : {payoffs.values()}")
 
         # Prédiction avec une inférence classique du modèle
         chosen_action, action_mask, action_probs = current_player.agent.get_action(state = player_state_seq, valid_actions = valid_actions, target_vector = target_vector, epsilon = epsilon)
 
         if DEBUG:
-            print(f"state : {state}")
-            print(f"current_player.name : {current_player.name}, current_phase : {env.current_phase}")
-            print(f"current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
+            print(f"[TRAIN] state : {state}")
+            print(f"[TRAIN] current_player.name : {current_player.name}, current_phase : {env.current_phase}")
+            print(f"[TRAIN] current_player_bet : {current_player.current_player_bet}, current_maximum_bet : {env.current_maximum_bet}, stack : {current_player.stack}")
         
         review_state = env.get_state(seat_position = current_player.seat_position)
         if state.tolist() != review_state.tolist():
-            raise ValueError(f"state != review_state => {state.tolist()} != {review_state.tolist()}")
+            raise ValueError(f"[TRAIN] state != review_state => {state.tolist()} != {review_state.tolist()}")
 
         # Exécuter l'action dans l'environnement
         next_state = env.step(chosen_action)
@@ -182,7 +185,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         handle_rendering(env, rendering, episode, render_every)
 
     # Calcul des récompenses finales en utilisant les stacks capturées pré-reset
-    print(f"\n=== Résultats de l'épisode [{episode + 1}/{EPISODES}] ===")
+    print(f"\n[TRAIN] === Résultats de l'épisode [{episode + 1}/{EPISODES}] ===")
     # Attribution des récompenses finales
     for player in env.players:
         # ---- Pour la collecte et l'affichage des métriques ----
@@ -269,24 +272,24 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
             run_episode(env, epsilon, rendering, episode, render_every, data_collector, mccfr_trainer)
             
             # Afficher les informations de l'épisode
-            print(f"\nEpisode [{episode + 1}/{episodes}]")
-            print(f"Randomness: {epsilon*100:.3f}%")
-            print(f"Time taken: {time.time() - start_time:.2f} seconds")
+            print(f"\n[TRAIN] Episode [{episode + 1}/{episodes}]")
+            print(f"[TRAIN] Randomness: {epsilon*100:.3f}%")
+            print(f"[TRAIN] Time taken: {time.time() - start_time:.2f} seconds")
             
         # Save models at end of training
         if episode == episodes - 1:
             save_models(env.players, episode)
-            print("Generating visualization...")
+            print("[TRAIN] Generating visualization...")
             data_collector.force_visualization()
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[TRAIN] An error occurred: {e}")
         save_models(env.players, episode)
-        print("Generating visualization...")
+        print("[TRAIN] Generating visualization...")
         data_collector.force_visualization()
     finally:
         save_models(env.players, episode)
-        print("Generating visualization...")
+        print("[TRAIN] Generating visualization...")
         data_collector.force_visualization()
         del env
         del mccfr_trainer
