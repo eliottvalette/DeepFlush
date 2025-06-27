@@ -323,7 +323,7 @@ class PokerGame:
             player.has_folded = False
             player.has_acted = False
             player.range = None
-            player.is_active = player.stack > 0
+            player.is_active = player.stack > 2
 
         # --- Nouvelle ligne ajoutée pour enregistrer les stacks initiales des joueurs
         self.initial_stacks = {player.name: player.stack for player in self.players}
@@ -510,11 +510,13 @@ class PokerGame:
             
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
             if self.current_player_seat == initial_seat:
+                for p in self.players:
+                    print(f"[GAME] {p}")
                 # Affiche l'état de chaque joueur pour faciliter le débogage
-                details = [(p.name, p.is_active, p.has_folded, p.is_all_in) for p in self.players]
+                details = [(p.name, p.is_active, p.has_folded, p.is_all_in, p.has_acted) for p in self.players]
                 raise RuntimeError(
                     "[GAME] Aucun joueur valide trouvé. Cela signifie que tous les joueurs sont inactifs, foldés ou all-in. "
-                    f"[GAME] Détails des joueurs : {details}"
+                    f"[GAME] Détails des joueurs [name, is_active, has_folded, is_all_in, has_acted]: {details}"
                 )
 
     def check_phase_completion(self):

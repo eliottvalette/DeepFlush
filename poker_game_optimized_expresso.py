@@ -8,7 +8,7 @@ Dans le but d'effectuer des simulations de jeu pour l'algorithme MCCFR.
 import pygame
 import random as rd
 from typing import List, Dict, Optional, Tuple
-from utils.config import DEBUG
+from utils.config import DEBUG_OPTI, DEBUG_OPTI_ULTIMATE
 from collections import Counter
 import numpy as np
 from poker_game import Player, PlayerAction, GamePhase, Card, SidePot, HandRank, Button, SCREEN_HEIGHT
@@ -32,7 +32,7 @@ class PokerGameOptimized:
         """
         Initialise la partie de poker avec un état plat pour la simulation MCCFR.
         """
-        if DEBUG:
+        if DEBUG_OPTI:
             print("========== INITIALISATION NOUVELLE SIMULATION DE POKER ==========")
         self.num_players = 3
         self.small_blind = 0.5
@@ -43,16 +43,16 @@ class PokerGameOptimized:
         self.main_pot = self._round_value(state[96] * self.starting_stack)
         
         # Faire des copies pour éviter de modifier les listes originales
-        self.community_cards = visible_community_cards.copy() if visible_community_cards else []
-        self.rd_missing_community_cards = rd_missing_community_cards.copy() if rd_missing_community_cards else []
-        self.rd_opponents_cards = rd_opponents_cards.copy() if rd_opponents_cards else []
-        if DEBUG:
-            print(f"[INIT] Hero seat: {hero_seat}, Button: {button_seat_position}")
-            print(f"[INIT] Hero cards: {hero_cards}")
-            print(f"[INIT] Visible community cards: {[card.value for card in visible_community_cards]}")
-            print(f"[INIT] RD missing community cards: {[card.value for card in self.rd_missing_community_cards]} (len={len(self.rd_missing_community_cards)})")
-            print(f"[INIT] RD opponent cards: {len(self.rd_opponents_cards)} mains")
-            print(f"[INIT] Main pot: {self.main_pot}BB")
+        self.community_cards = visible_community_cards.copy()
+        self.rd_missing_community_cards = rd_missing_community_cards.copy()
+        self.rd_opponents_cards = rd_opponents_cards.copy()
+        if DEBUG_OPTI:
+            print(f"[GAME_OPTI] [INIT] Hero seat: {hero_seat}, Button: {button_seat_position}")
+            print(f"[GAME_OPTI] [INIT] Hero cards: {hero_cards}")
+            print(f"[GAME_OPTI] [INIT] Visible community cards: {[card.value for card in visible_community_cards]}")
+            print(f"[GAME_OPTI] [INIT] RD missing community cards: {[card.value for card in self.rd_missing_community_cards]} (len={len(self.rd_missing_community_cards)})")
+            print(f"[GAME_OPTI] [INIT] RD opponent cards: {len(self.rd_opponents_cards)} mains")
+            print(f"[GAME_OPTI] [INIT] Main pot: {self.main_pot}BB")
         self.hero_cards = hero_cards
         self.side_pots = self._create_side_pots()
         
@@ -61,8 +61,8 @@ class PokerGameOptimized:
                         3: GamePhase.RIVER, 4: GamePhase.SHOWDOWN}
         phase_idx = np.argmax(state[47:52]) if any(state[47:52] > 0) else 0
         self.current_phase = phase_indices[phase_idx]
-        if DEBUG:
-            print(f"[INIT] Phase de jeu: {self.current_phase}")
+        if DEBUG_OPTI:
+            print(f"[GAME_OPTI] [INIT] Phase de jeu: {self.current_phase}")
             
         # Position du bouton
         self.hero_seat = hero_seat
@@ -82,7 +82,7 @@ class PokerGameOptimized:
         self.last_raiser = None
         self.action_buttons = self._create_action_buttons()
         
-        # Initialiser les stacks metrics pour le debug
+        # Initialiser les stacks metrics pour le DEBUG_OPTI
         self.initial_stacks = initial_stacks.copy()
         self.net_stack_changes = {player.name: player.stack - self.initial_stacks[player.name] for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
@@ -96,9 +96,9 @@ class PokerGameOptimized:
         # Affichage des joueurs et leurs stacks
         for player in self.players:
             player_status = "actif" if player.is_active else "fold"
-            if DEBUG:
-                print(f"[INIT] Joueur {player.name} (seat {player.seat_position}): {player.stack}BB - {player_status}")        
-        if DEBUG:
+            if DEBUG_OPTI:
+                print(f"[GAME_OPTI] [INIT] Joueur {player.name} (seat {player.seat_position}): {player.stack}BB - {player_status}")        
+        if DEBUG_OPTI:
             print("========== FIN INITIALISATION ==========\n")
 
     def _next_player(self):
@@ -124,10 +124,12 @@ class PokerGameOptimized:
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
             if self.current_player_seat == initial_seat:
                 # Affiche l'état de chaque joueur pour faciliter le débogage
-                details = [(p.name, p.is_active, p.has_folded, p.is_all_in) for p in self.players]
+                for p in self.players:
+                    print(f"[GAME_OPTI] {p}")
+                details = [(p.name, p.is_active, p.has_folded, p.is_all_in, p.has_acted) for p in self.players]
                 raise RuntimeError(
-                    "Aucun joueur valide trouvé. Cela signifie que tous les joueurs sont inactifs, foldés ou all-in. "
-                    f"Détails des joueurs : {details}"
+                    "[GAME_OPTI] Aucun joueur valide trouvé. Cela signifie que tous les joueurs sont inactifs, foldés ou all-in. "
+                    f"[GAME_OPTI] Détails des joueurs : {details}"
                 )
 
     def check_phase_completion(self):
@@ -146,7 +148,7 @@ class PokerGameOptimized:
         
         # Vérifier s'il ne reste qu'un seul joueur actif
         if len(in_game_players) == 1:
-            if DEBUG:
+            if DEBUG_OPTI_ULTIMATE:
                 print("Moving to showdown (only one player remains)")
             self.handle_showdown()
             return
@@ -160,7 +162,7 @@ class PokerGameOptimized:
         # Dès lors, il n'y a pas de sens à continuer la partie, donc on va au showdown.
         non_all_in_has_acted_players = [p for p in in_game_players if not p.is_all_in and p.has_acted]
         if len(non_all_in_has_acted_players) == 1 and len(in_game_players) > 1:
-            if DEBUG:
+            if DEBUG_OPTI_ULTIMATE:
                 print("Moving to showdown (only one non all-in player remains)")
             while len(self.community_cards) < 5:
                 self.community_cards.append(self.rd_missing_community_cards.pop())
@@ -178,7 +180,7 @@ class PokerGameOptimized:
 
         # Si tous les joueurs actifs sont all-in, la partie est terminée, on va vers le showdown pour déterminer le vainqueur
         if (len(all_in_players) == len(in_game_players)) and (len(in_game_players) > 1):
-            if DEBUG:
+            if DEBUG_OPTI_ULTIMATE:
                 print("Moving to showdown (all remaining players are all-in)")
             while len(self.community_cards) < 5:
                 self.community_cards.append(self.rd_missing_community_cards.pop())
@@ -188,28 +190,28 @@ class PokerGameOptimized:
         for player in in_game_players:
             # Si le joueur n'a pas encore agi dans la phase, le tour n'est pas terminé
             if not player.has_acted:
-                if DEBUG:
+                if DEBUG_OPTI_ULTIMATE:
                     print(f'{player.name} n\'a pas encore agi')
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
 
             # Si le joueur n'a pas égalisé la mise maximale et n'est pas all-in, le tour n'est pas terminé
             if player.current_player_bet < self.current_maximum_bet and not player.is_all_in:
-                if DEBUG:
+                if DEBUG_OPTI:
                     print('Un des joueurs en jeu n\'a pas égalisé la mise maximale')
                 self._next_player()
                 return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         
         # Atteindre cette partie du code signifie que la phase est terminée
         if self.current_phase == GamePhase.RIVER:
-            if DEBUG:
+            if DEBUG_OPTI_ULTIMATE:
                 print("River complete - going to showdown")
             self.handle_showdown()
             return # Ne rien faire de plus, la phase ne peut pas encore être terminée
         else:
             self.advance_phase()
-            if DEBUG:
-                print(f"Advanced to {self.current_phase}")
+            if DEBUG_OPTI_ULTIMATE:
+                print(f"[GAME_OPTI] Advanced to {self.current_phase}")
             # Réinitialiser has_acted pour tous les joueurs actifs et non fold au début d'une nouvelle phase
             for p in self.players:
                 if p.is_active and not p.has_folded and not p.is_all_in:
@@ -222,13 +224,13 @@ class PokerGameOptimized:
                     ((current_player.role_position == 1 or current_player.role_position == 5) and 
                      current_player.current_player_bet == self.big_blind)):
                 if self.current_phase == GamePhase.RIVER:
-                    if DEBUG:
+                    if DEBUG_OPTI_ULTIMATE:
                         print("River complete - going to showdown")
                     self.handle_showdown()
                 else:
                     self.advance_phase()
-                    if DEBUG:
-                        print(f"Advanced to {self.current_phase}")
+                    if DEBUG_OPTI_ULTIMATE:
+                        print(f"[GAME_OPTI] Advanced to {self.current_phase}")
                     for p in self.players:
                         if p.is_active and not p.has_folded and not p.is_all_in:
                             p.has_acted = False
@@ -239,51 +241,51 @@ class PokerGameOptimized:
         Distribue les cartes communes selon la phase de jeu actuelle.
         Distribue 3 cartes pour le flop, 1 pour le turn et 1 pour la river.
         """
-        if DEBUG:
-            print(f"\n[DISTRIBUTION] Distribution des cartes communes pour phase {self.current_phase}")
+        if DEBUG_OPTI:
+            print(f"[GAME_OPTI] \n[DISTRIBUTION] Distribution des cartes communes pour phase {self.current_phase}")
     
         if self.current_phase == GamePhase.PREFLOP:
             raise ValueError(
-                "Erreur d'état : Distribution des community cards pendant le pré-flop. "
-                "Les cartes communes ne doivent être distribuées qu'après le pré-flop."
+                "[GAME_OPTI] Erreur d'état : Distribution des community cards pendant le pré-flop. "
+                "[GAME_OPTI] Les cartes communes ne doivent être distribuées qu'après le pré-flop."
             )
         
         # Vérifier que nous avons suffisamment de cartes pour la distribution
         if not self.rd_missing_community_cards:
-            raise ValueError("[DISTRIBUTION] ⚠️ Attention: Aucune carte communautaire disponible pour la distribution.")
+            raise ValueError("[GAME_OPTI] [DISTRIBUTION] ⚠️ Attention: Aucune carte communautaire disponible pour la distribution.")
             
         # Faire une copie locale des cartes communautaires pour éviter de les épuiser
-        if DEBUG:
-            print(f"[DISTRIBUTION] Cartes disponibles: {len(self.rd_missing_community_cards)}")
+        if DEBUG_OPTI:
+            print(f"[GAME_OPTI] [DISTRIBUTION] Cartes disponibles: {len(self.rd_missing_community_cards)}")
         
         if self.current_phase == GamePhase.FLOP:
             # S'assurer qu'on a au moins 3 cartes pour le flop
             if len(self.rd_missing_community_cards) >= 3:
-                if DEBUG:
+                if DEBUG_OPTI:
                     print("[DISTRIBUTION] Distribution du FLOP - 3 cartes")
                 for _ in range(3):
                     card = self.rd_missing_community_cards.pop(0)
                     self.community_cards.append(card)
-                    if DEBUG:
-                        print(f"[DISTRIBUTION] Carte distribuée: {card}")
+                    if DEBUG_OPTI:
+                        print(f"[GAME_OPTI] [DISTRIBUTION] Carte distribuée: {card}")
             else:
-                raise ValueError("[DISTRIBUTION] ⚠️ Pas assez de cartes pour le flop!")
+                raise ValueError("[GAME_OPTI] [DISTRIBUTION] ⚠️ Pas assez de cartes pour le flop!")
         elif self.current_phase in [GamePhase.TURN, GamePhase.RIVER]:
             # S'assurer qu'on a au moins 1 carte pour le turn/river
             if self.rd_missing_community_cards:
-                if DEBUG:
-                    print(f"[DISTRIBUTION] Distribution de la {self.current_phase} - 1 carte")
+                if DEBUG_OPTI:
+                    print(f"[GAME_OPTI] [DISTRIBUTION] Distribution de la {self.current_phase} - 1 carte")
                 card = self.rd_missing_community_cards.pop(0)
                 self.community_cards.append(card)
-                if DEBUG:
-                    print(f"[DISTRIBUTION] Carte distribuée: {card}")
+                if DEBUG_OPTI:
+                    print(f"[GAME_OPTI] [DISTRIBUTION] Carte distribuée: {card}")
             else:
-                raise ValueError(f"[DISTRIBUTION] ⚠️ Pas assez de cartes pour {self.current_phase}!")
+                raise ValueError(f"[GAME_OPTI] [DISTRIBUTION] ⚠️ Pas assez de cartes pour {self.current_phase}!")
                 
         # Mettre à jour la liste originale
-        if DEBUG:
-            print(f"[DISTRIBUTION] Community cards après distribution: {self.community_cards}")
-            print(f"[DISTRIBUTION] Cartes restantes: {len(self.rd_missing_community_cards)}")
+        if DEBUG_OPTI:
+            print(f"[GAME_OPTI] [DISTRIBUTION] Community cards après distribution: {self.community_cards}")
+            print(f"[GAME_OPTI] [DISTRIBUTION] Cartes restantes: {len(self.rd_missing_community_cards)}")
 
     def deal_cards(self):
         """
@@ -299,17 +301,17 @@ class PokerGameOptimized:
             else:
                 player.cards = self.rd_opponents_cards.pop()
 
-        if DEBUG:
+        if DEBUG_OPTI:
             for player in self.players:
-                print(f"[CARDS] player : {player.name}, cards : {[card.value for card in player.cards]} {[card.suit for card in player.cards]}")
+                print(f"[GAME_OPTI] [CARDS] player : {player.name}, cards : {[card.value for card in player.cards]} {[card.suit for card in player.cards]}")
 
     def advance_phase(self):
         """
         Passe à la phase suivante du jeu (préflop -> flop -> turn -> river).
         Distribue les cartes communes appropriées et réinitialise les mises.
         """
-        if DEBUG:
-            print(f"current_phase {self.current_phase}")
+        if DEBUG_OPTI_ULTIMATE:
+            print(f"[GAME_OPTI] current_phase {self.current_phase}")
         self.last_raiser = None  # Réinitialiser le dernier raiser pour la nouvelle phase
         
         # Normal phase progression
@@ -341,8 +343,8 @@ class PokerGameOptimized:
                self.players[self.current_player_seat].is_all_in):
             self.current_player_seat = (self.current_player_seat + 1) % self.num_players
         
-        if DEBUG:
-            print(f"[PHASE] Premier joueur à agir: {self.players[self.current_player_seat].name} (seat {self.current_player_seat})")
+        if DEBUG_OPTI_ULTIMATE:
+            print(f"[GAME_OPTI] [PHASE] Premier joueur à agir: {self.players[self.current_player_seat].name} (seat {self.current_player_seat})")
             print("========== FIN CHANGEMENT PHASE ==========\n")
     
     def _update_button_states(self):
@@ -473,48 +475,48 @@ class PokerGameOptimized:
         if player.seat_position != self.current_player_seat:
             current_turn_player = self.players[self.current_player_seat].name
             raise ValueError(
-                f"Erreur d'action : Ce n'est pas le tour de {player.name}. "
+                f"[GAME_OPTI] Erreur d'action : Ce n'est pas le tour de {player.name}. "
                 f"C'est au tour de {current_turn_player} d'agir."
             )
         #----- Vérification des fonds disponibles -----
         if not player.is_active or player.is_all_in or player.has_folded or self.current_phase == GamePhase.SHOWDOWN:
-            raise ValueError(f"{player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
+            raise ValueError(f"[GAME_OPTI] {player.name} n'était pas censé pouvoir faire une action, Raisons : actif = {player.is_active}, all-in = {player.is_all_in}, folded = {player.has_folded}")
         
         valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
         if not any(valid_action.value == action.value for valid_action in valid_actions):
-            raise ValueError(f"{player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
+            raise ValueError(f"[GAME_OPTI] {player.name} n'a pas le droit de faire cette action, actions valides : {valid_actions}")
         
         #----- Affichage de débogage (pour le suivi durant l'exécution) -----
-        if DEBUG:
-            print(f"\n=== Action qui va etre effectuée par {player.name} ===")
-            print(f"Joueur actif : {player.is_active}")
-            print(f"Action choisie : {action.value}")
-            print(f"Phase actuelle : {self.current_phase}")
-            print(f"Pot actuel : {self.main_pot}BB")
-            print(f"A agi : {player.has_acted}")
-            print(f"Est all-in : {player.is_all_in}")
-            print(f"Est folded : {player.has_folded}")
-            print(f"Mise maximale actuelle : {self.current_maximum_bet}BB")
-            print(f"Stack du joueur avant action : {player.stack}BB")
-            print(f"Mise actuelle du joueur : {player.current_player_bet}BB")
+        if DEBUG_OPTI_ULTIMATE:
+            print(f"[GAME_OPTI] \n=== Action qui va etre effectuée par {player.name} ===")
+            print(f"[GAME_OPTI] Joueur actif : {player.is_active}")
+            print(f"[GAME_OPTI] Action choisie : {action.value}")
+            print(f"[GAME_OPTI] Phase actuelle : {self.current_phase}")
+            print(f"[GAME_OPTI] Pot actuel : {self.main_pot}BB")
+            print(f"[GAME_OPTI] A agi : {player.has_acted}")
+            print(f"[GAME_OPTI] Est all-in : {player.is_all_in}")
+            print(f"[GAME_OPTI] Est folded : {player.has_folded}")
+            print(f"[GAME_OPTI] Mise maximale actuelle : {self.current_maximum_bet}BB")
+            print(f"[GAME_OPTI] Stack du joueur avant action : {player.stack}BB")
+            print(f"[GAME_OPTI] Mise actuelle du joueur : {player.current_player_bet}BB")
         
         #----- Traitement de l'action en fonction de son type -----
         if action.value == PlayerAction.FOLD.value:
             # Le joueur se couche il n'est plus actif pour ce tour.
             player.has_folded = True
-            if DEBUG : 
-                print(f"{player.name} se couche (Fold).")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} se couche (Fold).")
         
         elif action.value == PlayerAction.CHECK.value:
-            if DEBUG : 
-                print(f"{player.name} check.")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} check.")
         
         elif action.value == PlayerAction.CALL.value:
-            if DEBUG : 
-                print(f"{player.name} call.")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} call.")
             call_amount = self.current_maximum_bet - player.current_player_bet
             if call_amount > player.stack: 
-                raise ValueError(f"{player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
+                raise ValueError(f"[GAME_OPTI] {player.name} n'a pas assez de jetons pour suivre la mise maximale, il n'aurait pas du avoir le droit de call")
         
             player.stack -= call_amount
             player.current_player_bet += call_amount
@@ -522,12 +524,12 @@ class PokerGameOptimized:
             player.total_bet += call_amount
             if player.stack == 0:
                 player.is_all_in = True
-            if DEBUG : 
-                print(f"{player.name} a call {call_amount}BB")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} a call {call_amount}BB")
 
         elif action.value == PlayerAction.RAISE.value:
-            if DEBUG : 
-                print(f"{player.name} raise.")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} raise.")
             # Si aucune mise n'a encore été faite, fixer un minimum raise basé sur la big blind.
             if self.current_maximum_bet == 0:
                 min_raise = self.big_blind
@@ -541,7 +543,7 @@ class PokerGameOptimized:
             # Vérifier si le joueur a assez de jetons pour couvrir le montant de raise.
             if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
-                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"[GAME_OPTI] Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
                     f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
         
@@ -556,8 +558,8 @@ class PokerGameOptimized:
             self.last_raiser = player.seat_position
             player.is_all_in = player.is_active and (player.stack == 0)
         
-            if DEBUG : 
-                print(f"{player.name} a raise {bet_amount}BB")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} a raise {bet_amount}BB")
         
         # --- Nouvelles actions pot-based ---
         elif action.value in {
@@ -598,7 +600,7 @@ class PokerGameOptimized:
             # Vérifier que le joueur a suffisamment de jetons pour cette raise
             if player.stack < (bet_amount - player.current_player_bet):
                 raise ValueError(
-                    f"Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
+                    f"[GAME_OPTI] Fonds insuffisants pour raise : {player.name} a {player.stack}BB tandis que le montant "
                     f"additionnel requis est {bet_amount - player.current_player_bet}BB. Mise minimum requise : {min_raise}BB."
                 )
         
@@ -613,19 +615,19 @@ class PokerGameOptimized:
             self.last_raiser = player.seat_position
             player.is_all_in = player.is_active and (player.stack == 0)
         
-            if DEBUG : 
-                print(f"{player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} a raise (pot-based {percentage*100:.0f}%) à {bet_amount}BB")
         
         
         elif action.value == PlayerAction.ALL_IN.value:
-            if DEBUG : 
-                print(f"{player.name} all-in.")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} all-in.")
             # Si aucune valeur n'est passée pour bet_amount, on assigne automatiquement tout le stack
             if bet_amount is None:
                 bet_amount = player.stack
             elif bet_amount != player.stack:
                 raise ValueError(
-                    f"Erreur ALL-IN : {player.name} doit miser exactement tout son stack ({player.stack}BB)."
+                    f"[GAME_OPTI] Erreur ALL-IN : {player.name} doit miser exactement tout son stack ({player.stack}BB)."
                 )
             
             # Mise à jour de la mise maximale seulement si l'all-in est supérieur
@@ -639,11 +641,11 @@ class PokerGameOptimized:
             self.main_pot += bet_amount  # On ajoute le all-in au pot de la phase
             player.total_bet += bet_amount  # On ajoute le all-in à la mise totale du joueur
             player.is_all_in = True  # On indique que le joueur est all-in
-            if DEBUG : 
-                print(f"{player.name} a all-in {bet_amount}BB")
+            if DEBUG_OPTI_ULTIMATE : 
+                print(f"[GAME_OPTI] {player.name} a all-in {bet_amount}BB")
         
         else:
-            raise ValueError(f"Action invalide : {action}")
+            raise ValueError(f"[GAME_OPTI] Action invalide : {action}")
         
         player.has_acted = True
         self.check_phase_completion()
@@ -672,32 +674,32 @@ class PokerGameOptimized:
         
         next_state = self.get_state(seat_position = player.seat_position)
 
-        if DEBUG:
-            print(f"\n=== Etat de la partie après action de {player.name} ===")
-            print(f"Joueur actif : {player.is_active}")
-            print(f"Action choisie : {action.value}")
-            print(f"Phase actuelle : {self.current_phase}")
-            print(f"Pot actuel : {self.main_pot}BB")
-            print(f"A agi : {player.has_acted}")
-            print(f"Est all-in : {player.is_all_in}")
-            print(f"Est folded : {player.has_folded}")
-            print(f"Mise maximale actuelle : {self.current_maximum_bet}BB")
-            print(f"Stack du joueur avant action : {player.stack}BB")
-            print(f"Mise actuelle du joueur : {player.current_player_bet}BB")
+        if DEBUG_OPTI_ULTIMATE:
+            print(f"[GAME_OPTI] \n=== Etat de la partie après action de {player.name} ===")
+            print(f"[GAME_OPTI] Joueur actif : {player.is_active}")
+            print(f"[GAME_OPTI] Action choisie : {action.value}")
+            print(f"[GAME_OPTI] Phase actuelle : {self.current_phase}")
+            print(f"[GAME_OPTI] Pot actuel : {self.main_pot}BB")
+            print(f"[GAME_OPTI] A agi : {player.has_acted}")
+            print(f"[GAME_OPTI] Est all-in : {player.is_all_in}")
+            print(f"[GAME_OPTI] Est folded : {player.has_folded}")
+            print(f"[GAME_OPTI] Mise maximale actuelle : {self.current_maximum_bet}BB")
+            print(f"[GAME_OPTI] Stack du joueur avant action : {player.stack}BB")
+            print(f"[GAME_OPTI] Mise actuelle du joueur : {player.current_player_bet}BB")
 
         return next_state
 
     def evaluate_final_hand(self, player: Player) -> Tuple[HandRank, List[int]]:
         if not player.cards:
             raise ValueError(
-                f"Erreur d'évaluation : le joueur {player.name} n'a pas de cartes pour évaluer sa main. "
+                f"[GAME_OPTI] Erreur d'évaluation : le joueur {player.name} n'a pas de cartes pour évaluer sa main. "
                 "Assurez-vous que les cartes ont été distribuées correctement."
             )
         """
         Évalue la meilleure main possible d'un joueur.
         """
         if not player.cards:
-            raise ValueError("Cannot evaluate hand - player has no cards")
+            raise ValueError("[GAME_OPTI] Cannot evaluate hand - player has no cards")
         
         # Combine les cartes du joueur avec les cartes communes
         all_cards = player.cards + self.community_cards
@@ -801,7 +803,7 @@ class PokerGameOptimized:
         Gère la phase de showdown pour le mode simulation MCCFR.
         Version simplifiée qui n'utilise pas le deck.
         """
-        if DEBUG:
+        if DEBUG_OPTI_ULTIMATE:
             print("\n=== DÉBUT SHOWDOWN SIMULATION ===")
         
         self.current_phase = GamePhase.SHOWDOWN
@@ -813,23 +815,23 @@ class PokerGameOptimized:
         # Pour la simulation MCCFR, nous avons seulement besoin de déterminer qui a gagné
         # et de mettre à jour les stacks en conséquence
         active_players = [p for p in self.players if p.is_active and not p.has_folded]
-        if DEBUG:
-            print(f"[SHOWDOWN] Joueurs actifs: {len(active_players)}")
+        if DEBUG_OPTI_ULTIMATE:
+            print(f"[GAME_OPTI] [SHOWDOWN] Joueurs actifs: {len(active_players)}")
         
         for player in active_players:
-            if DEBUG:
+            if DEBUG_OPTI_ULTIMATE:
                 if player.cards:
-                    print(f"[SHOWDOWN] {player.name} montre: {player.cards[0]} {player.cards[1]}")
+                    print(f"[GAME_OPTI] [SHOWDOWN] {player.name} montre: {player.cards[0]} {player.cards[1]}")
         
-        if DEBUG:
-            print(f"[SHOWDOWN] Cartes communes: {[card.value for card in self.community_cards]}")
+        if DEBUG_OPTI_ULTIMATE:
+            print(f"[GAME_OPTI] [SHOWDOWN] Cartes communes: {[card.value for card in self.community_cards]}")
         
         if len(active_players) == 1:
             # Si un seul joueur reste, il remporte tout le pot
             winner = active_players[0]
             winner.stack += self.main_pot
-            if DEBUG:
-                print(f"Victoire par fold - {winner.name} gagne {self.main_pot:.2f}BB")
+            if DEBUG_OPTI_ULTIMATE:
+                print(f"[GAME_OPTI] Victoire par fold - {winner.name} gagne {self.main_pot:.2f}BB")
             self.main_pot = 0
         else:
             # Dans le cas où plusieurs joueurs sont en jeu, nous évaluons leurs mains
@@ -840,8 +842,8 @@ class PokerGameOptimized:
                 if player.cards:  # S'assurer que le joueur a des cartes
                     hand_rank, hand_values = self.evaluate_final_hand(player)
                     rank_value = hand_rank.value
-                    if DEBUG:
-                        print(f"[SHOWDOWN] {player.name} a {hand_rank.name} {hand_values}")
+                    if DEBUG_OPTI_ULTIMATE:
+                        print(f"[GAME_OPTI] [SHOWDOWN] {player.name} a {hand_rank.name} {hand_values}")
                     if rank_value > best_rank:
                         best_rank = rank_value
                         winners = [player]
@@ -853,11 +855,11 @@ class PokerGameOptimized:
                 share = self.main_pot / len(winners)
                 for winner in winners:
                     winner.stack += share
-                    if DEBUG:
-                        print(f"[SHOWDOWN] {winner.name} gagne {share:.2f}BB avec {HandRank(best_rank).name}")
+                    if DEBUG_OPTI_ULTIMATE:
+                        print(f"[GAME_OPTI] [SHOWDOWN] {winner.name} gagne {share:.2f}BB avec {HandRank(best_rank).name}")
                 self.main_pot = 0
             else:
-                if DEBUG:
+                if DEBUG_OPTI_ULTIMATE:
                     print("[SHOWDOWN] ⚠️ Aucun gagnant déterminé")
         
         # Calculer les changements nets des stacks
@@ -865,12 +867,12 @@ class PokerGameOptimized:
                                 for player in self.players}
         self.final_stacks = {player.name: player.stack for player in self.players}
         
-        if DEBUG:
+        if DEBUG_OPTI_ULTIMATE:
             print("[SHOWDOWN] Stacks finaux:")
             for player in self.players:
                 change = self.net_stack_changes[player.name]
                 change_str = f"+{change:.2f}" if change >= 0 else f"{change:.2f}"
-                print(f"[SHOWDOWN] {player.name}: {player.stack:.2f}BB ({change_str}BB)")
+                print(f"[GAME_OPTI] [SHOWDOWN] {player.name}: {player.stack:.2f}BB ({change_str}BB)")
             print("========== FIN SHOWDOWN ==========\n")
 
     def _create_side_pots(self) -> List[SidePot]:
@@ -1123,16 +1125,16 @@ class PokerGameOptimized:
         
         # Vérifier que des actions valides sont disponibles
         if not valid_actions:
-            if DEBUG:
-                print(f"Aucune action valide disponible pour {hero.name}. Impossible de continuer la simulation.")
+            if DEBUG_OPTI_ULTIMATE:
+                print(f"[GAME_OPTI] Aucune action valide disponible pour {hero.name}. Impossible de continuer la simulation.")
             return 0
             
         # Le héros joue d'abord son action
         if not any(action.value == trajectory_action.value for action in valid_actions):
-            print(f"trajectory_action type : {type(trajectory_action)}")
-            print(f"valid_actions type : {type(valid_actions[0])}")
-            print(f"current_player_bet : {hero.current_player_bet}, current_maximum_bet : {self.current_maximum_bet}, stack : {hero.stack}")
-            print(f"L'action {trajectory_action} n'est pas valide. C'est sans doute une erreur d'aproximation lors de la dénormalisation : {valid_actions}")
+            print(f"[GAME_OPTI] trajectory_action type : {type(trajectory_action)}")
+            print(f"[GAME_OPTI] valid_actions type : {type(valid_actions[0])}")
+            print(f"[GAME_OPTI] current_player_bet : {hero.current_player_bet}, current_maximum_bet : {self.current_maximum_bet}, stack : {hero.stack}")
+            print(f"[GAME_OPTI] L'action {trajectory_action} n'est pas valide. C'est sans doute une erreur d'aproximation lors de la dénormalisation : {valid_actions}")
             trajectory_action = PlayerAction.ALL_IN
 
         # Exécute l'action du héros
@@ -1146,7 +1148,7 @@ class PokerGameOptimized:
             self._update_button_states()
             valid_actions = [a for a in PlayerAction if self.action_buttons[a].enabled]
             if not valid_actions:
-                raise ValueError(f"Aucune action valide disponible pour {current_player.name}. Impossible de continuer la simulation.")
+                raise ValueError(f"[GAME_OPTI] Aucune action valide disponible pour {current_player.name}. Impossible de continuer la simulation.")
 
             # On récupère la sequence d'états du joueur actuel
             player_state_seq = self.state_seq[current_player.name]
@@ -1273,7 +1275,7 @@ class PokerGameOptimized:
         """
         current_player = self.players[seat_position]
         state = []
-        STATE_DEBUG = False
+        STATE_DEBUG_OPTI = False
 
         # Correspondance des couleurs avec des nombres ♠, ♥, ♦, ♣
         suit_map = {
@@ -1297,7 +1299,7 @@ class PokerGameOptimized:
             state.append(-1) # hauteur manquante
             state.extend([-1] * 4) # couleur manquante
         
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 1", len(state))
         
         # 2. Cartes communes [10:35]
@@ -1313,7 +1315,7 @@ class PokerGameOptimized:
             state.append(-1)         # hauteur manquante
             state.extend([-1] * 4)   # couleur manquante
         
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 2", len(state))
 
         # 3. Rang de la main actuelle (si assez de cartes sont visibles) [35:47]
@@ -1345,7 +1347,7 @@ class PokerGameOptimized:
             state.append((kickers[0]- 2) / 13)             # Normalisation de la valeur du kicker (taille = 1)
             state.append(hand_rank.value / len(HandRank))  # Normalisation de la valeur du rang (taille = 1)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 3", len(state))
 
         # 4. Informations sur le tour [47:52]
@@ -1361,34 +1363,34 @@ class PokerGameOptimized:
         phase_range[phase_values[self.current_phase]] = 1
         state.extend(phase_range)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 4", len(state))
 
         # 5. Mise actuelle normalisée par le stack initial [52:53]
         state.append(self.current_maximum_bet / self.starting_stack)  # Normalisation de la mise (taille = 1)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 5", len(state))
 
         # 6. Argent restant (tailles des stacks normalisées par le stack initial) [53:59]
         for player in self.players:
             state.append(player.stack / self.starting_stack) # (taille = 6)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 6", len(state))
 
         # 7. Informations sur les mises (normalisées par le stack initial) [59:65]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack) # (taille = 6)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 7", len(state))
 
         # 8. Informations sur l'activité [65:71]
         for player in self.players:
             state.append(1 if player.is_active else -1) # (taille = 6)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 8", len(state))
 
         # 9. Informations sur la position (encodage one-hot des positions relatives) [71:77]
@@ -1397,7 +1399,7 @@ class PokerGameOptimized:
         relative_positions[relative_pos] = 1
         state.extend(relative_positions) # (taille = 6)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 9", len(state))
 
         # 10. Actions disponibles (binaire extrême : disponible/indisponible) [77:89]
@@ -1409,7 +1411,7 @@ class PokerGameOptimized:
                 action_availability.append(-1)
         state.extend(action_availability) # (taille = 6)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 10", len(state))
 
         # 11. Update action encoding for previous actions [89:119]    
@@ -1439,7 +1441,7 @@ class PokerGameOptimized:
         
         state.extend([val for sublist in last_actions for val in sublist])
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 11", len(state))
 
         # 12 Probabilité de victoire de la main au préflop [119:121]
@@ -1449,7 +1451,7 @@ class PokerGameOptimized:
         state.append(hand_win_prob) # (taille = 1)
         state.append(pot_odds) # (taille = 1)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 12", len(state))
 
         # 13. Potentiel de quinte et de couleur [121:123]
@@ -1457,34 +1459,34 @@ class PokerGameOptimized:
         state.append(straight_draw)
         state.append(flush_draw)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 13", len(state))
 
         # 14. Main pot [123:124]
         state.append(self.main_pot / self.starting_stack)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 14", len(state))
 
         # 15. Contribution des joueurs [124:130]
         for player in self.players:
             state.append(player.total_bet / self.starting_stack)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 15", len(state))
 
         # 16. has_acted status [130:136]
         for player in self.players:
             state.append(1 if player.has_acted else -1)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 16", len(state))
 
         # 17. Informations sur les mises du round actuel [136:142]
         for player in self.players:
             state.append(player.current_player_bet / self.starting_stack) # (taille = 6)
 
-        if STATE_DEBUG:
+        if STATE_DEBUG_OPTI:
             print("step 17", len(state))
 
         # Avant de retourner, conversion en tableau numpy.

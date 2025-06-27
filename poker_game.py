@@ -326,7 +326,7 @@ class PokerGame:
             player.is_all_in = False
             player.has_folded = False
             player.range = None
-            player.is_active = player.stack > 0
+            player.is_active = player.stack > 2
 
         # --- Nouvelle ligne ajoutée pour enregistrer les stacks initiales des joueurs
         self.initial_stacks = {player.name: player.stack for player in self.players}

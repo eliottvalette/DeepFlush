@@ -11,7 +11,9 @@ START_EPS = 0.4
 STATE_SIZE = 106
 
 # Paramètres de visualisation
-DEBUG = True
+DEBUG = False
+DEBUG_OPTI = False
+DEBUG_OPTI_ULTIMATE = False
 RENDERING = False
 FPS = 3
 

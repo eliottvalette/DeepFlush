@@ -7,6 +7,7 @@ import pygame
 import torch
 import time
 import copy
+import traceback
 from visualization import DataCollector
 from poker_agents import PokerAgent
 from poker_game_expresso import PokerGame, GamePhase, PlayerAction
@@ -46,7 +47,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         torch.mps.empty_cache()
 
     # Vérification du nombre minimum de joueurs
-    players_that_can_play = [p for p in env.players if p.stack > 0]
+    players_that_can_play = [p for p in env.players if p.stack > 2] # On ne compte pas les joueurs avec moins de 2BB dans leur stack
     if len(players_that_can_play) < 2 or number_of_hand_per_game > 10:
         env.reset()
         number_of_hand_per_game = 0
@@ -284,6 +285,8 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
 
     except Exception as e:
         print(f"[TRAIN] An error occurred: {e}")
+        if not isinstance(e, KeyboardInterrupt):
+            raise e
         save_models(env.players, episode)
         print("[TRAIN] Generating visualization...")
         data_collector.force_visualization()
