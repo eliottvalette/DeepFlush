@@ -207,7 +207,7 @@ class PokerAgent:
         # Stocker la séquence d'états, l'indice d'action choisie, le masque d'action valide et la récompense finale
         self.memory.append((state_seq, action_index, valid_action_mask, reward, target_vector, done, next_state_seq))
 
-    def train_model(self, batch_size=64):
+    def train_model(self, batch_size=32):
         """
         Une étape d'optimisation sur un mini-batch.
 
