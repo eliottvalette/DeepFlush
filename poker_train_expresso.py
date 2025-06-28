@@ -22,6 +22,10 @@ from utils.config import DEBUG
 # Compteurs
 number_of_consecutive_hands= 0
 
+# ==================================================================================
+#  RUN ONE EPISODE (nouvelle version avec reward shaping MCCFR)
+# ==================================================================================
+
 def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, render_every: int, data_collector: DataCollector, mccfr_trainer: MCCFRTrainer) -> Tuple[List[float], List[dict]]:
     """
     Exécute un épisode complet du jeu de poker.
@@ -124,8 +128,13 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             state_seq = copy.deepcopy(state_seq)
         )
 
+        # --------------------------------------------------
+        #  Calcul du potentiel φ(s) = stack + EV_MCCFR(s)
+        # --------------------------------------------------
+        phi_value = mccfr_trainer.compute_phi_from_mccfr(target_vector, payoffs, current_player.stack)
+
         if DEBUG:
-            print(f"[TRAIN] hero_name : {current_player.name}\n[TRAIN] target_vector : {target_vector}\n[TRAIN] payoffs : {payoffs.values()}")
+            print(f"[TRAIN] hero_name : {current_player.name}\n[TRAIN] target_vector : {target_vector}\n[TRAIN] payoffs : {payoffs.values()}, φ(s) : {phi_value:.3f}")
 
         # Prédiction avec une inférence classique du modèle
         chosen_action, action_mask, action_probs = current_player.agent.get_action(state = player_state_seq, valid_actions = valid_actions, target_vector = target_vector, epsilon = epsilon)
@@ -164,7 +173,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             next_state_seq.append(next_state)
             
             # Buffer experience for later reward assignment
-            experiences.append((current_player.agent, player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase))
+            experiences.append((current_player.agent, player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase, phi_value))
         
         else : # Cas spécifique au joueur qui déclenche le showdown par son action
             # Stocker l'expérience pour l'entrainement du modèle: on enregistre une copie de la séquence courante
@@ -180,7 +189,7 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
             next_state_seq.append(next_state)
 
             # Stocker l'expérience
-            experiences.append((current_player.agent, previous_player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase))
+            experiences.append((current_player.agent, previous_player_state_seq.copy(), action_to_idx[chosen_action], action_mask, target_vector, env.current_phase, phi_value))
         
         # Rendu graphique si activé
         handle_rendering(env, rendering, episode, render_every)
@@ -209,27 +218,34 @@ def run_episode(env: PokerGame, epsilon: float, rendering: bool, episode: int, r
         }
         data_collector.add_state(state_info)
     
-    # Repérer la dernière transition pour chaque agent
-    last_transition = {}
-    for exp in experiences:  # exp = (agent, state_seq, action_idx, valid_mask, target_vector, phase)
-        last_transition[exp[0]] = exp  # en écrasant à chaque passage, il ne reste que la plus récente
+    # --------------------------------------------------
+    #  Construction des récompenses densifiées via φ
+    # --------------------------------------------------
+    chronos = {}
+    for idx, exp in enumerate(experiences):
+        chronos.setdefault(exp[0], []).append(idx)
 
-    # Pousser toutes les transitions dans la mémoire, reward uniquement sur la dernière
-    for exp in experiences:
-        agent, state_sequence, action_idx, valid_mask, target_vector, _ = exp
-        is_final = (exp is last_transition[agent])
-        reward   = env.net_stack_changes[agent.name] if is_final else 0.0
-        if DEBUG:
-            print(f"[TRAIN] agent : {agent.name}, length of state_sequence : {len(state_sequence)}, reward : {reward}")
-        done     = is_final
+    for idx, exp in enumerate(experiences):
+        agent, state_sequence, action_idx, valid_mask, tgt_vec, _phase, phi_curr = exp
+        indices = chronos[agent]
+        pos = indices.index(idx)
+        is_final = pos == len(indices) - 1
+        phi_next = experiences[indices[pos + 1]][6] if not is_final else 0.0
+
+        R_env = env.net_stack_changes[agent.name] if is_final else 0.0
+        reward = R_env + agent.gamma * phi_next - phi_curr
+        done = is_final
         next_state_seq = state_sequence[1:] if len(state_sequence) > 1 else state_sequence
+
+        if DEBUG:
+            print(f"[TRAIN] agent={agent.name}, reward={reward:.3f} (R_env={R_env:.3f}, Δφ={(agent.gamma*phi_next - phi_curr):.3f})")
 
         agent.remember(
             state_seq         = state_sequence,
             action_index      = action_idx,
             valid_action_mask = valid_mask,
             reward            = reward,
-            target_vector     = target_vector,
+            target_vector     = tgt_vec,
             done              = done,
             next_state_seq    = next_state_seq
         )

@@ -233,3 +233,19 @@ class MCCFRTrainer:
         target_probs = shifted_payoffs / np.sum(shifted_payoffs)
         return target_probs
 
+    def compute_phi_from_mccfr(self, target_vector: np.ndarray, payoffs: dict, stack: float) -> float:
+        """Retourne φ(s) = stack + Σ_a π*(a) · EV(a).
+
+        Les valeurs None (actions non simulées) sont remplacées par la plus petite
+        valeur non‑None pour garder un ordre cohérent.
+        """
+        # Construire le vecteur des payoffs EV(a) dans l'ordre canonique des PlayerAction
+        non_none_vals = [v for v in payoffs.values() if v is not None]
+        min_val = min(non_none_vals) if non_none_vals else 0.0
+        payoff_vec = np.array([
+            (payoffs[a] if payoffs[a] is not None else min_val) for a in PlayerAction
+        ], dtype=np.float32)
+
+        v_mccfr = float(np.dot(target_vector, payoff_vec))
+        return stack + v_mccfr
+

@@ -223,8 +223,8 @@ def build_state_via_env(env: PokerGame, ranks: tuple[int, int], suited: bool, or
     """
     env.reset()
     # Choix des couleurs
-    suit_a = "♥"
-    suit_b = suit_a if suited else "♠"
+    suit_a = rd.choice(["♠", "♥", "♦", "♣"])
+    suit_b = suit_a if suited else rd.choice(list(set(["♠", "♥", "♦", "♣"]) - {suit_a}))
     v1, v2 = ranks if order == "ab" else (ranks[1], ranks[0])
     env.players[0].cards = [Card(suit_a, v1), Card(suit_b, v2)]
     # Mettre à jour le state vector (phase reste preflop, rien d'autre à changer)
@@ -271,7 +271,7 @@ def main(model_path: str):
             diff_matrix[i, j] = abs(v_ab - v_ba)
 
             # Debug print once if verbose requested
-            if i == 0 and j == 1:
+            if i == 0 and j == 1 :
                 debug_full_state(forward_state)
 
     vmin = min(forward_matrix.min(), reverse_matrix.min())

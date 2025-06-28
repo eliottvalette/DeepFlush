@@ -28,24 +28,13 @@ class PokerAgent:
            – **Critique**: MSE(Q(s,a), td)  
         4. Deux optimiseurs Adam indépendants mettent à jour θ et ϕ.
     """
-    def __init__(self, device,state_size, action_size, gamma, learning_rate,
-                 entropy_coeff=0.5,
-                 value_loss_coeff=0.01,
-                 invalid_action_loss_coeff=2,
-                 policy_loss_coeff=0.4,
-                 reward_norm_coeff=0.5,
-                 load_model=False, load_path=None, show_cards=False):
+    def __init__(self, device,state_size, action_size, gamma, learning_rate, load_model=False, load_path=None, show_cards=False):
         """
         Initialisation de l'agent
         :param state_size: Taille du vecteur d'état
         :param action_size: Nombre d'actions possibles
         :param gamma: Facteur d'actualisation pour les récompenses futures
         :param learning_rate: Taux d'apprentissage
-        :param entropy_coeff: Coefficient pour la régularisation par entropie
-        :param value_loss_coeff: Coefficient pour la fonction de valeur
-        :param invalid_action_loss_coeff: Coefficient pour la perte des actions invalides
-        :param policy_loss_coeff: Coefficient pour la perte de la politique
-        :param reward_norm_coeff: Coefficient pour la normalisation des récompenses
         :param load_model: Si True, charge un modèle existant
         :param load_path: Chemin vers le modèle à charger
         """
@@ -65,18 +54,20 @@ class PokerAgent:
         self.action_size = action_size
         self.gamma = gamma
         self.learning_rate = learning_rate
-        self.entropy_coeff = entropy_coeff
-        self.value_loss_coeff = value_loss_coeff
-        self.invalid_action_loss_coeff = invalid_action_loss_coeff
-        self.policy_loss_coeff = policy_loss_coeff
-        self.reward_norm_coeff = reward_norm_coeff
+        self.entropy_coeff = 2.0
+        self.value_loss_coeff = 0.005
+        self.invalid_action_loss_coeff = 10
+        self.policy_loss_coeff = 0.4
+        self.reward_norm_coeff = 4.0
+        self.target_match_loss_coeff = 0.5
+        self.critic_loss_coeff = 0.05
 
         # Utilisation du modèle Transformer qui attend une séquence d'inputs
         self.actor_model = PokerTransformerActorModel(input_dim=state_size, output_dim=action_size).to(device)
         self.critic_model = PokerTransformerCriticModel(input_dim=state_size, output_dim=action_size).to(device)
         self.optimizer = optim.Adam(self.actor_model.parameters(), lr=self.learning_rate)
         self.critic_optimizer = optim.Adam(self.critic_model.parameters(), lr=self.learning_rate * 0.1)
-        self.memory = deque(maxlen=10_000)  # Buffer de replay
+        self.memory = deque(maxlen=1_000)  # Buffer de replay
 
         if load_model:
             self.load(load_path)
@@ -216,7 +207,7 @@ class PokerAgent:
         # Stocker la séquence d'états, l'indice d'action choisie, le masque d'action valide et la récompense finale
         self.memory.append((state_seq, action_index, valid_action_mask, reward, target_vector, done, next_state_seq))
 
-    def train_model(self, batch_size=32):
+    def train_model(self, batch_size=64):
         """
         Une étape d'optimisation sur un mini-batch.
 
@@ -315,7 +306,7 @@ class PokerAgent:
         state_value_loss = F.mse_loss(state_values.squeeze(), td_targets.detach())
         
         # Combinaison des pertes du critique
-        total_critic_loss = critic_loss + self.value_loss_coeff * state_value_loss
+        total_critic_loss = critic_loss * self.critic_loss_coeff + self.value_loss_coeff * state_value_loss
 
         # Perte de l'acteur: utiliser l'avantage pour guider la politique
         # On veut maximiser log(π(a|s)) * avantage, donc minimiser le négatif
@@ -338,7 +329,7 @@ class PokerAgent:
         # Perte totale de l'acteur: combinaison pondérée des composantes
         total_actor_loss = (
             policy_loss * self.policy_loss_coeff
-            + target_match_loss * 0.5  # Coefficient pour l'alignement avec la cible MCCFR
+            + target_match_loss * self.target_match_loss_coeff  # Coefficient pour l'alignement avec la cible MCCFR
             + invalid_action_loss * self.invalid_action_loss_coeff
             - entropy * self.entropy_coeff  # Le négatif car on veut maximiser l'entropie
         )
@@ -356,10 +347,10 @@ class PokerAgent:
         # Métriques pour le suivi
         metrics = {
             'reward_norm_mean': rewards_tensor.mean().item(),
-            'critic_loss': critic_loss.item(),
+            'critic_loss': critic_loss.item() * self.critic_loss_coeff,
             'state_value_loss': state_value_loss.item() * self.value_loss_coeff,
             'policy_loss': policy_loss.item() * self.policy_loss_coeff,
-            'target_match_loss': target_match_loss.item() * 0.5,
+            'target_match_loss': target_match_loss.item() * self.target_match_loss_coeff,
             'invalid_action_loss': invalid_action_loss.item() * self.invalid_action_loss_coeff,
             'entropy': entropy.item() * self.entropy_coeff,
             'total_actor_loss': total_actor_loss.item(),
