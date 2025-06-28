@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 EPISODES = 10_000
-GAMMA = 0.9985
+GAMMA = 1.0
 ALPHA = 0.001
 EPS_DECAY = 0.9988
 START_EPS = 0.4

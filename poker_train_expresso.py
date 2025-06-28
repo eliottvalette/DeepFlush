@@ -292,7 +292,7 @@ def main_training_loop(agent_list: List[PokerAgent], episodes: int, rendering: b
             start_time = time.time()
 
             # Décroissance d'epsilon
-            epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.05, START_EPS)
+            epsilon = np.clip(START_EPS * EPS_DECAY ** episode, 0.01, START_EPS)
             
             # Exécuter l'épisode et obtenir les résultats incluant les métriques
             run_episode(env, epsilon, rendering, episode, render_every, data_collector, mccfr_trainer)

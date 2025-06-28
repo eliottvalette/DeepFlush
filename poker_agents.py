@@ -56,8 +56,8 @@ class PokerAgent:
         self.learning_rate = learning_rate
         self.entropy_coeff = 2.0
         self.value_loss_coeff = 0.005
-        self.invalid_action_loss_coeff = 10
-        self.policy_loss_coeff = 0.4
+        self.invalid_action_loss_coeff = 15
+        self.policy_loss_coeff = 0.2
         self.reward_norm_coeff = 4.0
         self.target_match_loss_coeff = 0.5
         self.critic_loss_coeff = 0.05
@@ -293,11 +293,10 @@ class PokerAgent:
         td_targets = rewards_tensor + self.gamma * next_state_values * (1 - dones_tensor)     # td_target = r + γ·maxₐ′ Q_target(s′, a′)
         advantages = chosen_action_q_values - state_values.squeeze(1).detach()                # A = Q - V Positif signifie que l'action est meilleure que prévu.
 
-        if random.random() < 0.001:
-            print(f'[AGENT] state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
-            print(f'[AGENT] rewards, mean : {rewards_tensor.mean()}, max : {rewards_tensor.max()}, min : {rewards_tensor.min()}')
-            print(f'[AGENT] next_state_values, mean : {next_state_values.mean()}, max : {next_state_values.max()}, min : {next_state_values.min()}')
-            print(f'[AGENT] advantages, mean : {advantages.mean()}, max : {advantages.max()}, min : {advantages.min()}')
+        print(f'[AGENT] state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
+        print(f'[AGENT] rewards, mean : {rewards_tensor.mean()}, max : {rewards_tensor.max()}, min : {rewards_tensor.min()}')
+        print(f'[AGENT] next_state_values, mean : {next_state_values.mean()}, max : {next_state_values.max()}, min : {next_state_values.min()}')
+        print(f'[AGENT] advantages, mean : {advantages.mean()}, max : {advantages.max()}, min : {advantages.min()}')
 
         # Perte du critique: MSE entre les Q-values prédites et les cibles TD
         critic_loss = F.mse_loss(chosen_action_q_values, td_targets.detach())
